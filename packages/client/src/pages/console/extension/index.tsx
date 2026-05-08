@@ -588,7 +588,7 @@ const ExtensionIndexPage = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      <PermissionGuard permissions="extensions:extensions:dextensions:detail-by-identifier-from-market">
+                      <PermissionGuard permissions="extensions:detail-by-identifier-from-market">
                         <DropdownMenuItem
                           onClick={() => {
                             setDetailTarget({
@@ -604,7 +604,7 @@ const ExtensionIndexPage = () => {
                           详情
                         </DropdownMenuItem>
                       </PermissionGuard>
-                      <PermissionGuard permissions="extensions:extensions:dextensions:detail-by-identifier-from-market">
+                      <PermissionGuard permissions="extensions:detail-by-identifier-from-market">
                         {!extension.isLocal && (
                           <DropdownMenuItem
                             onClick={() => {
@@ -622,7 +622,7 @@ const ExtensionIndexPage = () => {
                           </DropdownMenuItem>
                         )}
                       </PermissionGuard>
-                      <PermissionGuard permissions="extensions:extensions:extensions:update">
+                      <PermissionGuard permissions="extensions:update">
                         {extension.isLocal && (
                           <DropdownMenuItem
                             onClick={() => {
@@ -636,7 +636,7 @@ const ExtensionIndexPage = () => {
                         )}
                       </PermissionGuard>
                       <DropdownMenuSeparator />
-                      <PermissionGuard permissions="extensions:extensions:extensions:delete">
+                      <PermissionGuard permissions="extensions:delete">
                         <DropdownMenuItem
                           variant="destructive"
                           onClick={() => handleUninstall(extension)}

@@ -188,7 +188,6 @@ export class ExtensionConsoleController extends BaseController {
     @Permissions({
         code: "upgrade",
         name: "更新应用",
-        hidden: true,
     })
     @BuildFileUrl(["**.icon"])
     async upgrade(@Param("identifier") identifier: string) {
