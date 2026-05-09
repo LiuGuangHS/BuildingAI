@@ -225,7 +225,7 @@ export async function uploadFilesAuto(
 ): Promise<UploadFileResult[]> {
     const storageConfig = await getActiveStorageConfig();
 
-    if (storageConfig.storageType !== "oss") {
+    if (storageConfig.storageType === "local") {
         return uploadFiles(files, params, options);
     }
 
