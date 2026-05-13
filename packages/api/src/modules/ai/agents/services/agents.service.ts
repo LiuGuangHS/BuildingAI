@@ -659,6 +659,7 @@ export class AgentsService extends BaseService<Agent> {
             avatar: source.avatar || this.defaultAvatar,
             createMode: source.createMode || "direct",
             thirdPartyIntegration: source.thirdPartyIntegration || {},
+            rolePrompt: source.rolePrompt,
             showContext: source.showContext,
             showReference: source.showReference,
             enableWebSearch: source.enableWebSearch,
