@@ -9382,8 +9382,8 @@
                     "enabled": true
                 },
                 {
-                    "model": "glm-glm-asr-2512",
-                    "label": "glm-tts",
+                    "model": "glm-asr-2512",
+                    "label": "glm-asr-2512",
                     "model_type": "speech2text",
                     "features": null,
                     "model_properties": {

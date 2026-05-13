@@ -51,7 +51,6 @@ const HIDDEN_TOOLS: PromptInputHiddenTool[] = [
   "search",
   "exploreApps",
   "file",
-  "speech",
   "thinking",
 ];
 

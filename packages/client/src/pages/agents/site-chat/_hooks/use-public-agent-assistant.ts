@@ -1,4 +1,5 @@
 import { BusinessCode } from "@buildingai/constants/shared/business-code.constant";
+import type { VoiceConfig } from "@buildingai/types";
 import type { FormFieldConfig } from "@buildingai/types/ai/agent-config.interface";
 import type { UIMessage } from "ai";
 import { startTransition, useCallback, useEffect, useMemo, useRef } from "react";
@@ -14,6 +15,7 @@ import { useMessageRepository } from "@/components/ask-assistant-ui";
 
 import { hasRenderableOpeningStatement } from "../../detail/_utils/opening-statement.ts";
 import { usePublicAgentDetail } from "../services/public-agent-detail";
+import { speakPublicAgentText, transcribePublicAgentAudio } from "../services/public-agent-voice";
 import { usePublicConversations } from "../services/public-conversations";
 import { getPublicApiRequestErrorCode } from "../services/public-http";
 import { usePublicAgentChatStream } from "./use-public-agent-chat-stream";
@@ -219,6 +221,11 @@ export function usePublicAgentAssistant(args: {
     return agent?.chatAvatar?.trim() ? agent?.chatAvatar : (agent?.avatar ?? undefined);
   }, [agent?.chatAvatar, agent?.avatar, agent?.chatAvatarEnabled]);
 
+  const voiceConfig = useMemo(
+    () => (agent?.voiceConfig as VoiceConfig | null | undefined) ?? null,
+    [agent?.voiceConfig],
+  );
+
   const openingStatementValue = agent?.openingStatement;
   const openingQuestions = useMemo(() => {
     const raw = agent?.openingQuestions;
@@ -361,8 +368,74 @@ export function usePublicAgentAssistant(args: {
     [onDislikeRaw],
   );
 
+  /**
+   * TTS playback for embed visitors (public `/v1/text-to-audio` route).
+   */
+  const onSpeak = useCallback(
+    (text: string, options?: { onReady?: (stop: () => void) => void }) => {
+      const tts = voiceConfig?.tts;
+      if (!tts?.modelId) return;
+      return (async () => {
+        const blob = await speakPublicAgentText({
+          accessToken,
+          anonymousIdentifier,
+          text,
+          options: {
+            modelId: tts.modelId,
+            voice: tts.voiceId,
+            speed: tts.speed,
+          },
+        });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        const stop = () => {
+          audio.pause();
+          audio.currentTime = 0;
+          URL.revokeObjectURL(url);
+        };
+        await new Promise<void>((resolve, reject) => {
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+            resolve();
+          };
+          audio.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(audio.error);
+          };
+          audio
+            .play()
+            .then(() => options?.onReady?.(stop))
+            .catch(reject);
+        });
+      })();
+    },
+    [
+      accessToken,
+      anonymousIdentifier,
+      voiceConfig?.tts?.modelId,
+      voiceConfig?.tts?.voiceId,
+      voiceConfig?.tts?.speed,
+    ],
+  );
+
+  /**
+   * STT for embed visitors (public `/v1/audio-to-text` route).
+   */
+  const onVoiceAudio = useCallback(
+    async (audioBlob: Blob) => {
+      const result = await transcribePublicAgentAudio({
+        accessToken,
+        anonymousIdentifier,
+        audioBlob,
+      });
+      return result.text;
+    },
+    [accessToken, anonymousIdentifier],
+  );
+
   const contextValue: AssistantContextValue = {
     agentId,
+    voiceConfig,
     messages,
     displayMessages,
     currentThreadId: conversationIdForMessageOps,
@@ -390,8 +463,8 @@ export function usePublicAgentAssistant(args: {
     onLike: onLikeRaw,
     onDislike,
     addToolApprovalResponse,
-    onSpeak: undefined,
-    onVoiceAudio: undefined,
+    onSpeak: voiceConfig?.tts?.modelId ? onSpeak : undefined,
+    onVoiceAudio: voiceConfig?.stt?.modelId ? onVoiceAudio : undefined,
     showConversationContext: false,
     assistantAvatar,
   };
