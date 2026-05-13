@@ -68,6 +68,13 @@ export class UpdateChatConfigDto {
     attachmentSizeLimit?: number;
 
     /**
+     * 是否显示 MCP 工具调用详情
+     */
+    @IsOptional()
+    @IsBoolean({ message: "MCP 工具调用详情显示状态必须是布尔值" })
+    showMcpToolDetails?: boolean;
+
+    /**
      * 欢迎信息
      */
     @IsOptional()

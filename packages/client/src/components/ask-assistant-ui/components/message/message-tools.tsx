@@ -28,6 +28,7 @@ export const MessageTools = memo(function MessageTools({
 }: MessageToolsProps) {
   const ctx = useOptionalAssistantContext();
   const showReference = ctx?.showReference ?? true;
+  const showMcpToolDetails = ctx?.showMcpToolDetails ?? true;
   const toolParts = parts.filter(
     (part) =>
       typeof part.type === "string" &&
@@ -115,7 +116,14 @@ export const MessageTools = memo(function MessageTools({
           part.type === "dynamic-tool"
             ? ((part as unknown as { toolName?: string }).toolName ?? "tool")
             : (part.type as string).replace("tool-", "");
-        return <GenericTool key={key} toolName={toolName} toolPart={toolPart} />;
+        return (
+          <GenericTool
+            key={key}
+            toolName={toolName}
+            toolPart={toolPart}
+            showDetails={showMcpToolDetails}
+          />
+        );
       })}
     </>
   );

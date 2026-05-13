@@ -48,7 +48,7 @@ const IndexPage = () => {
   const assistant = useAssistant({ providers, suggestions });
 
   return (
-    <AssistantProvider {...assistant}>
+    <AssistantProvider {...assistant} showMcpToolDetails={chatConfig?.showMcpToolDetails ?? true}>
       <Chat
         title={conversation?.title || "新对话"}
         welcomeTitle={welcomeInfo?.title}

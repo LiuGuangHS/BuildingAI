@@ -47,6 +47,7 @@ const chatConfigFormSchema = z.object({
     .union([z.number(), z.string()])
     .transform((v) => (typeof v === "string" ? (v === "" ? 0 : Number(v)) : v))
     .pipe(z.number().min(1, "对话附件大小限制须为正数（单位：MB）")),
+  showMcpToolDetails: z.boolean(),
   suggestionsEnabled: z.boolean(),
   suggestions: z.array(suggestionSchema),
   memoryModelId: z.string().optional(),
@@ -60,6 +61,7 @@ type FormValues = z.infer<typeof chatConfigFormSchema>;
 interface ApiChatConfig {
   welcomeInfo?: { title?: string; description?: string; footer?: string };
   attachmentSizeLimit?: number;
+  showMcpToolDetails?: boolean;
   suggestionsEnabled?: boolean;
   suggestions?: Array<{ icon: string; text: string }>;
   memoryModelId?: string;
@@ -72,6 +74,7 @@ const defaultFormValues: FormValues = {
   welcomeDescription: "",
   footerInfo: "",
   attachmentSizeLimit: 10,
+  showMcpToolDetails: true,
   suggestionsEnabled: true,
   suggestions: [
     { icon: "🎮", text: "写一个像宝可梦方式的小游戏" },
@@ -127,6 +130,8 @@ const ChatConfigForm = ({ apiData }: ChatConfigFormProps) => {
       footerInfo: apiData.welcomeInfo?.footer ?? "",
       attachmentSizeLimit:
         typeof apiData.attachmentSizeLimit === "number" ? apiData.attachmentSizeLimit : 10,
+      showMcpToolDetails:
+        typeof apiData.showMcpToolDetails === "boolean" ? apiData.showMcpToolDetails : true,
       suggestionsEnabled:
         typeof apiData.suggestionsEnabled === "boolean" ? apiData.suggestionsEnabled : true,
       suggestions: Array.isArray(apiData.suggestions)
@@ -170,6 +175,7 @@ const ChatConfigForm = ({ apiData }: ChatConfigFormProps) => {
         footer: values.footerInfo?.trim() || undefined,
       },
       attachmentSizeLimit: values.attachmentSizeLimit,
+      showMcpToolDetails: values.showMcpToolDetails,
       suggestionsEnabled: values.suggestionsEnabled,
       suggestions: values.suggestions,
       memoryModelId: values.memoryModelId?.trim() ?? "",
@@ -414,6 +420,24 @@ const ChatConfigForm = ({ apiData }: ChatConfigFormProps) => {
                         />
                       </FormControl>
                       <FormDescription>单次上传附件的最大体积，单位：兆字节（MB）</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="showMcpToolDetails"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <FormLabel>MCP 工具调用详情</FormLabel>
+                          <FormDescription>开启后可展开查看 MCP 工具调用参数与结果</FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}

@@ -138,6 +138,7 @@ export interface AssistantContextValue {
   onVoiceAudio?: (audioBlob: Blob) => Promise<string | void>;
   showConversationContext?: boolean;
   showReference?: boolean;
+  showMcpToolDetails?: boolean;
   assistantAvatar?: string;
   historicalSessions?: DisplayMessage[][];
   /** Override available upload types (e.g. for third-party agents like Coze/Dify). */

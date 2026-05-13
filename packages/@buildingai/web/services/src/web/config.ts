@@ -46,6 +46,7 @@ export type ChatConfig = {
         footer?: string;
     };
     attachmentSizeLimit: number;
+    showMcpToolDetails: boolean;
 };
 
 export function useChatConfigQuery(options?: QueryOptionsUtil<ChatConfig>) {

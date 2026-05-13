@@ -62,6 +62,12 @@ export class ChatConfigService extends BaseService<Dict> {
             "chat_config",
         );
 
+        const showMcpToolDetails = await this.dictService.get(
+            "chat_show_mcp_tool_details",
+            true,
+            "chat_config",
+        );
+
         const memoryModelId = await this.dictService.get<string | null>(
             "chat_memory_model_id",
             null,
@@ -85,6 +91,7 @@ export class ChatConfigService extends BaseService<Dict> {
             suggestionsEnabled,
             welcomeInfo,
             attachmentSizeLimit,
+            showMcpToolDetails,
             memoryModelId: memoryModelId ?? undefined,
             titleModelId: titleModelId ?? undefined,
             followUpModelId: followUpModelId ?? undefined,
@@ -102,6 +109,7 @@ export class ChatConfigService extends BaseService<Dict> {
             suggestionsEnabled,
             welcomeInfo,
             attachmentSizeLimit,
+            showMcpToolDetails,
             memoryModelId,
             titleModelId,
             followUpModelId,
@@ -137,6 +145,13 @@ export class ChatConfigService extends BaseService<Dict> {
                 await this.dictService.set("chat_attachment_size_limit", attachmentSizeLimit, {
                     group: "chat_config",
                     description: "聊天附件大小限制配置",
+                });
+            }
+
+            if (showMcpToolDetails !== undefined) {
+                await this.dictService.set("chat_show_mcp_tool_details", showMcpToolDetails, {
+                    group: "chat_config",
+                    description: "MCP 工具调用详情显示状态",
                 });
             }
 
