@@ -64,6 +64,7 @@ export interface UseChatStreamReturn {
     content: string,
     parentId?: string | null,
     files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
+    options?: { baseMessages?: UIMessage[] },
   ) => void;
   stop: () => void;
   addToolApprovalResponse?: (args: { id: string; approved: boolean; reason?: string }) => void;
@@ -172,6 +173,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   const pendingUserDbIdRef = useRef<string | null>(null);
   const pendingAssistantDbIdRef = useRef<string | null>(null);
   const [statusOverride, setStatusOverride] = useState<ChatStatus | null>(null);
+  const statusRef = useRef<ChatStatus>("ready");
 
   const mapLatestMessageId = useCallback((role: UIMessage["role"], dbId: string): boolean => {
     const latest = [...messagesRef.current].reverse().find((message) => message.role === role);
@@ -310,6 +312,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   });
 
   messagesRef.current = messages;
+  statusRef.current = status;
 
   useEffect(() => {
     if (!addToolApprovalResponse) return;
@@ -525,8 +528,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       content: string,
       parentId?: string | null,
       files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
+      options?: { baseMessages?: UIMessage[] },
     ) => {
-      if (status === "submitted" || status === "streaming") return;
+      const currentStatus = statusRef.current;
+      if (currentStatus === "submitted" || currentStatus === "streaming") return;
       if (!content.trim() && (!files || files.length === 0)) return;
       if (!token) {
         const redirect = `${location.pathname}${location.search}`;
@@ -538,6 +543,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       }
       setStatusOverride(null);
       pendingParentIdRef.current = parentId !== undefined ? parentId : lastMessageDbIdRef.current;
+
+      if (options?.baseMessages) {
+        setChatMessages(options.baseMessages);
+      }
 
       const fileParts: FileUIPart[] | undefined =
         files && files.length > 0
@@ -554,7 +563,15 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         ...(fileParts && { files: fileParts }),
       });
     },
-    [sendMessage, status, token, location.pathname, location.search, navigate, lastMessageDbIdRef],
+    [
+      sendMessage,
+      token,
+      location.pathname,
+      location.search,
+      navigate,
+      lastMessageDbIdRef,
+      setChatMessages,
+    ],
   );
 
   const streamingMessageId =

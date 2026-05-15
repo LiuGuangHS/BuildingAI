@@ -168,6 +168,8 @@ export function useAssistant(options: UseAssistantOptions): AssistantContextValu
     conversationIdRef,
     prevThreadIdRef,
   });
+  const streamMessagesRef = useRef<UIMessage[]>([]);
+  streamMessagesRef.current = streamMessages;
 
   const { liked, disliked, onLike, onDislike } = useFeedback(streamMessages, currentThreadId);
 
@@ -259,13 +261,12 @@ export function useAssistant(options: UseAssistantOptions): AssistantContextValu
       const parentId = getParentId(messageId);
       if (parentId === undefined) return;
 
-      const sliced = sliceMessagesUntil(streamMessages, parentId);
+      const sliced = sliceMessagesUntil(streamMessagesRef.current, parentId);
       resetLastSeenIds(sliced.map((m) => m.id));
       editInProgressRef.current = true;
-      setMessages(sliced);
-      queueMicrotask(() => send(newContent, parentId, files));
+      send(newContent, parentId, files, { baseMessages: sliced });
     },
-    [getParentId, streamMessages, setMessages, send, resetLastSeenIds],
+    [getParentId, send, resetLastSeenIds],
   );
 
   return {
