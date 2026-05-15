@@ -1,0 +1,1 @@
+import{t as e}from"./status-codes.constant-BV2w9Io6.js";var t=t=>{if(typeof t==`boolean`)return t;if(typeof t==`number`)return t===e.YES;if(typeof t==`string`){let e=t.toLowerCase().trim();return[`1`,`true`,`yes`,`y`,`on`,`enabled`,`enable`,`active`].includes(e)}return!1};export{t};
