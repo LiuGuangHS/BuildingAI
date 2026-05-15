@@ -12,7 +12,7 @@ import {
 } from "@buildingai/ui/components/ui/dialog";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { Switch } from "@buildingai/ui/components/ui/switch";
-import { cn } from "@buildingai/utils";
+import { cn } from "@buildingai/ui/lib/utils";
 import { useEffect, useRef, useState } from "react";
 
 import { TagSelect } from "@/components/tags";
