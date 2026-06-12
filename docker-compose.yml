@@ -18,6 +18,8 @@ services:
             TZ: Asia/Shanghai
             REDIS_PASSWORD: ${REDIS_PASSWORD:-}
             QUICK_START_MODE: ${QUICK_START_MODE:-false}
+        command: >
+            sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then exec redis-server --requirepass "$$REDIS_PASSWORD"; else exec redis-server; fi'
         ports:
             - "${REDIS_EXTERNAL_PORT:-}${REDIS_EXTERNAL_PORT:+:}6379"
         volumes:
@@ -26,7 +28,7 @@ services:
             - buildingai-network
         <<: *resource-config
         healthcheck:
-            test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping"]
+            test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
             interval: 10s
             timeout: 5s
             retries: 5
