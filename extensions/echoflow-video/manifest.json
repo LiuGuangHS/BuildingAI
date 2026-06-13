@@ -1,0 +1,18 @@
+{
+    "identifier": "echoflow-video",
+    "name": "AI视频工作台",
+    "type": "application",
+  "version": "0.0.12",
+    "description": "面向创作者的 AI 视频生成工作台，支持文生视频、图生视频、视频编辑、任务历史和算力计费。",
+    "icon": "/echoflow-video/static/logo.png",
+    "homepage": "",
+    "author": {
+        "avatar": "/echoflow-video/static/logo.png",
+        "name": "EchoflowAI Teams",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    }
+}

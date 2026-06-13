@@ -1,0 +1,105 @@
+{
+    "name": "echoflow-video",
+    "version": "0.0.12",
+    "description": "面向创作者的 AI 视频生成工作台，支持文生视频、图生视频、视频编辑、任务历史和算力计费。",
+    "author": "BuildingAI Teams",
+    "private": true,
+    "main": "./manifest.json",
+    "module": "./manifest.json",
+    "files": [
+        "build/**/*"
+    ],
+    "exports": {
+        ".": {
+            "import": "./manifest.json",
+            "require": "./manifest.json"
+        },
+        "./api": {
+            "types": "./build/index.d.ts",
+            "import": "./build/index.js",
+            "require": "./build/index.js"
+        },
+        "./*": "./*"
+    },
+    "scripts": {
+        "build:clean": "rimraf build .nuxt .output .temp",
+        "dev:web": "vite",
+        "dev:api": "cross-env NODE_ENV=development tsup --watch src/api",
+        "dev": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
+        "build:api": "cross-env NODE_ENV=production tsup",
+        "build:web": "vite build",
+        "build:publish": "pnpm build:clean && pnpm run build:web && pnpm run build:api",
+        "format": "prettier --write src",
+        "lint": "eslint src --quiet",
+        "lint:fix": "eslint src --fix",
+        "check-types": "vue-tsc --noEmit",
+        "test": "pnpm run check-types && pnpm run test:unit",
+        "test:unit": "node ../../packages/api/node_modules/jest/bin/jest.js --runInBand --passWithNoTests",
+        "test:watch": "pnpm run check-types --watch",
+        "i18n:translate": "node ../../scripts/translate-i18n.mjs"
+    },
+    "dependencies": {
+        "@buildingai/base": "workspace:*",
+        "@buildingai/ai-sdk": "workspace:*",
+        "@buildingai/constants": "workspace:*",
+        "@buildingai/core": "workspace:*",
+        "@buildingai/db": "workspace:*",
+        "@buildingai/decorators": "workspace:*",
+        "@buildingai/dto": "workspace:*",
+        "@buildingai/errors": "workspace:*",
+        "@buildingai/extension-sdk": "workspace:*",
+        "@buildingai/hooks": "workspace:*",
+        "@buildingai/http": "workspace:*",
+        "@buildingai/i18n": "workspace:*",
+        "@buildingai/pipe": "workspace:*",
+        "@buildingai/services": "workspace:*",
+        "@buildingai/stores": "workspace:*",
+        "@buildingai/ui": "workspace:*",
+        "@buildingai/utils": "workspace:*",
+        "@buildingai/web-core": "workspace:*",
+        "lucide-react": "catalog:web",
+        "react": "catalog:web",
+        "react-dom": "catalog:web",
+        "react-router-dom": "catalog:web",
+        "vite-tsconfig-paths": "catalog:web"
+    },
+    "devDependencies": {
+        "@buildingai/eslint-config": "workspace:*",
+        "@buildingai/typescript-config": "workspace:*",
+        "@buildingai/web-types": "workspace:*",
+        "@types/react": "catalog:web",
+        "@types/react-dom": "catalog:web",
+        "eslint-plugin-react-refresh": "^0.4.26"
+    },
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "jest": {
+        "moduleFileExtensions": ["js", "json", "ts"],
+        "rootDir": ".",
+        "testRegex": "tests/api/.*\\.spec\\.ts$",
+        "transform": {
+            "^.+\\.(t|j)s$": [
+                "<rootDir>/../../packages/api/node_modules/ts-jest",
+                {
+                    "tsconfig": "tsconfig.spec.json"
+                }
+            ]
+        },
+        "testEnvironment": "node",
+        "moduleNameMapper": {
+            "^@buildingai/base$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
+            "^@buildingai/core/decorators$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
+            "^@buildingai/db/@nestjs/typeorm$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
+            "^@buildingai/db/entities$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
+            "^@buildingai/db/typeorm$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
+            "^@buildingai/errors$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
+            "^@buildingai/utils$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
+            "^@buildingai/core$": "<rootDir>/../../packages/core/src",
+            "^@buildingai/core/(.*)$": "<rootDir>/../../packages/core/src/$1",
+            "^@buildingai/db$": "<rootDir>/../../packages/@buildingai/db/src",
+            "^@buildingai/db/(.*)$": "<rootDir>/../../packages/@buildingai/db/src/$1",
+            "^@buildingai/(.*)$": "<rootDir>/../../packages/@buildingai/$1/src"
+        }
+    }
+}

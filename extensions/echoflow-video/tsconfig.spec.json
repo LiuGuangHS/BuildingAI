@@ -1,0 +1,13 @@
+{
+    "extends": "./tsconfig.api.json",
+    "compilerOptions": {
+        "module": "Node16",
+        "moduleResolution": "node16",
+        "rootDir": ".",
+        "types": []
+    },
+    "include": [
+        "src/api/**/*",
+        "tests/api/**/*"
+    ]
+}
