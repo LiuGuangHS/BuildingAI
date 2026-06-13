@@ -1,0 +1,55 @@
+{
+    "applications": {
+        "echoflow-video": {
+            "manifest": {
+                "identifier": "echoflow-video",
+                "name": "AI视频工作台",
+                "version": "0.0.12",
+                "description": "面向创作者的 AI 视频生成工作台，支持文生视频、图生视频、视频编辑、任务历史和算力计费。",
+                "icon": "/echoflow-video/static/logo.png",
+                "author": {
+                    "avatar": "/echoflow-video/static/logo.png",
+                    "name": "EchoflowAI Teams",
+                    "homepage": ""
+                }
+            },
+            "isLocal": true,
+            "enabled": true,
+            "installedAt": "2026-06-12T08:09:37.480Z"
+        },
+        "echoflow-image": {
+            "manifest": {
+                "identifier": "echoflow-image",
+                "name": "AI图像工作台",
+                "version": "0.0.5",
+                "description": "面向创作者的 AI 图像生成与编辑工作台，支持模型配置、参考图创作、历史管理和算力计费。",
+                "icon": "/echoflow-image/static/logo.png",
+                "author": {
+                    "avatar": "/echoflow-image/static/logo.png",
+                    "name": "EchoflowAI Teams",
+                    "homepage": ""
+                }
+            },
+            "isLocal": true,
+            "enabled": true,
+            "installedAt": "2026-06-12T08:09:37.488Z"
+        },
+        "simple-blog": {
+            "manifest": {
+                "identifier": "simple-blog",
+                "name": "Simple Blog",
+                "version": "0.0.1",
+                "description": "A simple blog application",
+                "author": {
+                    "avatar": "/static/avatars/buildingai.png",
+                    "name": "EchoflowAI Teams",
+                    "homepage": ""
+                }
+            },
+            "isLocal": true,
+            "enabled": true,
+            "installedAt": "2026-06-12T08:09:37.497Z"
+        }
+    },
+    "functionals": {}
+}

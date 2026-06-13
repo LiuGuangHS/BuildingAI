@@ -604,6 +604,185 @@ importers:
         specifier: catalog:dev
         version: 2.2.12(typescript@5.9.3)
 
+  extensions/echoflow-image:
+    dependencies:
+      '@buildingai/base':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/base
+      '@buildingai/constants':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/constants
+      '@buildingai/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@buildingai/db':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/db
+      '@buildingai/decorators':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/decorators
+      '@buildingai/dto':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/dto
+      '@buildingai/errors':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/errors
+      '@buildingai/extension-sdk':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/extension-sdk
+      '@buildingai/hooks':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/hooks
+      '@buildingai/http':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/http
+      '@buildingai/i18n':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/i18n
+      '@buildingai/pipe':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/pipe
+      '@buildingai/services':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/services
+      '@buildingai/stores':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/stores
+      '@buildingai/ui':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/ui
+      '@buildingai/utils':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/utils
+      '@buildingai/web-core':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/core
+      lucide-react:
+        specifier: catalog:web
+        version: 0.561.0(react@19.2.4)
+      react:
+        specifier: catalog:web
+        version: 19.2.4
+      react-dom:
+        specifier: catalog:web
+        version: 19.2.4(react@19.2.4)
+      react-router-dom:
+        specifier: catalog:web
+        version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      vite-tsconfig-paths:
+        specifier: catalog:web
+        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+    devDependencies:
+      '@buildingai/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/eslint-config
+      '@buildingai/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/typescript-config
+      '@buildingai/web-types':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/types
+      '@types/react':
+        specifier: catalog:web
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: catalog:web
+        version: 19.2.3(@types/react@19.2.14)
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.26
+        version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
+
+  extensions/echoflow-video:
+    dependencies:
+      '@buildingai/ai-sdk':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/ai-sdk
+      '@buildingai/base':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/base
+      '@buildingai/constants':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/constants
+      '@buildingai/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@buildingai/db':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/db
+      '@buildingai/decorators':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/decorators
+      '@buildingai/dto':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/dto
+      '@buildingai/errors':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/errors
+      '@buildingai/extension-sdk':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/extension-sdk
+      '@buildingai/hooks':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/hooks
+      '@buildingai/http':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/http
+      '@buildingai/i18n':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/i18n
+      '@buildingai/pipe':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/pipe
+      '@buildingai/services':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/services
+      '@buildingai/stores':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/stores
+      '@buildingai/ui':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/ui
+      '@buildingai/utils':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/utils
+      '@buildingai/web-core':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/core
+      lucide-react:
+        specifier: catalog:web
+        version: 0.561.0(react@19.2.4)
+      react:
+        specifier: catalog:web
+        version: 19.2.4
+      react-dom:
+        specifier: catalog:web
+        version: 19.2.4(react@19.2.4)
+      react-router-dom:
+        specifier: catalog:web
+        version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      vite-tsconfig-paths:
+        specifier: catalog:web
+        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+    devDependencies:
+      '@buildingai/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/eslint-config
+      '@buildingai/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/typescript-config
+      '@buildingai/web-types':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/types
+      '@types/react':
+        specifier: catalog:web
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: catalog:web
+        version: 19.2.3(@types/react@19.2.14)
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.26
+        version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
+
   extensions/simple-blog:
     dependencies:
       '@buildingai/base':

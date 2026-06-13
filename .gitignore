@@ -34,6 +34,7 @@ coverage
 .kiro
 .claude
 .gemini
+.codegraph/
 
 # Build Outputs
 .next/
@@ -65,9 +66,26 @@ yarn-error.log*
 
 # extensions
 extensions/*
+!extensions/extensions.json
 !extensions/simple-blog
-!extensions/simple-blog/*
-!extensions/simple-blog/build
-!extensions/simple-blog/.output
-extensions/simple-blog/dist
+!extensions/simple-blog/**
+!extensions/echoflow-image
+!extensions/echoflow-image/**
+!extensions/echoflow-video
+!extensions/echoflow-video/**
+
+extensions/*/node_modules/
+extensions/*/node_modules/**
+extensions/*/build/
+extensions/*/build/**
+extensions/*/.output/
+extensions/*/.output/**
+extensions/*/dist/
+extensions/*/dist/**
+extensions/*/.temp/
+extensions/*/.temp/**
+extensions/*/.nuxt/
+extensions/*/.nuxt/**
+extensions/*/data/versions/
+extensions/*/data/versions/**
 releases
