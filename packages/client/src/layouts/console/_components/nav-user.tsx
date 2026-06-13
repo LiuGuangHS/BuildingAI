@@ -109,7 +109,7 @@ export function NavUser() {
       <Dialog open={versionInfoOpen} onOpenChange={setVersionInfoOpen}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
-            <DialogTitle>关于BuildingAI</DialogTitle>
+            <DialogTitle>关于EchoFlowAI</DialogTitle>
             <div className="mt-4 flex items-center gap-1">
               <span className="text-muted-foreground">版本：</span>
               <span>1.0.0</span>

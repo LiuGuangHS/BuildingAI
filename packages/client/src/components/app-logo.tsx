@@ -1,5 +1,4 @@
 import { useConfigStore } from "@buildingai/stores";
-import SvgIcons from "@buildingai/ui/components/svg-icons";
 import { cn } from "@buildingai/ui/lib/utils";
 
 const AppLogo = ({
@@ -23,7 +22,7 @@ const AppLogo = ({
             alt={websiteConfig?.webinfo.name}
           />
         ) : (
-          <SvgIcons.buildingai className="h-10 shrink-0" />
+          <img className="h-10 shrink-0" src="/logo-full.svg" alt="EchoFlowAI" />
         )}
       </>
       {showAppName && (

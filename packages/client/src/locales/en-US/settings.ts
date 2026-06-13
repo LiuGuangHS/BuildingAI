@@ -30,6 +30,9 @@ export default {
       description: "Choose the interface display language",
     },
   },
+  notificationSetting: {
+    label: "Notifications",
+  },
   nav: {
     account: {
       label: "Account",

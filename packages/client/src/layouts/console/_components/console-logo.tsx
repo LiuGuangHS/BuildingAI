@@ -1,5 +1,4 @@
 import { useConfigStore } from "@buildingai/stores";
-import SvgIcons from "@buildingai/ui/components/svg-icons";
 import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/ui/avatar";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import {
@@ -30,7 +29,7 @@ export function ConsoleLogo() {
                   </AvatarFallback>
                 </Avatar>
               ) : (
-                <SvgIcons.buildingai className="size-8!" />
+                <img className="size-8 rounded-md" src="/logo.svg" alt="EchoFlowAI" />
               )}
               <div className="flex flex-1 flex-col justify-center text-left text-sm">
                 <span className="truncate font-medium">{websiteConfig?.webinfo.name}</span>

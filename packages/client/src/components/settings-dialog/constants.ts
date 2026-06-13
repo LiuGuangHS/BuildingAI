@@ -1,4 +1,5 @@
 import {
+  Bell,
   BookmarkCheck,
   Hammer,
   Info,
@@ -13,6 +14,7 @@ import {
 export type SettingsPage =
   | "profile"
   | "general"
+  | "notice"
   | "wallet"
   | "redeemCDK"
   | "tools"
@@ -53,6 +55,7 @@ export const SETTINGS_NAV: SettingsNavGroup[] = [
     label: "settings.nav.general.label",
     items: [
       { id: "general", name: "settings.nav.general.general", icon: Settings },
+      { id: "notice", name: "settings.nav.general.notice", icon: Bell },
       { id: "about", name: "settings.nav.general.about", icon: Info },
     ],
   },

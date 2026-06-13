@@ -27,9 +27,9 @@ export class WebsiteSeeder extends BaseSeeder {
      * 版权配置默认数据
      */
     private readonly copyrightConfig: CopyrightConfig = {
-        copyrightText: "Powered by",
-        copyrightBrand: "BuildingAI",
-        copyrightUrl: "https://buildingai.cc",
+        copyrightText: "",
+        copyrightBrand: "",
+        copyrightUrl: "",
     };
 
     async run(dataSource: DataSource): Promise<void> {

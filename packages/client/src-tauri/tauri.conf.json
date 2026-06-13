@@ -1,18 +1,17 @@
 {
     "$schema": "https://schema.tauri.app/config/2",
-    "productName": "BuildingAI",
+    "productName": "EchoFlowAI",
     "version": "26.0.0",
-    "identifier": "cc.buildingai.client",
+    "identifier": "com.echoflow.aiclient",
     "build": {
         "beforeDevCommand": "pnpm dev",
         "devUrl": "http://localhost:4091",
-        "beforeBuildCommand": "pnpm build",
-        "frontendDist": "../dist"
+        "frontendDist": "https://ai.echoflow.cn/"
     },
     "app": {
         "windows": [
             {
-                "title": "BuildingAI",
+                "title": "EchoFlowAI",
                 "width": 1152,
                 "height": 720,
                 "minWidth": 1152,

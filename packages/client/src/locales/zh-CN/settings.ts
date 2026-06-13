@@ -30,6 +30,9 @@ export default {
       description: "选择界面显示语言",
     },
   },
+  notificationSetting: {
+    label: "应用通知",
+  },
   nav: {
     account: {
       label: "账户",

@@ -1,7 +1,7 @@
 {
     "name": "buildingai-monorepo",
     "title": "BuildingAI",
-    "version": "26.1.1",
+    "version": "26.1.2",
     "description": "BuildingAI Monorepo",
     "author": {
         "name": "BuildingAI Teams",
@@ -63,11 +63,11 @@
         "bd:update-git": "node packages/cli/bin/cli.js update-git",
         "docker:up": "docker compose up -d",
         "docker:down": "docker compose down",
-        "dev:desktop": "cd packages/desktop && pnpm run dev",
+        "dev:desktop": "cd packages/client && pnpm run dev:desktop",
         "dev:api": "cd packages/api && pnpm run dev",
         "dev:web": "cd packages/client && pnpm run dev",
         "dev:main": "cd packages/client && pnpm run dev && cd ../api && pnpm run dev",
-        "build:desktop": "cd packages/desktop && pnpm run build:desktop",
+        "build:desktop": "cd packages/client && pnpm run build:desktop",
         "build:api": "cd packages/api && pnpm run build",
         "build:web": "cd packages/client && pnpm run build:web",
         "extension:create": "node packages/cli/bin/cli.js extension:create",

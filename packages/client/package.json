@@ -1,12 +1,13 @@
 {
-    "name": "buildingai-client",
+    "name": "echoflowai-client",
     "private": true,
     "version": "0.0.0",
     "type": "module",
     "scripts": {
         "dev": "vite",
         "dev:desktop": "tauri dev",
-        "build:web": "cross-env NODE_OPTIONS=--max-old-space-size=3072 vite build && node ../../scripts/release.mjs",
+        "build": "cross-env NODE_OPTIONS=--max-old-space-size=3072 vite build",
+        "build:web": "pnpm build && node ../../scripts/release.mjs",
         "build:desktop": "tauri build",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",

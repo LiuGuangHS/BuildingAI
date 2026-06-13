@@ -43,6 +43,8 @@ export { Menu, MenuSourceType, MenuType } from "./menu.entity";
 export { NoticeSetting } from "./notice-setting.entity";
 export { Payconfig } from "./payconfig.entity";
 export { Permission, PermissionType } from "./permission.entity";
+export { Notification } from "./notification.entity";
+export { PushSubscription } from "./push-subscription.entity";
 export { Recharge } from "./recharge.entity";
 export { RechargeOrder } from "./recharge-order.entity";
 export { RefundLog } from "./refund-log.entity";
