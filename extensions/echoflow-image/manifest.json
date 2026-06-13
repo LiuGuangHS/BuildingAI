@@ -1,0 +1,18 @@
+{
+    "identifier": "echoflow-image",
+    "name": "AI图像工作台",
+    "type": "application",
+    "version": "0.0.5",
+    "description": "面向创作者的 AI 图像生成与编辑工作台，支持模型配置、参考图创作、历史管理和算力计费。",
+    "icon": "/echoflow-image/static/logo.png",
+    "homepage": "",
+    "author": {
+        "avatar": "/echoflow-image/static/logo.png",
+        "name": "EchoflowAI Teams",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    }
+}
