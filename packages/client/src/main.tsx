@@ -11,7 +11,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 
-import { NotificationCenter } from "./components/notification-center";
 import { PwaLifecycle } from "./components/pwa-lifecycle";
 import { SettingsDialogProvider } from "./components/settings-dialog";
 import { defaultLocale, messages } from "./locales";
@@ -41,7 +40,6 @@ createRoot(document.getElementById("root")!).render(
                 {/* <ReactQueryDevtools buttonPosition="top-right"  /> */}
                 <Toaster position="top-center" />
                 <PwaLifecycle />
-                <NotificationCenter />
                 <RouterProvider router={router} />
               </SettingsDialogProvider>
             </AlertDialogProvider>
