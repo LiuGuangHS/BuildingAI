@@ -33,7 +33,7 @@ export default function AIVideoIndexPage() {
     const {
         data: historyData,
         isLoading: historyLoading,
-    } = useWebVideoListQuery({ page: 1, pageSize: 6 });
+    } = useWebVideoListQuery({ page: 1, pageSize: 6 }, { enabled: false });
 
     const createMutation = useWebCreateVideoMutation();
     const { data: currentGeneration } = useWebVideoStatusQuery(currentId);

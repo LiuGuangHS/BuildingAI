@@ -279,6 +279,32 @@ pnpm --dir extensions/echoflow-video lint
 pnpm --dir extensions/echoflow-video build:publish
 ```
 
+## 种子数据
+
+插件当前通过升级脚本初始化 4 个默认 HappyHorse 视频模型，并由 `GET /generation/options/models` 返回给用户端：
+
+- `happyhorse-1.0-t2v`：文生视频
+- `happyhorse-1.0-i2v`：图生视频，首帧驱动
+- `happyhorse-1.0-r2v`：参考视频生成
+- `happyhorse-1.0-video-edit`：视频编辑
+
+默认模型写入插件自己的 `video_model_config` 表，升级脚本需要保持幂等，避免重复插入。发布或升级前从插件根目录执行发布构建：
+
+```bash
+pnpm buildingai extension:release
+```
+
+管理员在 BuildingAI Console 的 `/extension/echoflow-video/console/config` 配置 HappyHorse。插件读取自己的管理员配置表，不要求把业务 API Key 写入环境变量。
+
+可配置字段包括：
+
+- API Key
+- Base URL
+- 请求 / 测试超时
+- 重试次数和重试间隔
+- Webhook Secret
+- 启用状态
+
 ## 质量基线
 
 本插件当前单测放在 `tests/api`，测试桩也仅放在 `tests/api/test-utils`，不要放回 `src/api`，避免发布包携带测试专用代码。生产 API 构建入口只包含 `src/api` 运行时代码。

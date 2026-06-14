@@ -119,7 +119,7 @@ export default function WebHistoryPage() {
                         items={data?.items || []}
                         loading={isLoading}
                         showDelete={false}
-                        detailBasePath=""
+                        detailBasePath=".."
                     />
                     {data && data.total > pageSize && (
                         <div className="flex justify-center gap-2">
