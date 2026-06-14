@@ -2,6 +2,7 @@ import { BaseController } from "@buildingai/base";
 import { ExtensionWebController } from "@buildingai/core/decorators";
 import { type UserPlayground } from "@buildingai/db";
 import { Playground } from "@buildingai/decorators/playground.decorator";
+import { Public } from "@buildingai/decorators/public.decorator";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Post, Query } from "@nestjs/common";
 
@@ -30,6 +31,7 @@ export class GenerationWebController extends BaseController {
     }
 
     @Get("options/models")
+    @Public()
     async listModels() {
         return this.generationService.listImageModels();
     }

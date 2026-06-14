@@ -1,5 +1,6 @@
 import { BaseController } from "@buildingai/base";
 import { ExtensionWebController } from "@buildingai/core/decorators";
+import { Public } from "@buildingai/decorators/public.decorator";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Get, Param } from "@nestjs/common";
 
@@ -12,11 +13,13 @@ export class ModelOptionsWebController extends BaseController {
     }
 
     @Get()
+    @Public()
     async listModels() {
         return this.modelConfigService.listEnabledForWeb();
     }
 
     @Get(":id")
+    @Public()
     async findOne(@Param("id", UUIDValidationPipe) id: string) {
         const config = await this.modelConfigService.findEnabledById(id);
         return this.modelConfigService.toWebOption(config);

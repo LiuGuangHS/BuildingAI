@@ -118,7 +118,7 @@ export default function HistoryPage() {
                         description="按提示词和状态检索你的生成记录"
                         items={data?.items || []}
                         loading={isLoading}
-                        detailBasePath="/history"
+                        detailBasePath="."
                         onDelete={handleDelete}
                         onRetry={handleRetry}
                     />

@@ -36,7 +36,7 @@ export default function EchoflowImagePublicPage() {
         isLoading: historyLoading,
         isError: historyError,
         refetch: refetchHistory,
-    } = useWebGenerationListQuery({ page: 1, pageSize: 6 });
+    } = useWebGenerationListQuery({ page: 1, pageSize: 6 }, { enabled: false });
     const { data: models = [], isLoading: modelsLoading } = useWebImageModelOptionsQuery();
     const { data: templateData } = useWebTemplatesQuery({ page: 1, pageSize: 20 });
 
@@ -157,7 +157,7 @@ export default function EchoflowImagePublicPage() {
                                 <div className="mt-0.5 text-lg font-bold">{latestSucceeded}</div>
                             </div>
                         </div>
-                        <Button variant="outline" size="sm" className="shrink-0" onClick={() => navigate("/history")}>
+                        <Button variant="outline" size="sm" className="shrink-0" onClick={() => navigate("history")}>
                             <History className="size-4" />
                             全部历史
                         </Button>
@@ -206,7 +206,7 @@ export default function EchoflowImagePublicPage() {
                         <HistoryList
                             items={historyData?.items || []}
                             loading={historyLoading}
-                            detailBasePath="/history"
+                            detailBasePath="history"
                             title="最近作品"
                             description="保留最近生成结果，方便继续查看或重试"
                             onDelete={handleDelete}

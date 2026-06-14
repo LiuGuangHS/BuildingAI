@@ -1,5 +1,6 @@
 import { BaseController } from "@buildingai/base";
 import { ExtensionWebController } from "@buildingai/core/decorators";
+import { Public } from "@buildingai/decorators/public.decorator";
 import { Body, Post } from "@nestjs/common";
 
 import { EstimateBillingDto } from "../../dto";
@@ -12,6 +13,7 @@ export class BillingWebController extends BaseController {
     }
 
     @Post("estimate")
+    @Public()
     async estimate(@Body() dto: EstimateBillingDto) {
         return this.billingRuleService.estimate(dto);
     }

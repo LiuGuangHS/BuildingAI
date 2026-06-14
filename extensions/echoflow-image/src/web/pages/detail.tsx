@@ -43,7 +43,7 @@ export default function DetailPage() {
         try {
             await deleteMutation.mutateAsync(id);
             toast.success("删除成功");
-            navigate("/history");
+            navigate("../history");
         } catch {
             toast.error("删除失败");
         }
@@ -54,7 +54,7 @@ export default function DetailPage() {
         try {
             const generation = await retryMutation.mutateAsync(id);
             toast.success("重新生成成功");
-            navigate(`/history/${generation.id}`);
+            navigate(`../history/${generation.id}`);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "重新生成失败");
         }
@@ -85,7 +85,7 @@ export default function DetailPage() {
         return (
             <div className="flex flex-col items-center justify-center gap-4 p-12 text-center">
                 <p className="text-muted-foreground text-lg">记录不存在</p>
-                <Button variant="outline" onClick={() => navigate("/history")}>
+                <Button variant="outline" onClick={() => navigate("../history")}>
                     <ArrowLeft className="size-4" />
                     返回历史
                 </Button>
@@ -97,7 +97,7 @@ export default function DetailPage() {
         <div className="space-y-6 p-4 md:p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <Button variant="ghost" className="mb-2 -ml-2" onClick={() => navigate("/history")}>
+                    <Button variant="ghost" className="mb-2 -ml-2" onClick={() => navigate("../history")}>
                         <ArrowLeft className="size-4" />
                         返回历史
                     </Button>
