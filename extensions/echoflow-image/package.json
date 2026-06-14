@@ -1,8 +1,8 @@
 {
     "name": "echoflow-image",
-    "version": "0.0.5",
+    "version": "0.0.1",
     "description": "面向创作者的 AI 图像生成与编辑工作台，支持模型配置、参考图创作、历史管理和算力计费。",
-    "author": "BuildingAI Teams",
+    "author": "EchoflowAI Teams",
     "private": true,
     "main": "./manifest.json",
     "module": "./manifest.json",
@@ -53,10 +53,12 @@
         "@buildingai/ui": "workspace:*",
         "@buildingai/utils": "workspace:*",
         "@buildingai/web-core": "workspace:*",
+        "@tanstack/react-query": "^5.90.21",
         "lucide-react": "catalog:web",
         "react": "catalog:web",
         "react-dom": "catalog:web",
         "react-router-dom": "catalog:web",
+        "sonner": "^2.0.7",
         "vite-tsconfig-paths": "catalog:web"
     },
     "devDependencies": {

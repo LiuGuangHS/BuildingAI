@@ -4,7 +4,7 @@
             "manifest": {
                 "identifier": "echoflow-video",
                 "name": "AI视频工作台",
-                "version": "0.0.12",
+                "version": "0.0.1",
                 "description": "面向创作者的 AI 视频生成工作台，支持文生视频、图生视频、视频编辑、任务历史和算力计费。",
                 "icon": "/echoflow-video/static/logo.png",
                 "author": {
@@ -21,7 +21,7 @@
             "manifest": {
                 "identifier": "echoflow-image",
                 "name": "AI图像工作台",
-                "version": "0.0.5",
+                "version": "0.0.1",
                 "description": "面向创作者的 AI 图像生成与编辑工作台，支持模型配置、参考图创作、历史管理和算力计费。",
                 "icon": "/echoflow-image/static/logo.png",
                 "author": {
@@ -49,6 +49,57 @@
             "isLocal": true,
             "enabled": true,
             "installedAt": "2026-06-12T08:09:37.497Z"
+        },
+        "echoflow-contract-generation": {
+            "manifest": {
+                "identifier": "echoflow-contract-generation",
+                "name": "AI合同 | 多行业模板",
+                "version": "0.0.1",
+                "description": "面向企业法务、创业者和个人用户的 AI 合同起草与审查工具，支持多行业合同模板、在线编辑、风险提示、法律术语解释、合规检查和 Word 合同导出。",
+                "icon": "/echoflow-contract-generation/static/icon.png",
+                "author": {
+                    "avatar": "/echoflow-contract-generation/static/icon.png",
+                    "name": "EchoflowAI Teams",
+                    "homepage": ""
+                }
+            },
+            "isLocal": true,
+            "enabled": true,
+            "installedAt": "2026-06-14T00:00:00.000Z"
+        },
+        "echoflow-astrology-fortune": {
+            "manifest": {
+                "identifier": "echoflow-astrology-fortune",
+                "name": "AI星盘运势",
+                "version": "0.0.1",
+                "description": "基于出生信息、星座生肖、个人档案和 AI 推理，生成每日运势、性格洞察、事业财富、情感关系、星座配对与生活决策建议。",
+                "icon": "/echoflow-astrology-fortune/static/icon.png",
+                "author": {
+                    "avatar": "/echoflow-astrology-fortune/static/icon.png",
+                    "name": "EchoflowAI Teams",
+                    "homepage": ""
+                }
+            },
+            "isLocal": true,
+            "enabled": true,
+            "installedAt": "2026-06-14T00:00:00.000Z"
+        },
+        "echoflow-ai-town": {
+            "manifest": {
+                "identifier": "echoflow-ai-town",
+                "name": "AI乐园小镇｜开放世界",
+                "version": "0.0.1",
+                "description": "治愈系小镇经营与 AI 趣味玩法应用。经营、探索、NPC 对话和随机事件动态串联，帮助用户打造个性乐园。",
+                "icon": "/echoflow-ai-town/static/icon.png",
+                "author": {
+                    "avatar": "/echoflow-ai-town/static/icon.png",
+                    "name": "EchoflowAI Teams",
+                    "homepage": ""
+                }
+            },
+            "isLocal": true,
+            "enabled": true,
+            "installedAt": "2026-06-14T00:00:00.000Z"
         }
     },
     "functionals": {}

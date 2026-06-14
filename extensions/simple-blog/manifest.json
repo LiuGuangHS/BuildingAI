@@ -1,9 +1,9 @@
 {
     "identifier": "simple-blog",
-    "name": "Simple Blog",
+    "name": "文章资讯",
     "type": "application",
     "version": "0.0.1",
-    "description": "A simple blog application",
+    "description": "文章资讯发布与浏览应用",
     "homepage": "",
     "author": {
         "avatar": "/static/avatars/buildingai.png",

@@ -1,8 +1,8 @@
 {
     "name": "echoflow-video",
-    "version": "0.0.12",
+    "version": "0.0.1",
     "description": "面向创作者的 AI 视频生成工作台，支持文生视频、图生视频、视频编辑、任务历史和算力计费。",
-    "author": "BuildingAI Teams",
+    "author": "EchoflowAI Teams",
     "private": true,
     "main": "./manifest.json",
     "module": "./manifest.json",
@@ -57,10 +57,12 @@
         "@buildingai/ui": "workspace:*",
         "@buildingai/utils": "workspace:*",
         "@buildingai/web-core": "workspace:*",
+        "@tanstack/react-query": "^5.90.21",
         "lucide-react": "catalog:web",
         "react": "catalog:web",
         "react-dom": "catalog:web",
         "react-router-dom": "catalog:web",
+        "sonner": "^2.0.7",
         "vite-tsconfig-paths": "catalog:web"
     },
     "devDependencies": {

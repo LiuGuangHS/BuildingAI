@@ -2,7 +2,7 @@
     "identifier": "echoflow-video",
     "name": "AI视频工作台",
     "type": "application",
-  "version": "0.0.12",
+    "version": "0.0.1",
     "description": "面向创作者的 AI 视频生成工作台，支持文生视频、图生视频、视频编辑、任务历史和算力计费。",
     "icon": "/echoflow-video/static/logo.png",
     "homepage": "",
