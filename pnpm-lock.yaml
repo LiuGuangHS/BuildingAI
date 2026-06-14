@@ -604,6 +604,270 @@ importers:
         specifier: catalog:dev
         version: 2.2.12(typescript@5.9.3)
 
+  extensions/echoflow-ai-town:
+    dependencies:
+      '@buildingai/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@buildingai/db':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/db
+      '@buildingai/decorators':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/decorators
+      '@buildingai/errors':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/errors
+      '@buildingai/extension-sdk':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/extension-sdk
+      '@buildingai/pipe':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/pipe
+      '@buildingai/services':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/services
+      '@buildingai/ui':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/ui
+      '@buildingai/utils':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/utils
+      '@buildingai/web-core':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/core
+      '@nestjs/common':
+        specifier: ^11.1.17
+        version: 11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@tanstack/react-query':
+        specifier: ^5.90.21
+        version: 5.90.21(react@19.2.4)
+      ai:
+        specifier: ^6.0.138
+        version: 6.0.138(zod@4.3.6)
+      class-transformer:
+        specifier: catalog:api
+        version: 0.5.1
+      class-validator:
+        specifier: catalog:api
+        version: 0.14.4
+      framer-motion:
+        specifier: ^12.23.26
+        version: 12.36.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react:
+        specifier: catalog:web
+        version: 19.2.4
+      react-dom:
+        specifier: catalog:web
+        version: 19.2.4(react@19.2.4)
+      react-router-dom:
+        specifier: catalog:web
+        version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      vite-tsconfig-paths:
+        specifier: catalog:web
+        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+    devDependencies:
+      '@buildingai/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/eslint-config
+      '@buildingai/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/typescript-config
+      '@buildingai/web-types':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/types
+      '@types/react':
+        specifier: catalog:web
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: catalog:web
+        version: 19.2.3(@types/react@19.2.14)
+      babel-plugin-react-compiler:
+        specifier: ^1.0.0
+        version: 1.0.0
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.26
+        version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
+
+  extensions/echoflow-astrology-fortune:
+    dependencies:
+      '@buildingai/base':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/base
+      '@buildingai/constants':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/constants
+      '@buildingai/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@buildingai/db':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/db
+      '@buildingai/decorators':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/decorators
+      '@buildingai/errors':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/errors
+      '@buildingai/extension-sdk':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/extension-sdk
+      '@buildingai/pipe':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/pipe
+      '@buildingai/services':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/services
+      '@buildingai/ui':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/ui
+      '@buildingai/utils':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/utils
+      '@buildingai/web-core':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/core
+      '@tanstack/react-query':
+        specifier: ^5.90.21
+        version: 5.90.21(react@19.2.4)
+      ai:
+        specifier: ^6.0.138
+        version: 6.0.138(zod@4.3.6)
+      class-transformer:
+        specifier: catalog:api
+        version: 0.5.1
+      class-validator:
+        specifier: catalog:api
+        version: 0.14.4
+      lucide-react:
+        specifier: catalog:web
+        version: 0.561.0(react@19.2.4)
+      react:
+        specifier: catalog:web
+        version: 19.2.4
+      react-dom:
+        specifier: catalog:web
+        version: 19.2.4(react@19.2.4)
+      react-router-dom:
+        specifier: catalog:web
+        version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      vite-tsconfig-paths:
+        specifier: catalog:web
+        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
+      '@buildingai/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/eslint-config
+      '@buildingai/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/typescript-config
+      '@buildingai/web-types':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/types
+      '@types/react':
+        specifier: catalog:web
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: catalog:web
+        version: 19.2.3(@types/react@19.2.14)
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.26
+        version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
+
+  extensions/echoflow-contract-generation:
+    dependencies:
+      '@buildingai/base':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/base
+      '@buildingai/constants':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/constants
+      '@buildingai/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@buildingai/db':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/db
+      '@buildingai/decorators':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/decorators
+      '@buildingai/errors':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/errors
+      '@buildingai/extension-sdk':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/extension-sdk
+      '@buildingai/llm-file-parser':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/llm-file-parser
+      '@buildingai/pipe':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/pipe
+      '@buildingai/services':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/services
+      '@buildingai/ui':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/ui
+      '@buildingai/utils':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/utils
+      '@buildingai/web-core':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/core
+      '@tanstack/react-query':
+        specifier: ^5.90.21
+        version: 5.90.21(react@19.2.4)
+      ai:
+        specifier: ^6.0.138
+        version: 6.0.138(zod@4.3.6)
+      class-transformer:
+        specifier: catalog:api
+        version: 0.5.1
+      class-validator:
+        specifier: catalog:api
+        version: 0.14.4
+      docx:
+        specifier: ^9.5.1
+        version: 9.7.1
+      react:
+        specifier: catalog:web
+        version: 19.2.4
+      react-dom:
+        specifier: catalog:web
+        version: 19.2.4(react@19.2.4)
+      react-router-dom:
+        specifier: catalog:web
+        version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      vite-tsconfig-paths:
+        specifier: catalog:web
+        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
+      '@buildingai/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/eslint-config
+      '@buildingai/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/typescript-config
+      '@buildingai/web-types':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/types
+      '@types/react':
+        specifier: catalog:web
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: catalog:web
+        version: 19.2.3(@types/react@19.2.14)
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.26
+        version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
+
   extensions/echoflow-image:
     dependencies:
       '@buildingai/base':
@@ -657,6 +921,9 @@ importers:
       '@buildingai/web-core':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/core
+      '@tanstack/react-query':
+        specifier: ^5.90.21
+        version: 5.90.21(react@19.2.4)
       lucide-react:
         specifier: catalog:web
         version: 0.561.0(react@19.2.4)
@@ -669,6 +936,9 @@ importers:
       react-router-dom:
         specifier: catalog:web
         version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      sonner:
+        specifier: ^2.0.7
+        version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       vite-tsconfig-paths:
         specifier: catalog:web
         version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
@@ -748,6 +1018,9 @@ importers:
       '@buildingai/web-core':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/core
+      '@tanstack/react-query':
+        specifier: ^5.90.21
+        version: 5.90.21(react@19.2.4)
       lucide-react:
         specifier: catalog:web
         version: 0.561.0(react@19.2.4)
@@ -760,6 +1033,9 @@ importers:
       react-router-dom:
         specifier: catalog:web
         version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      sonner:
+        specifier: ^2.0.7
+        version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       vite-tsconfig-paths:
         specifier: catalog:web
         version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
@@ -8633,6 +8909,10 @@ packages:
   dnd-core@16.0.1:
     resolution: {integrity: sha512-HK294sl7tbw6F6IeuK16YSBUoorvHpY8RHO+9yFfaJyCDVb6n7PRcezrOEOa2SBCqiYpemh5Jx20ZcjKdFAVng==}
 
+  docx@9.7.1:
+    resolution: {integrity: sha512-ilXFf9Moz47ABjFpDiA5s1w9lpb4EFSp7+5iiJSbfyYDM+bpZdAgLlSr7fW4aXhVe/E+F6QCv0EvRVFEd5CsWg==}
+    engines: {node: '>=10'}
+
   dom-helpers@5.2.1:
     resolution: {integrity: sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA==}
 
@@ -9336,20 +9616,6 @@ packages:
   fraction.js@5.3.4:
     resolution: {integrity: sha512-1X1NTtiJphryn/uLQz3whtY6jK3fTqoE3ohKs0tT+Ujr1W59oopxmoEh7Lu5p6vBaPbgoM0bzveAW4Qi5RyWDQ==}
 
-  framer-motion@12.35.0:
-    resolution: {integrity: sha512-w8hghCMQ4oq10j6aZh3U2yeEQv5K69O/seDI/41PK4HtgkLrcBovUNc0ayBC3UyyU7V1mrY2yLzvYdWJX9pGZQ==}
-    peerDependencies:
-      '@emotion/is-prop-valid': '*'
-      react: ^18.0.0 || ^19.0.0
-      react-dom: ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@emotion/is-prop-valid':
-        optional: true
-      react:
-        optional: true
-      react-dom:
-        optional: true
-
   framer-motion@12.36.0:
     resolution: {integrity: sha512-4PqYHAT7gev0ke0wos+PyrcFxI0HScjm3asgU8nSYa8YzJFuwgIvdj3/s3ZaxLq0bUSboIn19A2WS/MHwLCvfw==}
     peerDependencies:
@@ -9564,6 +9830,9 @@ packages:
   has-tostringtag@1.0.2:
     resolution: {integrity: sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==}
     engines: {node: '>= 0.4'}
+
+  hash.js@1.1.7:
+    resolution: {integrity: sha512-taOaskGt4z4SOANNseOviYDvjEJinIkRgmp7LbKP2YTTmVxWBl87s/uzK9r+44BclBSp2X7K1hqeNfz9JbBeXA==}
 
   hasown@2.0.2:
     resolution: {integrity: sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==}
@@ -11131,6 +11400,9 @@ packages:
   min-document@2.19.2:
     resolution: {integrity: sha512-8S5I8db/uZN8r9HSLFVWPdJCvYOejMcEC82VIzNUc6Zkklf/d1gg2psfE79/vyhWOj4+J8MtwmoOz3TmvaGu5A==}
 
+  minimalistic-assert@1.0.1:
+    resolution: {integrity: sha512-UtJcAD4yEaGtjPezWuO9wC4nwUnVH/8/Im3yEHQP4b67cXlD/Qr9hdITCU1xDbSEXg2XKNaP8jsReV7vQd00/A==}
+
   minimatch@10.2.3:
     resolution: {integrity: sha512-Rwi3pnapEqirPSbWbrZaa6N3nmqq4Xer/2XooiOKyV3q12ML06f7MOuc5DVH8ONZIFhwIYQ3yzPH4nt7iWHaTg==}
     engines: {node: 18 || 20 || >=22}
@@ -11183,9 +11455,6 @@ packages:
 
   motion-dom@12.36.0:
     resolution: {integrity: sha512-Ep1pq8P88rGJ75om8lTCA13zqd7ywPGwCqwuWwin6BKc0hMLkVfcS6qKlRqEo2+t0DwoUcgGJfXwaiFn4AOcQA==}
-
-  motion-utils@12.29.2:
-    resolution: {integrity: sha512-G3kc34H2cX2gI63RqU+cZq+zWRRPSsNIOjpdl9TN4AQwC4sgwYPl/Q/Obf/d53nOm569T0fYK+tcoSV50BWx8A==}
 
   motion-utils@12.36.0:
     resolution: {integrity: sha512-eHWisygbiwVvf6PZ1vhaHCLamvkSbPIeAYxWUuL3a2PD/TROgE7FvfHWTIH4vMl798QLfMw15nRqIaRDXTlYRg==}
@@ -14136,6 +14405,7 @@ packages:
   whatwg-encoding@3.1.1:
     resolution: {integrity: sha512-6qN4hJdMwfYBtE3YBTTHhoeuUrDBPZmbQaxWAqSALV/MeEnR5z1xd8UKud2RAkFoPkmB+hli1TZSnyi84xz1vQ==}
     engines: {node: '>=18'}
+    deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
 
   whatwg-fetch@3.6.20:
     resolution: {integrity: sha512-EqhiFU6daOA8kpjOWTL0olhVOF3i7OrFzSYiGsEMB8GcXS+RrzauAERX65xMeNWVqxA6HXH2m69Z9LaKKdisfg==}
@@ -14239,6 +14509,10 @@ packages:
     engines: {node: '>=0.8'}
     hasBin: true
 
+  xml-js@1.6.11:
+    resolution: {integrity: sha512-7rVi2KMfwfWFl+GpPg6m80IVMWXLRjO+PxTq7V2CDhoGak0wzYzFgUY2m4XJ47OGdXd8eLE8EmwfAmdjw7lC1g==}
+    hasBin: true
+
   xml-name-validator@4.0.0:
     resolution: {integrity: sha512-ICP2e+jsHvAj2E2lIHxa5tjXRlKDJo4IdvPvCXbXQGdzSfmSpNVyIKMvoZHjDY9DP0zV17iI85o90vRFXNccRw==}
     engines: {node: '>=12'}
@@ -14250,6 +14524,9 @@ packages:
   xml2js@0.6.2:
     resolution: {integrity: sha512-T4rieHaC1EXcES0Kxxj4JWgaUQHDk+qwHcYOCFHfiwKz7tOVPLq7Hjq9dM1WCMhylqMEfP7hMcOIChvotiZegA==}
     engines: {node: '>=4.0.0'}
+
+  xml@1.0.1:
+    resolution: {integrity: sha512-huCv9IH9Tcf95zuYCsQraZtWnJvBtLVE0QHMOs8bWyZAFZNDcYjsPq1nEx8jKA9y+Beo9v+7OBPRisQTjinQMw==}
 
   xmlbuilder2@3.1.1:
     resolution: {integrity: sha512-WCSfbfZnQDdLQLiMdGUQpMxxckeQ4oZNMNhLVkcekTu7xhD4tuUDyAPoY8CwXvBYE6LwBHd6QW2WZXlOWr1vCw==}
@@ -21372,6 +21649,15 @@ snapshots:
       '@react-dnd/invariant': 4.0.2
       redux: 4.2.1
 
+  docx@9.7.1:
+    dependencies:
+      '@types/node': 25.5.0
+      hash.js: 1.1.7
+      jszip: 3.10.1
+      nanoid: 5.1.7
+      xml: 1.0.1
+      xml-js: 1.6.11
+
   dom-helpers@5.2.1:
     dependencies:
       '@babel/runtime': 7.28.6
@@ -22227,15 +22513,6 @@ snapshots:
 
   fraction.js@5.3.4: {}
 
-  framer-motion@12.35.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
-    dependencies:
-      motion-dom: 12.36.0
-      motion-utils: 12.29.2
-      tslib: 2.8.1
-    optionalDependencies:
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
-
   framer-motion@12.36.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
       motion-dom: 12.36.0
@@ -22459,6 +22736,11 @@ snapshots:
   has-tostringtag@1.0.2:
     dependencies:
       has-symbols: 1.1.0
+
+  hash.js@1.1.7:
+    dependencies:
+      inherits: 2.0.4
+      minimalistic-assert: 1.0.1
 
   hasown@2.0.2:
     dependencies:
@@ -24557,6 +24839,8 @@ snapshots:
     dependencies:
       dom-walk: 0.1.2
 
+  minimalistic-assert@1.0.1: {}
+
   minimatch@10.2.3:
     dependencies:
       brace-expansion: 5.0.4
@@ -24611,8 +24895,6 @@ snapshots:
     dependencies:
       motion-utils: 12.36.0
 
-  motion-utils@12.29.2: {}
-
   motion-utils@12.36.0: {}
 
   motion-v@1.10.3(@vueuse/core@13.9.0(vue@3.5.30(typescript@5.9.3)))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vue@3.5.30(typescript@5.9.3)):
@@ -24629,7 +24911,7 @@ snapshots:
 
   motion@12.35.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
-      framer-motion: 12.35.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      framer-motion: 12.36.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       tslib: 2.8.1
     optionalDependencies:
       react: 19.2.4
@@ -28071,6 +28353,10 @@ snapshots:
       wmf: 1.0.2
       word: 0.3.0
 
+  xml-js@1.6.11:
+    dependencies:
+      sax: 1.5.0
+
   xml-name-validator@4.0.0: {}
 
   xml2js@0.5.0:
@@ -28082,6 +28368,8 @@ snapshots:
     dependencies:
       sax: 1.4.4
       xmlbuilder: 11.0.1
+
+  xml@1.0.1: {}
 
   xmlbuilder2@3.1.1:
     dependencies:

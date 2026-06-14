@@ -1,5 +1,4 @@
 import { useConfigStore } from "@buildingai/stores";
-import SvgIcons from "@buildingai/ui/components/svg-icons";
 import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/ui/avatar";
 import {
   SidebarMenu,
@@ -47,7 +46,7 @@ export function DefaultLogo() {
                       </AvatarFallback>
                     </Avatar>
                   ) : (
-                    <SvgIcons.buildingai className="size-8!" />
+                    <img className="size-8 rounded-md" src="/logo.svg" alt="EchoFlowAI" />
                   )}
                 </>
               </Link>
