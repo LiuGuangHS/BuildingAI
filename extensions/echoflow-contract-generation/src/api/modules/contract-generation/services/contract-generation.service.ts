@@ -1,0 +1,966 @@
+import { BaseService } from "@buildingai/base";
+import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants";
+import { FileUploadService } from "@buildingai/core/modules";
+import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
+import { AccountLog, AiModel, File } from "@buildingai/db/entities";
+import { Brackets, EntityManager, Repository } from "@buildingai/db/typeorm";
+import { HttpErrorFactory } from "@buildingai/errors";
+import { ExtensionBillingService, PublicAiModelService } from "@buildingai/extension-sdk";
+import { llmFileParser } from "@buildingai/llm-file-parser";
+import { Injectable, Logger } from "@nestjs/common";
+import { generateText, Output } from "ai";
+import type { Request } from "express";
+import { Readable } from "node:stream";
+import { z } from "zod";
+
+import {
+    ContractGenerationStatus,
+    ContractGenerationConfig,
+    ContractGenerationTask,
+    ContractGenerationVersion,
+    ContractTemplateEntity,
+    type ContractLegalTerm,
+    type ContractRiskFinding,
+    type ContractScore,
+    type ContractSection,
+} from "../../../db/entities";
+import { ExportContractDto, GenerateContractDto, QueryContractTaskDto, ReviewUploadedContractDto, RewriteContractClauseDto, UpdateContractConfigDto, UpdateContractContentDto, UpdateRiskActionDto, UpsertContractTemplateDto } from "../dto";
+import { CONTRACT_TEMPLATES, type ContractTemplate, getContractTemplate } from "../templates/contract-templates";
+import { buildContractDocx } from "./contract-docx.builder";
+
+const EXTENSION_ID = "echoflow-contract-generation";
+const DEFAULT_PAGE_SIZE = 20;
+const UPLOAD_REVIEW_MAX_BYTES = 20 * 1024 * 1024;
+const UPLOAD_REVIEW_PARSE_TIMEOUT_MS = 20000;
+const UPLOAD_REVIEW_MAX_CHARS = 30000;
+const UPLOAD_REVIEW_ALLOWED_EXTENSIONS = new Set(["pdf", "doc", "docx", "txt", "md", "rtf"]);
+const UPLOAD_REVIEW_ALLOWED_MIME_TYPES = new Set([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/rtf",
+    "text/plain",
+    "text/markdown",
+]);
+const MAX_VARIABLE_KEYS = 80;
+const MAX_VARIABLE_CHARS = 12000;
+const MAX_SECTION_CHARS = 20000;
+const MAX_PROMPT_LIST_ITEMS = 40;
+
+const sectionSchema = z.object({
+    id: z.string().optional(),
+    title: z.string(),
+    content: z.string(),
+    importance: z.enum(["normal", "important", "critical"]).optional(),
+});
+
+const riskSchema = z.object({
+    sectionTitle: z.string(),
+    level: z.enum(["low", "medium", "high"]),
+    issue: z.string(),
+    suggestion: z.string(),
+    replacementText: z.string().optional(),
+});
+
+const termSchema = z.object({ term: z.string(), explanation: z.string() });
+
+const scoreSchema = z.object({
+    overall: z.number().min(0).max(100),
+    completeness: z.number().min(0).max(100),
+    riskControl: z.number().min(0).max(100),
+    clarity: z.number().min(0).max(100),
+    missingItems: z.array(z.string()),
+});
+
+const contractSchema = z.object({
+    title: z.string(),
+    summary: z.string(),
+    sections: z.array(sectionSchema).min(3),
+    riskFindings: z.array(riskSchema),
+    legalTerms: z.array(termSchema),
+    score: scoreSchema,
+});
+
+const reviewSchema = z.object({
+    riskFindings: z.array(riskSchema),
+    legalTerms: z.array(termSchema),
+    score: scoreSchema,
+});
+
+const rewriteSchema = z.object({ content: z.string(), reason: z.string() });
+
+@Injectable()
+export class ContractGenerationService extends BaseService<ContractGenerationTask> {
+    protected readonly logger = new Logger(ContractGenerationService.name);
+
+    constructor(
+        @InjectRepository(ContractGenerationTask)
+        private readonly taskRepo: Repository<ContractGenerationTask>,
+        @InjectRepository(ContractGenerationConfig)
+        private readonly configRepo: Repository<ContractGenerationConfig>,
+        @InjectRepository(ContractGenerationVersion)
+        private readonly versionRepo: Repository<ContractGenerationVersion>,
+        @InjectRepository(ContractTemplateEntity)
+        private readonly templateRepo: Repository<ContractTemplateEntity>,
+        @InjectRepository(AiModel)
+        private readonly modelRepo: Repository<AiModel>,
+        @InjectRepository(AccountLog)
+        private readonly accountLogRepo: Repository<AccountLog>,
+        @InjectRepository(File)
+        private readonly fileRepo: Repository<File>,
+        private readonly billingService: ExtensionBillingService,
+        private readonly publicAiModelService: PublicAiModelService,
+        private readonly fileUploadService: FileUploadService,
+    ) {
+        super(taskRepo);
+    }
+
+    async listTemplates() {
+        const total = await this.templateRepo.count();
+        const templates = await this.templateRepo.find({ where: { isActive: true }, order: { sortOrder: "DESC", createdAt: "ASC" } });
+        return total > 0 ? templates : CONTRACT_TEMPLATES;
+    }
+
+    async listAdminTemplates() {
+        await this.syncBuiltinTemplatesIfEmpty();
+        return this.templateRepo.find({ order: { sortOrder: "DESC", createdAt: "ASC" } });
+    }
+
+    async createTemplate(dto: UpsertContractTemplateDto) {
+        const template = await this.templateRepo.save(this.templateRepo.create(this.normalizeTemplateDto(dto)));
+        return template;
+    }
+
+    async updateTemplate(id: string, dto: UpsertContractTemplateDto) {
+        const template = await this.templateRepo.findOne({ where: { id } });
+        if (!template) throw HttpErrorFactory.notFound("模板不存在");
+        await this.templateRepo.update(id, this.normalizeTemplateDto(dto));
+        return this.templateRepo.findOne({ where: { id } });
+    }
+
+    async deleteTemplate(id: string) {
+        const template = await this.templateRepo.findOne({ where: { id } });
+        if (!template) throw HttpErrorFactory.notFound("模板不存在");
+        await this.templateRepo.softDelete(id);
+        return { success: true };
+    }
+
+    async resetBuiltinTemplates() {
+        await this.syncBuiltinTemplates(true);
+        return this.listAdminTemplates();
+    }
+
+    async getPublicConfig() {
+        const model = await this.loadConfiguredModel(false);
+        return {
+            configured: Boolean(model),
+            model: model ? { id: model.id, name: model.name, providerName: model.provider.name, provider: model.provider.provider } : null,
+        };
+    }
+
+    async getAdminConfig() {
+        const config = await this.getOrCreateConfig();
+        const model = config.modelId ? await this.loadModel(config.modelId, false) : null;
+        return {
+            ...config,
+            model: model ? { id: model.id, name: model.name, providerName: model.provider.name, provider: model.provider.provider } : null,
+        };
+    }
+
+    async updateAdminConfig(dto: UpdateContractConfigDto) {
+        const model = await this.loadModel(dto.modelId);
+        const config = await this.getOrCreateConfig();
+        await this.configRepo.update(config.id, { modelId: model.id, metadata: { ...(config.metadata ?? {}), updatedAt: new Date().toISOString() } });
+        return this.getAdminConfig();
+    }
+
+    async generate(userId: string, dto: GenerateContractDto) {
+        const model = await this.loadConfiguredModel(true);
+        const template = await this.getTemplate(dto.templateId);
+        const cost = this.calculateCost(model);
+
+        if (cost > 0 && !(await this.billingService.hasSufficientPower(userId, cost))) {
+            throw HttpErrorFactory.badRequest("积分不足");
+        }
+
+        const variables = this.normalizeVariables(dto.variables ?? {});
+        const normalizedDto = { ...dto, variables };
+        const task = await this.create({
+            userId,
+            modelId: model.id,
+            providerId: model.provider.id,
+            title: dto.title,
+            contractType: dto.contractType || template.contractType,
+            industry: dto.industry || template.industry,
+            templateId: template.id,
+            parties: this.extractParties(variables),
+            variables,
+            prompt: dto.prompt ?? null,
+            summary: null,
+            sections: [],
+            riskFindings: [],
+            legalTerms: [],
+            score: null,
+            status: ContractGenerationStatus.PENDING,
+            resultUrl: null,
+            errorMessage: null,
+            costCredits: cost,
+            providerMetadata: { templateName: template.name, language: dto.language ?? "zh-CN", stance: dto.stance ?? "neutral" },
+            requestPayload: normalizedDto as unknown as Record<string, unknown>,
+        } as Partial<ContractGenerationTask>);
+
+        try {
+            await this.taskRepo.update(task.id, { status: ContractGenerationStatus.PROCESSING });
+            await this.reserveTaskCreditsOnce(task, model.name);
+            const result = await generateText({
+                model: await this.resolveLanguageModel(model),
+                output: Output.object({ schema: contractSchema }),
+                prompt: this.buildGeneratePrompt(normalizedDto, template),
+                temperature: 0.18,
+            });
+
+            const output = result.output;
+            const sections = this.normalizeSections(output.sections);
+            if (sections.length === 0) throw new Error("AI contract generation returned no sections");
+
+            return await this.taskRepo.manager.transaction(async (entityManager) => {
+                const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
+                if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+                await entityManager.update(ContractGenerationTask, task.id, {
+                    status: ContractGenerationStatus.DRAFT,
+                    title: output.title?.trim() || dto.title,
+                    summary: output.summary?.trim() || null,
+                    sections,
+                    riskFindings: this.normalizeRisks(output.riskFindings),
+                    legalTerms: this.normalizeTerms(output.legalTerms),
+                    score: this.normalizeScore(output.score),
+                    providerMetadata: {
+                        ...(currentTask?.providerMetadata ?? task.providerMetadata ?? {}),
+                        provider: model.provider.provider,
+                        model: model.model,
+                        sectionCount: sections.length,
+                    },
+                });
+                const saved = (await entityManager.findOne(ContractGenerationTask, { where: { id: task.id } })) as ContractGenerationTask | null;
+                if (!saved) throw HttpErrorFactory.notFound("任务不存在或已删除");
+                await this.createVersion(saved, "generate", "AI 初次生成", entityManager);
+                return saved;
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Contract generation task ${task.id} failed: ${message}`);
+            await this.refundTaskCreditsIfNeeded(task.id, "AI合同生成失败自动退款");
+            await this.markTaskFailedIfActive(task.id, ContractGenerationStatus.FAILED, message);
+            throw error;
+        }
+    }
+
+    async reviewUploadedContract(userId: string, dto: ReviewUploadedContractDto) {
+        const model = await this.loadConfiguredModel(true);
+        const cost = this.calculateCost(model);
+        if (cost > 0 && !(await this.billingService.hasSufficientPower(userId, cost))) {
+            throw HttpErrorFactory.badRequest("积分不足");
+        }
+
+        const fileSource = await this.resolveReviewFileSource(userId, dto);
+        const task = await this.create({
+            userId,
+            modelId: model.id,
+            providerId: model.provider.id,
+            title: dto.title?.trim() || "上传合同审查",
+            contractType: dto.contractType || "uploaded-review",
+            industry: dto.industry || "通用法务",
+            templateId: null,
+            parties: [],
+            variables: { fileUrl: fileSource.fileUrl, fileId: fileSource.fileId },
+            prompt: "上传已有合同审查",
+            summary: null,
+            sections: [],
+            riskFindings: [],
+            legalTerms: [],
+            score: null,
+            status: ContractGenerationStatus.PENDING,
+            resultUrl: null,
+            errorMessage: null,
+            costCredits: cost,
+            providerMetadata: { source: "upload-review", fileUrl: fileSource.fileUrl, fileId: fileSource.fileId, stance: dto.stance ?? "neutral" },
+            requestPayload: { ...dto, fileUrl: fileSource.fileUrl, fileId: fileSource.fileId } as unknown as Record<string, unknown>,
+        } as Partial<ContractGenerationTask>);
+
+        try {
+            await this.taskRepo.update(task.id, { status: ContractGenerationStatus.PROCESSING });
+            await this.reserveTaskCreditsOnce(task, model.name);
+            const content = await llmFileParser.parseAndFormat(fileSource.fileUrl, { maxFileSize: UPLOAD_REVIEW_MAX_BYTES, timeout: UPLOAD_REVIEW_PARSE_TIMEOUT_MS });
+            const result = await generateText({
+                model: await this.resolveLanguageModel(model),
+                output: Output.object({ schema: contractSchema }),
+                prompt: this.buildUploadReviewPrompt(dto, content.slice(0, UPLOAD_REVIEW_MAX_CHARS)),
+                temperature: 0.12,
+            });
+            const output = result.output;
+            const sections = this.normalizeSections(output.sections);
+            if (sections.length === 0) throw new Error("Uploaded contract review returned no sections");
+
+            return await this.taskRepo.manager.transaction(async (entityManager) => {
+                const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
+                if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+                await entityManager.update(ContractGenerationTask, task.id, {
+                    status: ContractGenerationStatus.DRAFT,
+                    title: output.title?.trim() || task.title,
+                    summary: output.summary?.trim() || null,
+                    sections,
+                    riskFindings: this.normalizeRisks(output.riskFindings),
+                    legalTerms: this.normalizeTerms(output.legalTerms),
+                    score: this.normalizeScore(output.score),
+                    providerMetadata: { ...(currentTask?.providerMetadata ?? task.providerMetadata ?? {}), provider: model.provider.provider, model: model.model, reviewedAt: new Date().toISOString(), sourceChars: content.length },
+                });
+                const saved = (await entityManager.findOne(ContractGenerationTask, { where: { id: task.id } })) as ContractGenerationTask | null;
+                if (!saved) throw HttpErrorFactory.notFound("任务不存在或已删除");
+                await this.createVersion(saved, "upload_review", "上传合同审查完成", entityManager);
+                return saved;
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await this.refundTaskCreditsIfNeeded(task.id, "上传合同审查失败自动退款");
+            await this.markTaskFailedIfActive(task.id, ContractGenerationStatus.FAILED, message);
+            throw error;
+        }
+    }
+
+    async reviewTask(userId: string, taskId: string) {
+        const task = await this.getTaskDetail(userId, taskId);
+        this.assertTaskEditable(task);
+        if (!task.sections?.length) throw HttpErrorFactory.badRequest("合同暂无可审查内容");
+        const model = await this.loadModel(task.modelId);
+
+        await this.taskRepo.update(task.id, { status: ContractGenerationStatus.REVIEWING });
+        try {
+            const result = await generateText({
+                model: await this.resolveLanguageModel(model),
+                output: Output.object({ schema: reviewSchema }),
+                prompt: this.buildReviewPrompt(task),
+                temperature: 0.1,
+            });
+            return await this.taskRepo.manager.transaction(async (entityManager) => {
+                const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
+                if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+                await entityManager.update(ContractGenerationTask, task.id, {
+                    status: ContractGenerationStatus.DRAFT,
+                    riskFindings: this.normalizeRisks(result.output.riskFindings),
+                    legalTerms: this.normalizeTerms(result.output.legalTerms),
+                    score: this.normalizeScore(result.output.score),
+                    resultUrl: null,
+                    providerMetadata: { ...(currentTask.providerMetadata ?? task.providerMetadata ?? {}), reviewedAt: new Date().toISOString() },
+                });
+                const saved = await this.findActiveTaskForWrite(task.id, entityManager);
+                if (!saved) throw HttpErrorFactory.notFound("任务不存在或已删除");
+                await this.createVersion(saved, "review", "重新风险审查", entityManager);
+                return saved;
+            });
+        } catch (error) {
+            await this.markTaskFailedIfActive(task.id, ContractGenerationStatus.DRAFT, error instanceof Error ? error.message : String(error), "lastReviewError");
+            throw error;
+        }
+    }
+
+    async rewriteClause(userId: string, taskId: string, dto: RewriteContractClauseDto) {
+        const task = await this.getTaskDetail(userId, taskId);
+        const model = await this.loadModel(task.modelId);
+        const result = await generateText({
+            model: await this.resolveLanguageModel(model),
+            output: Output.object({ schema: rewriteSchema }),
+            prompt: this.buildRewritePrompt(dto),
+            temperature: 0.15,
+        });
+        return result.output;
+    }
+
+    async updateTaskContent(userId: string, taskId: string, dto: UpdateContractContentDto) {
+        const task = await this.getTaskDetail(userId, taskId);
+        this.assertTaskEditable(task);
+        const sections = this.normalizeSections(dto.sections);
+        if (sections.length === 0) throw HttpErrorFactory.badRequest("请至少保留一条有效条款");
+
+        return await this.taskRepo.manager.transaction(async (entityManager) => {
+            const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
+            if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+            await entityManager.update(ContractGenerationTask, task.id, {
+                title: dto.title?.trim() || currentTask.title,
+                summary: dto.summary?.trim() || currentTask.summary,
+                sections,
+                status: currentTask.status === ContractGenerationStatus.SUCCESS ? ContractGenerationStatus.DRAFT : currentTask.status,
+                resultUrl: currentTask.status === ContractGenerationStatus.SUCCESS ? null : currentTask.resultUrl,
+                providerMetadata: { ...(currentTask.providerMetadata ?? {}), editedAt: new Date().toISOString(), sectionCount: sections.length },
+            });
+            const saved = await this.findActiveTaskForWrite(task.id, entityManager);
+            if (!saved) throw HttpErrorFactory.notFound("任务不存在或已删除");
+            await this.createVersion(saved, "edit", "用户保存编辑", entityManager);
+            return saved;
+        });
+    }
+
+    async updateRiskAction(userId: string, taskId: string, dto: UpdateRiskActionDto) {
+        const task = await this.getTaskDetail(userId, taskId);
+        this.assertTaskEditable(task);
+        const nextActions = { ...(task.riskActions ?? {}), [dto.riskKey]: { status: dto.status, actedAt: new Date().toISOString() } };
+        const nextSections = dto.status === "accepted" && dto.sections ? this.normalizeSections(dto.sections) : task.sections;
+        return await this.taskRepo.manager.transaction(async (entityManager) => {
+            const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
+            if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+            await entityManager.update(ContractGenerationTask, task.id, { riskActions: nextActions, sections: nextSections, status: ContractGenerationStatus.DRAFT, resultUrl: null, providerMetadata: { ...(currentTask.providerMetadata ?? task.providerMetadata ?? {}), riskActionUpdatedAt: new Date().toISOString() } });
+            const saved = await this.findActiveTaskForWrite(task.id, entityManager);
+            if (!saved) throw HttpErrorFactory.notFound("任务不存在或已删除");
+            await this.createVersion(saved, dto.status === "accepted" ? "risk_accept" : "risk_ignore", dto.status === "accepted" ? "采纳风险建议" : "忽略风险建议", entityManager);
+            return saved;
+        });
+    }
+
+    async getTaskVersions(userId: string, taskId: string) {
+        await this.getTaskDetail(userId, taskId);
+        return this.versionRepo.find({ where: { taskId }, order: { versionNo: "DESC", createdAt: "DESC" } });
+    }
+
+    async restoreTaskVersion(userId: string, taskId: string, versionId: string) {
+        const task = await this.getTaskDetail(userId, taskId);
+        this.assertTaskEditable(task);
+        const version = await this.versionRepo.findOne({ where: { id: versionId, taskId } });
+        if (!version) throw HttpErrorFactory.notFound("版本不存在");
+        return await this.taskRepo.manager.transaction(async (entityManager) => {
+            const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
+            if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+            await entityManager.update(ContractGenerationTask, task.id, {
+                title: version.title,
+                summary: version.summary,
+                sections: version.sections,
+                riskFindings: version.riskFindings,
+                legalTerms: version.legalTerms,
+                score: version.score,
+                riskActions: version.riskActions,
+                status: ContractGenerationStatus.DRAFT,
+                resultUrl: null,
+                providerMetadata: { ...(currentTask.providerMetadata ?? task.providerMetadata ?? {}), restoredFromVersion: version.versionNo, restoredAt: new Date().toISOString() },
+            });
+            const saved = await this.findActiveTaskForWrite(task.id, entityManager);
+            if (!saved) throw HttpErrorFactory.notFound("任务不存在或已删除");
+            await this.createVersion(saved, "restore", `恢复到版本 v${version.versionNo}`, entityManager);
+            return saved;
+        });
+    }
+
+    async exportTask(userId: string, taskId: string, request: Request, dto: ExportContractDto = {}) {
+        const task = await this.getTaskDetail(userId, taskId);
+        const exportType = dto.exportType ?? (dto.includeRiskReport ? "contract_with_report" : "contract");
+        if (task.status === ContractGenerationStatus.SUCCESS && task.resultUrl && task.providerMetadata?.exportType === exportType) return task;
+        if ([ContractGenerationStatus.PENDING, ContractGenerationStatus.PROCESSING, ContractGenerationStatus.REVIEWING, ContractGenerationStatus.EXPORTING].includes(task.status)) {
+            throw HttpErrorFactory.badRequest("任务正在处理，请稍后再试");
+        }
+        if (!task.sections?.length) throw HttpErrorFactory.badRequest("合同暂无可导出的条款");
+
+        try {
+            await this.taskRepo.update(task.id, { status: ContractGenerationStatus.EXPORTING });
+            const buffer = await buildContractDocx(task, { exportType });
+            const upload = await this.fileUploadService.uploadFile(this.createMulterFile(buffer, `${task.id}.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"), request, undefined, { extensionId: EXTENSION_ID });
+            const currentTask = await this.findActiveTaskForWrite(task.id);
+            if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+            await this.taskRepo.update(task.id, {
+                status: ContractGenerationStatus.SUCCESS,
+                resultUrl: upload.url,
+                errorMessage: null,
+                providerMetadata: { ...(currentTask.providerMetadata ?? task.providerMetadata ?? {}), exportedAt: new Date().toISOString(), exportType, fileId: upload.id, fileName: `${task.id}.docx`, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+            });
+            return this.getTaskDetail(userId, task.id);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await this.markTaskFailedIfActive(task.id, ContractGenerationStatus.EXPORT_FAILED, message, "lastExportError");
+            throw error;
+        }
+    }
+
+    async getUserTasks(userId: string, query: QueryContractTaskDto) {
+        return this.listTasks({ ...query, userId });
+    }
+
+    async getTaskDetail(userId: string, taskId: string) {
+        const task = await this.taskRepo.findOne({ where: { id: taskId, userId } });
+        if (!task) throw HttpErrorFactory.notFound("任务不存在");
+        return task;
+    }
+
+    async deleteTask(userId: string, taskId: string) {
+        const task = await this.getTaskDetail(userId, taskId);
+        this.assertTaskNotBusy(task, "删除");
+        await this.taskRepo.softDelete({ id: taskId, userId });
+        return { success: true };
+    }
+
+    async getAllTasks(query: QueryContractTaskDto) {
+        return this.listTasks(query);
+    }
+
+    async getAdminTaskDetail(taskId: string) {
+        const task = await this.taskRepo.findOne({ where: { id: taskId } });
+        if (!task) throw HttpErrorFactory.notFound("任务不存在");
+        return task;
+    }
+
+    async adminDeleteTask(taskId: string) {
+        const task = await this.getAdminTaskDetail(taskId);
+        this.assertTaskNotBusy(task, "删除");
+        await this.taskRepo.softDelete(taskId);
+        return { success: true };
+    }
+
+    private async listTasks(query: QueryContractTaskDto) {
+        const page = query.page ?? 1;
+        const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
+        const qb = this.taskRepo.createQueryBuilder("task").orderBy("task.createdAt", "DESC");
+        this.applyFilters(qb, query);
+        const [items, total] = await qb.skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
+        return { items, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+    }
+
+    private async createVersion(task: ContractGenerationTask, changeType: string, changeSummary: string, entityManager?: EntityManager) {
+        if (!entityManager) {
+            return this.versionRepo.manager.transaction((manager) => this.createVersion(task, changeType, changeSummary, manager));
+        }
+        const repo = entityManager.getRepository(ContractGenerationVersion);
+        const latest = await repo.findOne({ where: { taskId: task.id }, order: { versionNo: "DESC" }, lock: { mode: "pessimistic_write" }, select: ["id", "versionNo"] });
+        await repo.save(repo.create({
+            taskId: task.id,
+            versionNo: (latest?.versionNo ?? 0) + 1,
+            title: task.title,
+            summary: task.summary ?? null,
+            sections: task.sections ?? [],
+            riskFindings: task.riskFindings ?? [],
+            legalTerms: task.legalTerms ?? [],
+            score: task.score ?? null,
+            riskActions: task.riskActions ?? {},
+            changeType,
+            changeSummary,
+        }));
+    }
+
+    private assertTaskEditable(task: ContractGenerationTask) {
+        if (this.isTaskBusy(task.status)) {
+            throw HttpErrorFactory.badRequest("任务正在处理，暂不能编辑");
+        }
+    }
+
+    private assertTaskNotBusy(task: ContractGenerationTask, action: string) {
+        if (this.isTaskBusy(task.status)) {
+            throw HttpErrorFactory.badRequest(`任务正在处理，暂不能${action}`);
+        }
+    }
+
+    private isTaskBusy(status: ContractGenerationStatus) {
+        return [ContractGenerationStatus.PENDING, ContractGenerationStatus.PROCESSING, ContractGenerationStatus.REVIEWING, ContractGenerationStatus.EXPORTING].includes(status);
+    }
+
+    private async findActiveTaskForWrite(taskId: string, entityManager?: EntityManager) {
+        const repo = entityManager ?? this.taskRepo.manager;
+        const task = await repo.findOne(ContractGenerationTask, { where: { id: taskId }, withDeleted: true });
+        return task && !task.deletedAt ? task : null;
+    }
+
+    private async markTaskFailedIfActive(taskId: string, status: ContractGenerationStatus, message: string, errorKey = "error") {
+        const task = await this.findActiveTaskForWrite(taskId);
+        if (!task) return;
+        const providerMetadata: ContractGenerationTask["providerMetadata"] = { ...(task.providerMetadata ?? {}), [errorKey]: message };
+        await this.taskRepo.save({
+            id: task.id,
+            status,
+            errorMessage: message,
+            providerMetadata,
+        });
+    }
+
+    private applyFilters(qb: ReturnType<Repository<ContractGenerationTask>["createQueryBuilder"]>, query: QueryContractTaskDto) {
+        if (query.userId) qb.andWhere("task.userId = :userId", { userId: query.userId });
+        if (query.status) qb.andWhere("task.status = :status", { status: query.status });
+        if (query.templateId) qb.andWhere("task.templateId = :templateId", { templateId: query.templateId });
+        if (query.contractType) qb.andWhere("task.contractType = :contractType", { contractType: query.contractType });
+        if (query.modelId) qb.andWhere("task.modelId = :modelId", { modelId: query.modelId });
+        if (query.providerId) qb.andWhere("task.providerId = :providerId", { providerId: query.providerId });
+        if (query.keyword) {
+            qb.andWhere(new Brackets((nested) => nested.where("task.title ILIKE :keyword", { keyword: `%${query.keyword}%` }).orWhere("task.prompt ILIKE :keyword", { keyword: `%${query.keyword}%` })));
+        }
+    }
+
+    private async loadModel(modelId: string): Promise<AiModel>;
+    private async loadModel(modelId: string, throwOnMissing: true): Promise<AiModel>;
+    private async loadModel(modelId: string, throwOnMissing: false): Promise<AiModel | null>;
+    private async loadModel(modelId: string, throwOnMissing = true) {
+        const model = await this.modelRepo.findOne({ where: { id: modelId, isActive: true }, relations: { provider: true } });
+        if (!model || !model.provider || !model.provider.isActive || model.modelType !== "llm") {
+            if (!throwOnMissing) return null;
+            throw HttpErrorFactory.badRequest("AI 合同需要启用的 LLM 模型");
+        }
+        return model;
+    }
+
+    private async loadConfiguredModel(throwOnMissing: true): Promise<AiModel>;
+    private async loadConfiguredModel(throwOnMissing: false): Promise<AiModel | null>;
+    private async loadConfiguredModel(throwOnMissing: boolean) {
+        const config = await this.getOrCreateConfig();
+        if (!config.modelId) {
+            if (throwOnMissing) throw HttpErrorFactory.badRequest("AI 合同插件尚未配置固定模型，请联系管理员在插件后台配置");
+            return null;
+        }
+        const model = await this.loadModel(config.modelId, false);
+        if (!model && throwOnMissing) throw HttpErrorFactory.badRequest("AI 合同插件配置的固定模型不可用，请联系管理员检查模型状态");
+        return model;
+    }
+
+    private async getOrCreateConfig() {
+        const existing = await this.configRepo.findOne({ where: { key: "default" } });
+        if (existing) return existing;
+        return this.configRepo.save(this.configRepo.create({ key: "default", modelId: null, metadata: {} }));
+    }
+
+    private async resolveLanguageModel(model: AiModel) {
+        const providerConfig = this.flattenProviderConfig(await this.publicAiModelService.getProviderConfig(model.id));
+        const provider = await this.publicAiModelService.getProviderAdapter(model.id, providerConfig);
+        return provider(model.model).model;
+    }
+
+    async listAvailableLlmModels() {
+        const models = await this.modelRepo.find({
+            where: { isActive: true, modelType: "llm" },
+            relations: { provider: true },
+            order: { sortOrder: "DESC", createdAt: "DESC" },
+        });
+        return models
+            .filter((model) => model.provider?.isActive)
+            .map((model) => ({
+                id: model.id,
+                name: model.name,
+                model: model.model,
+                modelType: model.modelType,
+                providerName: model.provider.name,
+                provider: model.provider.provider,
+            }));
+    }
+
+    private async reserveTaskCreditsOnce(task: ContractGenerationTask, modelName: string, entityManager?: EntityManager) {
+        const cost = Number(task.costCredits ?? 0);
+        if (cost <= 0) return;
+        if (!entityManager) {
+            return this.taskRepo.manager.transaction((manager) => this.reserveTaskCreditsOnce(task, modelName, manager));
+        }
+        const repo = entityManager?.getRepository(AccountLog) ?? this.accountLogRepo;
+        const currentTask = await entityManager.findOne(ContractGenerationTask, { where: { id: task.id }, lock: { mode: "pessimistic_write" }, withDeleted: true });
+        if (!currentTask || currentTask.deletedAt) return;
+        if (currentTask.providerMetadata?.billingStatus === "deducted") return;
+        const existingLog = await repo.findOne({ where: { associationNo: task.id, accountType: ACCOUNT_LOG_TYPE.PLUGIN_DEC, action: ACTION.DEC }, select: ["id"] });
+        if (!existingLog) {
+            await this.billingService.deductUserPower({ userId: task.userId, amount: cost, remark: `AI合同: ${modelName}`, associationNo: task.id, associationUserId: task.userId }, entityManager);
+        }
+        await entityManager.update(ContractGenerationTask, task.id, {
+            providerMetadata: {
+                ...(currentTask.providerMetadata ?? task.providerMetadata ?? {}),
+                billingStatus: "deducted",
+                billedAt: new Date().toISOString(),
+            },
+        });
+    }
+
+    private async refundTaskCreditsIfNeeded(taskId: string, remark: string) {
+        try {
+            await this.taskRepo.manager.transaction(async (entityManager) => {
+                const task = await entityManager.findOne(ContractGenerationTask, { where: { id: taskId }, lock: { mode: "pessimistic_write" }, withDeleted: true });
+                if (!task || Number(task.costCredits ?? 0) <= 0) return;
+                const metadata = task.providerMetadata ?? {};
+                if (metadata.billingStatus !== "deducted" || metadata.refundedAt) return;
+                await this.billingService.addUserPower({ userId: task.userId, amount: Number(task.costCredits), remark, associationNo: task.id, associationUserId: task.userId }, entityManager);
+                await entityManager.update(ContractGenerationTask, task.id, {
+                    providerMetadata: {
+                        ...metadata,
+                        billingStatus: "refunded",
+                        refundedAt: new Date().toISOString(),
+                        refundRemark: remark,
+                    },
+                });
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Contract task ${taskId} refund failed: ${message}`);
+            const task = await this.taskRepo.findOne({ where: { id: taskId }, withDeleted: true });
+            if (!task) return;
+            await this.taskRepo.update(taskId, {
+                providerMetadata: {
+                    ...(task.providerMetadata ?? {}),
+                    refundError: message,
+                },
+            });
+        }
+    }
+
+    private async getTemplate(templateId?: string | null): Promise<ContractTemplate> {
+        const total = await this.templateRepo.count();
+        const activeTemplates = await this.templateRepo.find({ where: { isActive: true }, order: { sortOrder: "DESC", createdAt: "ASC" } });
+        if (total > 0) {
+            if (activeTemplates.length === 0) throw HttpErrorFactory.badRequest("AI 合同插件暂无启用模板，请联系管理员启用模板");
+            const selected = activeTemplates.find((template) => template.id === templateId) ?? activeTemplates[0];
+            return this.toTemplate(selected);
+        }
+        return getContractTemplate(templateId);
+    }
+
+    private toTemplate(template: ContractTemplateEntity): ContractTemplate {
+        return {
+            id: template.id,
+            name: template.name,
+            industry: template.industry,
+            contractType: template.contractType,
+            description: template.description,
+            fields: template.fields,
+            defaultSections: template.defaultSections,
+            promptTemplate: template.promptTemplate,
+        };
+    }
+
+    private normalizeTemplateDto(dto: UpsertContractTemplateDto): Partial<ContractTemplateEntity> {
+        return {
+            name: dto.name.trim(),
+            industry: dto.industry.trim(),
+            contractType: dto.contractType.trim(),
+            description: dto.description.trim(),
+            fields: this.normalizeTemplateFields(dto.fields),
+            defaultSections: (Array.isArray(dto.defaultSections) ? dto.defaultSections : []).map((section) => String(section).trim().slice(0, 120)).filter(Boolean).slice(0, 40),
+            promptTemplate: dto.promptTemplate?.trim() || null,
+            isActive: dto.isActive ?? true,
+            sortOrder: dto.sortOrder ?? 0,
+        };
+    }
+
+    private normalizeTemplateFields(fields: UpsertContractTemplateDto["fields"]) {
+        return (Array.isArray(fields) ? fields : [])
+            .slice(0, MAX_PROMPT_LIST_ITEMS)
+            .map((field) => ({
+                key: String(field.key ?? "").trim().slice(0, 80),
+                label: String(field.label ?? "").trim().slice(0, 120),
+                type: field.type,
+                required: Boolean(field.required),
+                placeholder: field.placeholder ? String(field.placeholder).trim().slice(0, 200) : undefined,
+                options: Array.isArray(field.options) ? field.options.slice(0, 40).map((option) => String(option).trim().slice(0, 120)).filter(Boolean) : undefined,
+            }))
+            .filter((field) => field.key && field.label && ["text", "textarea", "number", "date", "select"].includes(field.type));
+    }
+
+    private async syncBuiltinTemplatesIfEmpty() {
+        if ((await this.templateRepo.count()) === 0) await this.syncBuiltinTemplates(false);
+    }
+
+    private async syncBuiltinTemplates(reset: boolean) {
+        if (reset) await this.templateRepo.delete({ isBuiltin: true });
+        const existing = await this.templateRepo.find();
+        const existingByType = new Map(existing.map((template) => [`${template.contractType}:${template.name}`, template]));
+        for (const [index, template] of CONTRACT_TEMPLATES.entries()) {
+            const key = `${template.contractType}:${template.name}`;
+            if (existingByType.has(key)) continue;
+            await this.templateRepo.save(this.templateRepo.create({ ...template, promptTemplate: null, isBuiltin: true, isActive: true, sortOrder: CONTRACT_TEMPLATES.length - index }));
+        }
+    }
+
+    private buildGeneratePrompt(dto: GenerateContractDto, template: ContractTemplate) {
+        return `你是一名严谨的中国商业合同起草助手。请输出符合 schema 的结构化合同数据，不要输出 Markdown。
+
+重要限制：
+- 内容仅供参考，不得宣称构成法律意见。
+- 条款要具体、可执行，避免空泛表达。
+- 主动补齐付款、验收、违约、解除、保密、争议解决等关键风险条款。
+- 风险提示要指出缺失或不清楚的信息，并给出可替换文本。
+
+合同标题：${dto.title}
+模板：${template.name}
+行业：${dto.industry || template.industry}
+合同类型：${dto.contractType || template.contractType}
+目标语言：${dto.language ?? "zh-CN"}
+合同立场：${this.getStanceInstruction(dto.stance)}
+默认条款结构：${template.defaultSections.join("、")}
+用户填写字段：${JSON.stringify(dto.variables ?? {}, null, 2)}
+补充要求：${dto.prompt || "无"}
+后台模板额外提示：${template.promptTemplate || "无"}`;
+    }
+
+    private getStanceInstruction(stance?: GenerateContractDto["stance"]) {
+        return {
+            neutral: "中立平衡，兼顾双方权利义务。",
+            favor_party_a: "适度偏向甲方，强化乙方交付、付款保障、违约责任和甲方解除权。",
+            favor_party_b: "适度偏向乙方，强化付款确定性、验收时限、责任边界和乙方免责场景。",
+            strict: "更严格严谨，条款细化到可执行标准，减少模糊表述。",
+            friendly: "更友好易懂，在保持风险控制的同时降低对抗性表达。",
+        }[stance ?? "neutral"];
+    }
+
+    private buildReviewPrompt(task: ContractGenerationTask) {
+        return `你是一名合同风险审查助手。请审查以下合同，输出 riskFindings、legalTerms、score 三部分结构化数据。
+要求：识别高/中/低风险，给出修改建议和可替换文本；评分 0-100；说明缺失关键条款。
+
+合同标题：${task.title}
+合同正文：
+${task.sections.map((section, index) => `${index + 1}. ${section.title}\n${section.content}`).join("\n\n")}`;
+    }
+
+    private buildUploadReviewPrompt(dto: ReviewUploadedContractDto, content: string) {
+        return `你是一名合同审查助手。请从用户上传的合同文本中提取合同标题、摘要和核心条款，并输出符合 schema 的结构化数据。
+要求：
+- 保留原合同主要条款含义，不要凭空重写整份合同。
+- 将长合同拆分为清晰条款 sections。
+- 识别高/中/低风险，给出修改建议和可替换文本。
+- 输出法律术语解释和 0-100 的完整度/风险控制/清晰度评分。
+- 内容仅供参考，不构成法律意见。
+
+合同类型：${dto.contractType || "未指定"}
+行业：${dto.industry || "未指定"}
+审查立场：${this.getStanceInstruction(dto.stance)}
+用户指定标题：${dto.title || "未指定"}
+
+上传合同正文：
+${content}`;
+    }
+
+    private async resolveReviewFileSource(userId: string, dto: ReviewUploadedContractDto) {
+        const file = await this.fileRepo.findOne({ where: { id: dto.fileId } });
+        if (!file || file.uploaderId !== userId) throw HttpErrorFactory.badRequest("合同文件不存在或无权访问");
+        if (file.extensionIdentifier && file.extensionIdentifier !== EXTENSION_ID) throw HttpErrorFactory.badRequest("合同文件不属于当前插件");
+        this.assertReviewFileSupported(file);
+        if (!file.url) throw HttpErrorFactory.badRequest("合同文件缺少可访问 URL");
+        return {
+            fileId: file.id,
+            fileUrl: this.normalizeStoredFileUrl(file.url),
+        };
+    }
+
+    private assertReviewFileSupported(file: File) {
+        if (Number(file.size ?? 0) > UPLOAD_REVIEW_MAX_BYTES) {
+            throw HttpErrorFactory.badRequest("合同文件不能超过 20MB");
+        }
+        const extension = String(file.extension || file.originalName?.split(".").pop() || "").toLowerCase().replace(/^\./, "");
+        const mimeType = String(file.mimeType || "").toLowerCase().split(";")[0]?.trim();
+        const extensionAllowed = UPLOAD_REVIEW_ALLOWED_EXTENSIONS.has(extension);
+        const mimeAllowed = Boolean(mimeType && UPLOAD_REVIEW_ALLOWED_MIME_TYPES.has(mimeType));
+        if (!extensionAllowed && !mimeAllowed) {
+            throw HttpErrorFactory.badRequest("仅支持 PDF、Word、RTF、TXT 或 Markdown 合同文件");
+        }
+    }
+
+    private normalizeStoredFileUrl(value: string) {
+        try {
+            const url = new URL(value);
+            if (!["http:", "https:"].includes(url.protocol)) throw new Error("invalid protocol");
+            if (url.username || url.password) throw new Error("credentials not allowed");
+            url.hash = "";
+            return url.toString();
+        } catch {
+            throw HttpErrorFactory.badRequest("合同文件 URL 格式不正确");
+        }
+    }
+
+    private buildRewritePrompt(dto: RewriteContractClauseDto) {
+        const modeLabel = {
+            stricter: "更严谨",
+            favor_party_a: "更偏甲方",
+            favor_party_b: "更偏乙方",
+            concise: "更简洁",
+            friendly: "更友好",
+            reduce_risk: "降低风险",
+        }[dto.mode ?? "reduce_risk"];
+        return `请将以下合同条款改写为“${modeLabel}”版本。输出 content 和 reason。
+条款标题：${dto.sectionTitle}
+原条款：${dto.content}`;
+    }
+
+    private extractParties(variables: Record<string, unknown>) {
+        return [
+            { name: String(variables.partyA ?? "").trim(), role: "甲方" },
+            { name: String(variables.partyB ?? "").trim(), role: "乙方" },
+        ].filter((party) => party.name);
+    }
+
+    private normalizeSections(sections: ContractSection[]) {
+        return (Array.isArray(sections) ? sections : [])
+            .slice(0, 80)
+            .map((section, index) => ({ id: section.id || `section-${index + 1}`, title: String(section.title ?? "").trim().slice(0, 200), content: String(section.content ?? "").trim().slice(0, MAX_SECTION_CHARS), importance: section.importance ?? "normal" }))
+            .filter((section) => section.title && section.content);
+    }
+
+    private normalizeVariables(variables: Record<string, unknown>) {
+        const entries = Object.entries(variables ?? {}).slice(0, MAX_VARIABLE_KEYS);
+        let remaining = MAX_VARIABLE_CHARS;
+        return entries.reduce<Record<string, unknown>>((accumulator, [key, value]) => {
+            if (remaining <= 0) return accumulator;
+            const normalizedKey = String(key).trim().slice(0, 80);
+            if (!normalizedKey) return accumulator;
+            const normalizedValue = this.stringifyVariableValue(value);
+            const text = String(normalizedValue ?? "").slice(0, Math.max(0, remaining));
+            remaining -= normalizedKey.length + text.length;
+            accumulator[normalizedKey] = text;
+            return accumulator;
+        }, {});
+    }
+
+    private stringifyVariableValue(value: unknown) {
+        if (typeof value === "string") return value.trim();
+        if (typeof value === "number" || typeof value === "boolean") return String(value);
+        if (Array.isArray(value)) return JSON.stringify(value.slice(0, 20));
+        if (value && typeof value === "object") return JSON.stringify(Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 20)));
+        return "";
+    }
+
+    private normalizeRisks(risks: ContractRiskFinding[]) {
+        return (Array.isArray(risks) ? risks : []).slice(0, MAX_PROMPT_LIST_ITEMS).map((risk) => ({ sectionTitle: String(risk.sectionTitle ?? "").trim().slice(0, 200), level: risk.level ?? "medium", issue: String(risk.issue ?? "").trim().slice(0, 1000), suggestion: String(risk.suggestion ?? "").trim().slice(0, 2000), replacementText: risk.replacementText ? String(risk.replacementText).trim().slice(0, MAX_SECTION_CHARS) : undefined })).filter((risk) => risk.sectionTitle && risk.issue && risk.suggestion);
+    }
+
+    private normalizeTerms(terms: ContractLegalTerm[]) {
+        return (Array.isArray(terms) ? terms : []).slice(0, MAX_PROMPT_LIST_ITEMS).map((term) => ({ term: String(term.term ?? "").trim().slice(0, 120), explanation: String(term.explanation ?? "").trim().slice(0, 1000) })).filter((term) => term.term && term.explanation);
+    }
+
+    private normalizeScore(score: ContractScore | null | undefined): ContractScore {
+        return { overall: this.clampScore(score?.overall), completeness: this.clampScore(score?.completeness), riskControl: this.clampScore(score?.riskControl), clarity: this.clampScore(score?.clarity), missingItems: Array.isArray(score?.missingItems) ? score.missingItems.map(String).filter(Boolean) : [] };
+    }
+
+    private clampScore(value: unknown) {
+        const number = typeof value === "number" && Number.isFinite(value) ? value : 0;
+        return Math.max(0, Math.min(100, Math.round(number)));
+    }
+
+    private calculateCost(model: AiModel): number {
+        const config = this.normalizeModelConfig(model);
+        const price = config?.pricePerContract;
+        return typeof price === "number" ? price : 0;
+    }
+
+    private normalizeModelConfig(model: AiModel): Record<string, unknown> | null {
+        if (!model.modelConfig) return null;
+        if (!Array.isArray(model.modelConfig)) return model.modelConfig as Record<string, unknown>;
+        return model.modelConfig.reduce<Record<string, unknown>>((accumulator, item) => {
+            if (item && typeof item === "object" && "field" in item && typeof item.field === "string") {
+                accumulator[item.field] = item.value;
+                return accumulator;
+            }
+            Object.assign(accumulator, item);
+            return accumulator;
+        }, {});
+    }
+
+    private flattenProviderConfig(config: Record<string, unknown>): Record<string, string> {
+        const normalized: Record<string, string> = {};
+        Object.entries(config).forEach(([key, item]) => {
+            if (typeof item === "string") {
+                normalized[key] = item;
+                return;
+            }
+            const value = (item as { value?: unknown } | undefined)?.value;
+            if (typeof value === "string") normalized[key] = value;
+        });
+        return {
+            apiKey: normalized.apiKey || normalized.api_key || normalized.API_KEY || "",
+            baseURL: normalized.baseURL || normalized.baseUrl || normalized.base_url || "",
+        };
+    }
+
+    private createMulterFile(buffer: Buffer, filename: string, mimetype: string): Express.Multer.File {
+        return { fieldname: "file", originalname: filename, encoding: "7bit", mimetype, size: buffer.length, buffer, destination: "", filename, path: "", stream: Readable.from(buffer) };
+    }
+}

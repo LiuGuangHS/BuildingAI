@@ -1,0 +1,18 @@
+{
+    "identifier": "echoflow-contract-generation",
+    "name": "AI合同 | 多行业模板",
+    "type": "application",
+    "version": "0.0.1",
+    "icon": "/echoflow-contract-generation/static/icon.png",
+    "description": "面向企业法务、创业者和个人用户的 AI 合同起草与审查工具，支持多行业合同模板、在线编辑、风险提示、法律术语解释、合规检查和 Word 合同导出。",
+    "homepage": "",
+    "author": {
+        "avatar": "/static/avatars/buildingai.png",
+        "name": "EchoflowAI Teams",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    }
+}

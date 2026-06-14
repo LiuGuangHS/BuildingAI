@@ -1,0 +1,242 @@
+import { Transform, Type } from "class-transformer";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from "class-validator";
+
+import { ContractGenerationStatus, type ContractSection } from "../../../db/entities";
+
+export class GenerateContractDto {
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(120)
+    title: string;
+
+    @IsString()
+    @IsOptional()
+    templateId?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(80)
+    contractType?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(80)
+    industry?: string;
+
+    @IsObject()
+    @IsOptional()
+    variables?: Record<string, unknown>;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(4000)
+    prompt?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(20)
+    language?: string;
+
+    @IsString()
+    @IsOptional()
+    @IsIn(["neutral", "favor_party_a", "favor_party_b", "strict", "friendly"])
+    stance?: "neutral" | "favor_party_a" | "favor_party_b" | "strict" | "friendly";
+}
+
+export class ReviewUploadedContractDto {
+    @IsString()
+    @IsOptional()
+    @MaxLength(120)
+    title?: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @IsUUID("4")
+    fileId: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(80)
+    contractType?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(80)
+    industry?: string;
+
+    @IsString()
+    @IsOptional()
+    @IsIn(["neutral", "favor_party_a", "favor_party_b", "strict", "friendly"])
+    stance?: "neutral" | "favor_party_a" | "favor_party_b" | "strict" | "friendly";
+}
+
+export class ExportContractDto {
+    @IsBoolean()
+    @IsOptional()
+    @Transform(({ value }) => value === true || value === "true")
+    includeRiskReport?: boolean;
+
+    @IsString()
+    @IsOptional()
+    @IsIn(["contract", "contract_with_report", "risk_report"])
+    exportType?: "contract" | "contract_with_report" | "risk_report";
+}
+
+export class UpdateContractConfigDto {
+    @IsString()
+    @IsNotEmpty()
+    @IsUUID("4")
+    modelId: string;
+}
+
+export class UpsertContractTemplateDto {
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(120)
+    name: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(80)
+    industry: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(80)
+    contractType: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(1000)
+    description: string;
+
+    @IsArray()
+    @ArrayMaxSize(40)
+    fields: Array<{
+        key: string;
+        label: string;
+        type: "text" | "textarea" | "number" | "date" | "select";
+        required?: boolean;
+        placeholder?: string;
+        options?: string[];
+    }>;
+
+    @IsArray()
+    @ArrayMaxSize(40)
+    defaultSections: string[];
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(4000)
+    promptTemplate?: string;
+
+    @IsBoolean()
+    @IsOptional()
+    isActive?: boolean;
+
+    @IsInt()
+    @IsOptional()
+    @Type(() => Number)
+    sortOrder?: number;
+}
+
+export class UpdateContractContentDto {
+    @IsString()
+    @IsOptional()
+    @MaxLength(120)
+    title?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(4000)
+    summary?: string;
+
+    @IsArray()
+    @ArrayMinSize(1)
+    @ArrayMaxSize(80)
+    sections: ContractSection[];
+}
+
+export class UpdateRiskActionDto {
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(500)
+    riskKey: string;
+
+    @IsString()
+    @IsIn(["accepted", "ignored"])
+    status: "accepted" | "ignored";
+
+    @IsArray()
+    @IsOptional()
+    @ArrayMaxSize(80)
+    sections?: ContractSection[];
+}
+
+export class RewriteContractClauseDto {
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(200)
+    sectionTitle: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(12000)
+    content: string;
+
+    @IsString()
+    @IsOptional()
+    @IsIn(["stricter", "favor_party_a", "favor_party_b", "concise", "friendly", "reduce_risk"])
+    mode?: "stricter" | "favor_party_a" | "favor_party_b" | "concise" | "friendly" | "reduce_risk";
+}
+
+export class QueryContractTaskDto {
+    @IsInt()
+    @Min(1)
+    @IsOptional()
+    @Type(() => Number)
+    page?: number;
+
+    @IsInt()
+    @Min(1)
+    @Max(100)
+    @IsOptional()
+    @Type(() => Number)
+    @Transform(({ value }) => (value === undefined ? 20 : value))
+    pageSize?: number;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(120)
+    keyword?: string;
+
+    @IsString()
+    @IsOptional()
+    @IsIn(Object.values(ContractGenerationStatus))
+    status?: ContractGenerationStatus;
+
+    @IsString()
+    @IsOptional()
+    @IsUUID("4")
+    userId?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(80)
+    templateId?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(80)
+    contractType?: string;
+
+    @IsString()
+    @IsOptional()
+    @IsUUID("4")
+    modelId?: string;
+
+    @IsString()
+    @IsOptional()
+    @IsUUID("4")
+    providerId?: string;
+}
