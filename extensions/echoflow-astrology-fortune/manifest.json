@@ -1,0 +1,18 @@
+{
+    "identifier": "echoflow-astrology-fortune",
+    "name": "AI星盘运势",
+    "type": "application",
+    "version": "0.0.1",
+    "icon": "/echoflow-astrology-fortune/static/icon.png",
+    "description": "基于出生信息、星座生肖、个人档案和 AI 推理，生成每日运势、性格洞察、事业财富、情感关系、星座配对与生活决策建议。",
+    "homepage": "",
+    "author": {
+        "avatar": "/static/avatars/buildingai.png",
+        "name": "EchoflowAI Teams",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    }
+}
