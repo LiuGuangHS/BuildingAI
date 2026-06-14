@@ -51,31 +51,39 @@
 - 前端依赖优先使用 `@buildingai/ui`、`@buildingai/http`、`@buildingai/services`、`@buildingai/services/shared`、`@buildingai/stores`、`@buildingai/hooks`、`@buildingai/web-core`，插件 service 建议分 `src/web/services/{console,web,types}`。
 - 数据、初始化和升级闭环在插件内：实体、迁移放 `src/api/db`；种子放 `src/api/db/seeds` 并导出 `getSeeders()`；升级脚本放 `src/api/upgrade/<version>/index.ts`；上传与静态存储放 `extensions/<identifier>/storage`。
 - 发布必须走官方 `extension:release` 流程，只依赖发布白名单文件；发布前至少跑插件构建、类型检查和必要 smoke test。
+- EchoFlow 业务插件文档统一维护在插件 `README.md`；种子数据、质量门禁、路线图和后续待办都写入 README，不再新增独立规划、质量或 Seeds 文档。
 
 ## 计费与 AI 能力
 
 - 插件需要扣减或返还用户积分时，优先注册 `ExtensionBillingModule` 并使用 `ExtensionBillingService`；若沿用本仓库现有直接 provider 写法，必须同时把 `User`、`AccountLog` 纳入 `TypeOrmModule.forFeature()` 并导入必要依赖。禁止直接改用户余额或账单表。
 - 计费流程要能解释清楚：估算金额、余额预检、扣费时机、失败退款、账务状态字段、幂等/重复请求处理。
-- 长任务或第三方调用建议先建业务记录并记录 `billingStatus`、`billingAmount`、外部任务 ID；失败分支必须记录原因并按策略退款。
+- AI 生成、文件解析、第三方任务等长流程默认采用“余额预检 -> 业务记录入库 -> 预扣 -> 成功写结果或失败退款”。如果改用成功后扣费，必须在 README 和后台文案里说明差异。
+- 扣费要以业务记录 ID 作为 `associationNo`，并检查同一 `associationNo` 是否已有 `ACCOUNT_LOG_TYPE.PLUGIN_DEC` + `ACTION.DEC` 账务记录，避免重复扣费。
+- 长任务或第三方调用建议先建业务记录并记录 `billingStatus`、`billingAmount`、外部任务 ID；失败分支必须记录原因并按策略退款。退款失败要写入业务记录元数据，例如 `providerMetadata.refundError`。
 - 事务内扣费/退款时，把同一个 `EntityManager` 传给 `deductUserPower()` 或 `addUserPower()`，避免业务记录和账务不一致。
 - 插件接入平台模型时，优先注册 `AiPublicModule` 并用 `PublicAiModelService` 获取模型、供应商配置和 provider adapter；若直接 provider 注入，必须补齐 `AiModel`、`AiProvider`、`Secret`、`SecretTemplate`、`SecretService` 等依赖。只有做底层 AI 工作流封装时才直接使用 `@buildingai/ai-sdk`。
+- 插件的模型配置页只列 `isActive: true` 且 `modelType: "llm"` 的模型，并过滤未启用的 Provider；保存默认模型时也要重新校验模型和 Provider 状态。
+- Console 模型列表返回值要与前端类型一致。若前端需要显示供应商，优先返回 `providerName`，需要对象字段时返回 `{ id, name, provider, isActive }`，不要把 `provider` 一会儿当字符串、一会儿当对象。
 - 插件自己的第三方 API Key 和服务参数必须走管理员后台 Console 配置、数据库配置或平台密钥配置，不使用环境变量作为插件配置入口。
 - 不要把真实密钥写入源码、`manifest.json`、前端包或 `.env`；交付时说明管理员后台需要配置哪些字段、默认值和验证方式。
 
 ## Seeds、Migration、Upgrade 与存储
 
 - Seeds 只负责首次安装初始化数据，必须可重复执行且通过 `shouldRun()` 或唯一键避免重复；升级时不要依赖 seeds 修复旧数据。
+- 如需记录种子数据说明，写入插件 README 的“种子数据”章节；除官方示例或历史遗留外，不新增独立 `SEEDS.md`。
 - 表结构变化写插件 migration：`extensions/<identifier>/src/api/db/migrations/`；升级前先构建 API，使生成命令能读取最新实体。
 - 数据修复、默认值回填、跨表搬迁、历史数据兼容写 Upgrade：`src/api/upgrade/<version>/index.ts`；Upgrade 要和插件版本绑定、尽量幂等、失败可定位。
 - 不要把表结构修改塞进 Upgrade，也不要把一次性历史修复写进正常 service 运行逻辑。
 - 写完 migration 或 Upgrade 后必须提升 `package.json.version` 与 `manifest.json.version`，并运行 `pnpm --filter <identifier> build:api` 或 `pnpm --filter <identifier> build:publish`，确认产物进入 `build/db/migrations` 或 `build/upgrade/<version>`。
 - 插件运行时上传/生成文件放 `storage/uploads` 等运行目录；需要随发布包携带的静态文件放 `storage/static`。历史记录存 URL、文件 ID 或相对路径，避免把大文件或 base64 放进数据库。
+- 用户上传文件进入插件业务时，优先使用平台 `/upload/file` 或共享 `uploadFile()` 返回的 `fileId` 作为业务入参；后端用 `File` 表校验上传者、插件归属、大小、MIME/扩展名和 URL 格式后再处理。不要让用户端直接提交任意外部 URL 给后端解析、下载或转存。
+- 文件解析、导出、AI 生成等异步流程写回业务记录前要重新读取记录并检查 `deletedAt`；处理中、导出中、审查中等状态默认禁止用户或管理员删除，避免软删除后后台任务继续写入或创建孤儿版本。
 - `.gitignore` 保持忽略运行时 `storage/*`，但允许 `storage/static` 与必要 `.gitkeep` 入库。
 
 ## 发布与升级检查
 
 - 发布前检查 `manifest.json` 与 `package.json` 版本一致且为合法 semver；发布版本不能低于当前版本。
-- `pnpm extension:release` 会按白名单复制 `.output`、`build`、`src`、`storage/static`、`storage/.gitkeep`、`manifest.json`、`package.json`、`README.md`、`SEEDS.md`、`tsconfig*`、`tsup.config.ts`、`eslint.config.mjs`、`LICENSE` 等文件；不要依赖白名单外文件进入发布包。
+- `pnpm extension:release` 会按白名单复制 `.output`、`build`、`src`、`storage/static`、`storage/.gitkeep`、`manifest.json`、`package.json`、`README.md`、`tsconfig*`、`tsup.config.ts`、`eslint.config.mjs`、`LICENSE` 等文件；旧模板/示例若仍有 `SEEDS.md` 也可能进入发布包，但 EchoFlow 业务插件不依赖独立 `SEEDS.md`。不要依赖白名单外文件进入发布包。
 - 发布包生成前默认选择 rebuild；如跳过 rebuild，必须说明使用的是哪一次构建产物。
 - 升级联调至少验证：版本识别、migration 执行、Upgrade 执行、旧数据保留、storage/node_modules 保留、服务重启后页面可打开。
 - 插件更新文档当前仍标注待完善，遇到升级策略分歧时，以 `插件升级开发文档`、CLI 实现和项目实际行为为准，并在交付中写明假设。
@@ -124,6 +132,8 @@ const { apiHttpClient, consoleHttpClient } = createPluginHttpClients();
 - ❌ Web 首页做成营销落地页 + "进入工作台"按钮（应直接展示功能）
 - ❌ Web 页面用 `consoleHttpClient` 调 Console API（认证/权限不同）
 - ❌ 只用 `consoleHttpClient`，忽略 `apiHttpClient`
+- ❌ Console 页面把管理员接口返回的 `provider` 字段误当另一种结构展示，导致模型供应商显示错误
+- ❌ 用户上传审查、解析或导入功能绕过平台上传记录，直接接收可访问 URL
 
 ## Git 与上游
 
@@ -155,7 +165,7 @@ const { apiHttpClient, consoleHttpClient } = createPluginHttpClients();
 
 ## 状态快照与待办
 
-以下为 2026-06-13 本地状态，执行前需重新核对：
+以下为 2026-06-14 本地状态，执行前需重新核对：
 
 1. 等用户确认后添加只读 `upstream` 并 fetch，核对官方分支。
 2. 优先按官方建议使用本地 pnpm 运行与联调；Docker 作为完整环境/依赖验证路径。
