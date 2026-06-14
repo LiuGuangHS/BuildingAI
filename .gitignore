@@ -73,6 +73,12 @@ extensions/*
 !extensions/echoflow-image/**
 !extensions/echoflow-video
 !extensions/echoflow-video/**
+!extensions/echoflow-contract-generation
+!extensions/echoflow-contract-generation/**
+!extensions/echoflow-astrology-fortune
+!extensions/echoflow-astrology-fortune/**
+!extensions/echoflow-ai-town
+!extensions/echoflow-ai-town/**
 
 extensions/*/node_modules/
 extensions/*/node_modules/**
