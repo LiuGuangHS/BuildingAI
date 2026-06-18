@@ -3,6 +3,7 @@ import { Column, CreateDateColumn, Index, PrimaryGeneratedColumn } from "@buildi
 
 import type { ContractLegalTerm, ContractRiskFinding, ContractScore, ContractSection, RiskActions } from "./contract-generation-task.entity";
 
+@Index("uq_contract_generation_versions_task_version", ["taskId", "versionNo"], { unique: true })
 @ExtensionEntity({ name: "contract_generation_versions" })
 export class ContractGenerationVersion {
     @PrimaryGeneratedColumn("uuid")

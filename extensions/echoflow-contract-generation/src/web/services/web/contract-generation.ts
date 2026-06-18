@@ -104,6 +104,18 @@ export function useContractVersionsQuery(taskId?: string) {
     return useQuery({ queryKey: [...CONTRACT_TASKS_QUERY_KEY, "versions", taskId], queryFn: () => listContractVersions(taskId!), enabled: Boolean(taskId) });
 }
 
+export function useContractTaskDetailQuery(taskId?: string) {
+    return useQuery({
+        queryKey: [...CONTRACT_TASKS_QUERY_KEY, "detail", taskId],
+        queryFn: () => getContractTaskDetail(taskId!),
+        enabled: Boolean(taskId),
+        refetchInterval: (query) => {
+            const task = query.state.data;
+            return task && ["pending", "processing", "reviewing", "exporting"].includes(task.status) ? 3000 : false;
+        },
+    });
+}
+
 export function useRestoreContractVersionMutation() {
     const queryClient = useQueryClient();
     return useMutation({ mutationFn: ({ taskId, versionId }: { taskId: string; versionId: string }) => restoreContractVersion(taskId, versionId), onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TASKS_QUERY_KEY }) });

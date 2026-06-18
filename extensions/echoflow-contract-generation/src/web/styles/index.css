@@ -1,3 +1,1251 @@
 @import "@buildingai/ui/styles/index.css";
 @import "@buildingai/ui/styles/base.css";
 @import "@buildingai/ui/styles/utils.css";
+
+.contract-workbench {
+    min-height: 100%;
+    padding: 20px;
+    color: hsl(var(--foreground));
+    background: hsl(var(--background));
+}
+
+.contract-workbench-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+}
+
+.contract-workbench-header p {
+    margin: 0 0 4px;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.contract-workbench-header h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 650;
+    line-height: 1.25;
+    letter-spacing: 0;
+}
+
+.contract-header-status {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.contract-workbench-grid {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr) 340px;
+    gap: 14px;
+    align-items: start;
+}
+
+.contract-panel {
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    padding: 14px;
+}
+
+.contract-sidebar,
+.contract-insight-panel {
+    position: sticky;
+    top: 12px;
+}
+
+.contract-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.contract-panel-head.is-compact {
+    margin-bottom: 8px;
+}
+
+.contract-panel-head h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 650;
+    letter-spacing: 0;
+}
+
+.contract-panel-head.is-compact h2 {
+    font-size: 16px;
+}
+
+.contract-panel-head p {
+    margin: 4px 0 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.contract-button,
+.contract-link-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.contract-link-button {
+    min-height: auto;
+    border: 0;
+    background: transparent;
+    color: hsl(var(--primary));
+    padding: 4px;
+}
+
+.contract-button:hover:not(:disabled) {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+}
+
+.contract-button.is-primary {
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+}
+
+.contract-button:disabled,
+.contract-risk-item button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.contract-status-pill {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    border-radius: 999px;
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.contract-status-pill.is-success {
+    background: color-mix(in oklab, hsl(var(--primary)) 12%, transparent);
+    color: hsl(var(--primary));
+}
+
+.contract-status-pill.is-warning {
+    background: color-mix(in oklab, #f59e0b 16%, transparent);
+    color: #a16207;
+}
+
+.contract-status-pill.is-danger {
+    background: color-mix(in oklab, hsl(var(--destructive)) 12%, transparent);
+    color: hsl(var(--destructive));
+}
+
+.contract-notice {
+    margin-bottom: 14px;
+    border: 1px solid color-mix(in oklab, hsl(var(--primary)) 22%, hsl(var(--border)));
+    border-radius: 8px;
+    background: color-mix(in oklab, hsl(var(--primary)) 7%, hsl(var(--card)));
+    padding: 10px 12px;
+    font-size: 13px;
+}
+
+.contract-search,
+.contract-field input,
+.contract-field select,
+.contract-field textarea,
+.contract-clause-editor input,
+.contract-clause-editor textarea,
+.contract-ai-panel select {
+    width: 100%;
+    border: 1px solid hsl(var(--input, var(--border)));
+    border-radius: 6px;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    padding: 9px 10px;
+    outline: none;
+}
+
+.contract-search:focus,
+.contract-field input:focus,
+.contract-field select:focus,
+.contract-field textarea:focus,
+.contract-clause-editor input:focus,
+.contract-clause-editor textarea:focus,
+.contract-ai-panel select:focus {
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.18);
+}
+
+.contract-template-list,
+.contract-task-list,
+.contract-risk-list {
+    display: grid;
+    gap: 8px;
+}
+
+.contract-template-list {
+    margin-top: 10px;
+}
+
+.contract-template-item,
+.contract-task-list button,
+.contract-version-item {
+    width: 100%;
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    padding: 10px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.contract-template-item:hover,
+.contract-template-item.is-active,
+.contract-task-list button:hover,
+.contract-version-item:hover {
+    border-color: hsl(var(--primary));
+    background: color-mix(in oklab, hsl(var(--primary)) 7%, hsl(var(--background)));
+}
+
+.contract-template-item strong,
+.contract-task-list strong,
+.contract-version-item strong {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+.contract-template-item span,
+.contract-task-list span,
+.contract-version-item span {
+    display: block;
+    margin-top: 4px;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+}
+
+.contract-sidebar-section,
+.contract-insight-section {
+    margin-top: 16px;
+}
+
+.contract-tabs {
+    display: inline-flex;
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    background: hsl(var(--muted));
+    padding: 3px;
+}
+
+.contract-tabs button {
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    padding: 7px 10px;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.contract-tabs button.is-active {
+    background: hsl(var(--card));
+    color: hsl(var(--primary));
+}
+
+.contract-setup {
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    background: hsl(var(--muted) / 0.28);
+    padding: 14px;
+}
+
+.contract-form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.contract-template-form {
+    margin-top: 12px;
+}
+
+.contract-template-form .contract-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+}
+
+.contract-field {
+    display: grid;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.contract-field.is-wide {
+    grid-column: 1 / -1;
+    margin-top: 12px;
+}
+
+.contract-field textarea {
+    min-height: 86px;
+    resize: vertical;
+    line-height: 1.65;
+}
+
+.contract-field small {
+    color: hsl(var(--muted-foreground));
+    font-weight: 400;
+}
+
+.contract-field em {
+    color: hsl(var(--destructive));
+    font-size: 12px;
+    font-style: normal;
+}
+
+.contract-upload-panel {
+    margin-top: 12px;
+}
+
+.contract-workspace-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    background: hsl(var(--card));
+    padding: 10px;
+}
+
+.contract-workspace-actions span {
+    color: hsl(var(--muted-foreground));
+    font-size: 13px;
+}
+
+.contract-workspace-actions > div {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.contract-clause-workbench {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr) 260px;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.contract-clause-nav,
+.contract-clause-editor,
+.contract-ai-panel {
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    background: hsl(var(--card));
+    padding: 12px;
+}
+
+.contract-mini-title {
+    margin-bottom: 10px;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.contract-clause-nav {
+    display: grid;
+    align-content: start;
+    gap: 6px;
+}
+
+.contract-clause-nav button {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 7px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: hsl(var(--foreground));
+    padding: 8px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.contract-clause-nav button.is-active {
+    border-color: hsl(var(--primary));
+    background: color-mix(in oklab, hsl(var(--primary)) 8%, hsl(var(--card)));
+}
+
+.contract-clause-nav button > span {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.contract-clause-nav strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+}
+
+.contract-clause-nav em {
+    grid-column: 2;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    font-style: normal;
+}
+
+.contract-clause-editor {
+    min-height: 420px;
+}
+
+.contract-clause-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.contract-clause-editor input {
+    margin-bottom: 10px;
+    font-weight: 650;
+}
+
+.contract-clause-editor textarea {
+    min-height: 310px;
+    resize: vertical;
+    line-height: 1.8;
+}
+
+.contract-ai-panel h3,
+.contract-insight-section h3 {
+    margin: 0 0 10px;
+    font-size: 15px;
+    font-weight: 650;
+}
+
+.contract-ai-panel p {
+    color: hsl(var(--muted-foreground));
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.contract-suggestion-card {
+    display: grid;
+    gap: 9px;
+    margin-top: 10px;
+    border: 1px solid color-mix(in oklab, hsl(var(--primary)) 25%, hsl(var(--border)));
+    border-radius: 8px;
+    background: color-mix(in oklab, hsl(var(--primary)) 7%, hsl(var(--card)));
+    padding: 10px;
+}
+
+.contract-suggestion-card p {
+    margin: 0;
+    color: hsl(var(--foreground));
+    white-space: pre-wrap;
+}
+
+.contract-suggestion-card > div {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.contract-score-card {
+    border: 1px solid color-mix(in oklab, hsl(var(--primary)) 24%, hsl(var(--border)));
+    border-radius: 8px;
+    background: color-mix(in oklab, hsl(var(--primary)) 7%, hsl(var(--card)));
+    padding: 14px;
+}
+
+.contract-score-card strong {
+    display: block;
+    color: hsl(var(--primary));
+    font-size: 36px;
+    line-height: 1;
+}
+
+.contract-score-card span {
+    display: block;
+    margin-top: 4px;
+    font-weight: 650;
+}
+
+.contract-score-card p {
+    margin: 8px 0 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.contract-risk-item {
+    border: 1px solid hsl(var(--border));
+    border-left-width: 4px;
+    border-radius: 8px;
+    background: hsl(var(--background));
+    padding: 10px;
+}
+
+.contract-risk-item.high {
+    border-left-color: hsl(var(--destructive));
+}
+
+.contract-risk-item.medium {
+    border-left-color: #f59e0b;
+}
+
+.contract-risk-item.low {
+    border-left-color: hsl(var(--primary));
+}
+
+.contract-risk-item > div:first-child {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.contract-risk-item span {
+    border-radius: 999px;
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    padding: 2px 7px;
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.contract-risk-item p,
+.contract-risk-item small,
+.contract-risk-item em {
+    display: block;
+    margin-top: 7px;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.contract-risk-item em {
+    color: hsl(var(--primary));
+    font-style: normal;
+    font-weight: 650;
+}
+
+.contract-risk-item button {
+    margin: 8px 7px 0 0;
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+    padding: 5px 9px;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.contract-detail-item {
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    background: hsl(var(--background));
+    padding: 9px;
+}
+
+.contract-detail-item + .contract-detail-item,
+.contract-version-item + .contract-version-item {
+    margin-top: 8px;
+}
+
+.contract-detail-item summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.contract-detail-item p {
+    margin: 6px 0 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.contract-empty {
+    display: grid;
+    place-items: center;
+    min-height: 92px;
+    border: 1px dashed hsl(var(--border));
+    border-radius: 8px;
+    color: hsl(var(--muted-foreground));
+    padding: 12px;
+    text-align: center;
+    font-size: 13px;
+}
+
+.contract-empty.is-large {
+    min-height: 320px;
+}
+
+@media (max-width: 1320px) {
+    .contract-workbench-grid {
+        grid-template-columns: 260px minmax(0, 1fr);
+    }
+
+    .contract-insight-panel {
+        position: static;
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 1080px) {
+    .contract-workbench-header,
+    .contract-workbench-grid,
+    .contract-clause-workbench {
+        grid-template-columns: 1fr;
+    }
+
+    .contract-sidebar {
+        position: static;
+    }
+
+    .contract-form-grid,
+    .contract-template-form .contract-form-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .contract-workbench {
+        padding: 14px;
+    }
+
+    .contract-workbench-header,
+    .contract-panel-head,
+    .contract-workspace-actions {
+        display: grid;
+    }
+
+    .contract-header-status,
+    .contract-workspace-actions > div {
+        justify-content: stretch;
+    }
+
+    .contract-button,
+    .contract-workbench-header > .contract-button {
+        width: 100%;
+    }
+
+    .contract-form-grid,
+    .contract-template-form .contract-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .contract-clause-nav {
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(170px, 1fr);
+        overflow-x: auto;
+    }
+}
+
+.ec-console-page {
+    min-height: 100%;
+    padding: 20px;
+    color: hsl(var(--foreground));
+}
+
+.ec-console-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.ec-console-kicker {
+    margin: 0 0 4px;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.ec-console-header h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 650;
+    line-height: 1.25;
+    letter-spacing: 0;
+}
+
+.ec-console-header p {
+    margin: 6px 0 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.ec-header-actions,
+.ec-actions,
+.ec-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ec-card {
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    padding: 16px;
+}
+
+.ec-config-layout,
+.ec-template-layout,
+.ec-task-layout,
+.ec-detail-grid {
+    display: grid;
+    align-items: start;
+    gap: 16px;
+}
+
+.ec-config-layout {
+    grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.ec-template-layout,
+.ec-task-layout {
+    grid-template-columns: 360px minmax(0, 1fr);
+}
+
+.ec-section-title,
+.ec-subsection-head,
+.ec-detail-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ec-section-title h2,
+.ec-subsection h3,
+.ec-publish-row h3,
+.ec-detail-head h2 {
+    margin: 0;
+    font-weight: 650;
+    letter-spacing: 0;
+}
+
+.ec-section-title h2 {
+    font-size: 18px;
+}
+
+.ec-subsection h3,
+.ec-publish-row h3 {
+    font-size: 15px;
+}
+
+.ec-detail-head h2 {
+    margin-top: 8px;
+    font-size: 22px;
+}
+
+.ec-section-title p,
+.ec-subsection p,
+.ec-publish-row p,
+.ec-detail-head p,
+.ec-list-item p,
+.ec-task-meta,
+.ec-model-preview span,
+.ec-detail-list dt {
+    margin: 4px 0 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.ec-field {
+    display: grid;
+    gap: 7px;
+    margin-top: 14px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.ec-field input,
+.ec-field select,
+.ec-field textarea,
+.ec-filter-bar input,
+.ec-filter-bar select,
+.ec-code-editor,
+.ec-large-text {
+    width: 100%;
+    border: 1px solid hsl(var(--input, var(--border)));
+    border-radius: 6px;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    padding: 9px 10px;
+    outline: none;
+}
+
+.ec-field textarea {
+    min-height: 76px;
+    resize: vertical;
+}
+
+.ec-field input:focus,
+.ec-field select:focus,
+.ec-field textarea:focus,
+.ec-filter-bar input:focus,
+.ec-filter-bar select:focus,
+.ec-code-editor:focus,
+.ec-large-text:focus {
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.18);
+}
+
+.ec-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.ec-button:hover:not(:disabled) {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+}
+
+.ec-button.is-primary {
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+}
+
+.ec-button.is-danger {
+    border-color: hsl(var(--destructive) / 0.35);
+    color: hsl(var(--destructive));
+}
+
+.ec-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.ec-status-pill,
+.ec-message,
+.ec-tag,
+.ec-risk-level {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.4;
+}
+
+.ec-status-pill,
+.ec-tag {
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+}
+
+.ec-status-pill.is-success,
+.ec-tag.is-success,
+.ec-message.is-success {
+    background: color-mix(in oklab, hsl(var(--primary)) 12%, transparent);
+    color: hsl(var(--primary));
+}
+
+.ec-status-pill.is-warning {
+    background: color-mix(in oklab, #f59e0b 16%, transparent);
+    color: #a16207;
+}
+
+.ec-status-pill.is-danger,
+.ec-message.is-danger {
+    background: color-mix(in oklab, hsl(var(--destructive)) 12%, transparent);
+    color: hsl(var(--destructive));
+}
+
+.ec-banner {
+    margin-top: 12px;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.ec-banner.is-success {
+    background: color-mix(in oklab, hsl(var(--primary)) 10%, transparent);
+    color: hsl(var(--primary));
+}
+
+.ec-banner.is-danger {
+    background: color-mix(in oklab, hsl(var(--destructive)) 10%, transparent);
+    color: hsl(var(--destructive));
+}
+
+.ec-model-preview,
+.ec-subsection,
+.ec-publish-row,
+.ec-metric-card {
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    background: hsl(var(--muted) / 0.35);
+}
+
+.ec-model-preview {
+    display: grid;
+    gap: 14px;
+    margin-top: 14px;
+    padding: 12px;
+}
+
+.ec-model-preview strong {
+    display: block;
+    margin-top: 3px;
+    font-size: 15px;
+}
+
+.ec-model-preview dl,
+.ec-detail-list {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+}
+
+.ec-model-preview dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ec-detail-list {
+    margin-top: 14px;
+}
+
+.ec-model-preview dl div,
+.ec-detail-list div {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.ec-model-preview dt,
+.ec-detail-list dt {
+    color: hsl(var(--muted-foreground));
+}
+
+.ec-model-preview dd,
+.ec-detail-list dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: right;
+    font-weight: 600;
+}
+
+.ec-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.ec-subsection,
+.ec-publish-row {
+    margin-top: 14px;
+    padding: 14px;
+}
+
+.ec-code-editor {
+    min-height: 220px;
+    margin-top: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    resize: vertical;
+}
+
+.ec-large-text {
+    min-height: 120px;
+    margin-top: 10px;
+    line-height: 1.6;
+    resize: vertical;
+}
+
+.ec-publish-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ec-publish-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.ec-list-panel {
+    position: sticky;
+    top: 12px;
+}
+
+.ec-template-list,
+.ec-task-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.ec-list-item {
+    width: 100%;
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    padding: 11px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ec-list-item:hover,
+.ec-list-item.is-active {
+    border-color: hsl(var(--primary));
+    background: color-mix(in oklab, hsl(var(--primary)) 7%, hsl(var(--background)));
+}
+
+.ec-list-item > div:first-child {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.ec-list-item strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+.ec-list-item span {
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.ec-tag-row,
+.ec-task-meta {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.ec-filter-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 132px;
+    gap: 8px;
+}
+
+.ec-list-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+}
+
+.ec-pagination {
+    justify-content: space-between;
+    margin-top: 12px;
+}
+
+.ec-empty {
+    display: grid;
+    place-items: center;
+    min-height: 120px;
+    border: 1px dashed hsl(var(--border));
+    border-radius: 8px;
+    color: hsl(var(--muted-foreground));
+    font-size: 13px;
+}
+
+.ec-empty.is-large {
+    min-height: 360px;
+}
+
+.ec-task-detail {
+    min-width: 0;
+}
+
+.ec-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 14px 0;
+}
+
+.ec-metric-card {
+    padding: 12px;
+}
+
+.ec-metric-card strong {
+    display: block;
+    font-size: 22px;
+}
+
+.ec-metric-card span {
+    color: hsl(var(--muted-foreground));
+    font-size: 12px;
+}
+
+.ec-detail-grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.ec-subsection pre {
+    max-height: 360px;
+    overflow: auto;
+    border-radius: 6px;
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    padding: 12px;
+    font-size: 12px;
+}
+
+.ec-clause-list,
+.ec-risk-list {
+    display: grid;
+    gap: 10px;
+}
+
+.ec-clause-list div,
+.ec-risk-list div {
+    border-top: 1px solid hsl(var(--border));
+    padding-top: 10px;
+}
+
+.ec-clause-list p,
+.ec-risk-list p,
+.ec-risk-list em {
+    display: block;
+    margin: 5px 0 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 13px;
+    line-height: 1.65;
+}
+
+.ec-risk-level.high {
+    background: color-mix(in oklab, hsl(var(--destructive)) 12%, transparent);
+    color: hsl(var(--destructive));
+}
+
+.ec-risk-level.medium {
+    background: color-mix(in oklab, #f59e0b 14%, transparent);
+    color: #a16207;
+}
+
+.ec-risk-level.low {
+    background: color-mix(in oklab, hsl(var(--primary)) 10%, transparent);
+    color: hsl(var(--primary));
+}
+
+.ec-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+}
+
+@media (max-width: 1080px) {
+    .ec-config-layout,
+    .ec-template-layout,
+    .ec-task-layout,
+    .ec-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ec-list-panel {
+        position: static;
+    }
+}
+
+@media (max-width: 720px) {
+    .ec-console-page {
+        padding: 14px;
+    }
+
+    .ec-console-header,
+    .ec-section-title,
+    .ec-subsection-head,
+    .ec-detail-head,
+    .ec-publish-row {
+        display: grid;
+    }
+
+    .ec-header-actions,
+    .ec-actions,
+    .ec-pagination {
+        justify-content: stretch;
+    }
+
+    .ec-button {
+        width: 100%;
+    }
+
+    .ec-form-grid,
+    .ec-model-preview dl,
+    .ec-filter-bar,
+    .ec-metric-grid {
+        grid-template-columns: 1fr;
+    }
+}

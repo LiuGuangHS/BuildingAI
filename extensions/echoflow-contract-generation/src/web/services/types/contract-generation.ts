@@ -42,6 +42,7 @@ export type AiModelOption = {
     modelType: string;
     providerName: string;
     provider: string;
+    pricePerContract?: number;
 };
 
 export type ContractSection = {
@@ -106,6 +107,7 @@ export type ContractGenerationConfig = {
         name: string;
         providerName: string;
         provider: string;
+        pricePerContract?: number;
     } | null;
 };
 

@@ -87,7 +87,7 @@ export class InitContractGeneration1781539200001 {
 
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_contract_tasks_user_created" ON "echoflow_contract_generation"."contract_generation_tasks" ("user_id", "created_at")`);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_contract_tasks_status" ON "echoflow_contract_generation"."contract_generation_tasks" ("status")`);
-        await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_contract_versions_task_version" ON "echoflow_contract_generation"."contract_generation_versions" ("task_id", "version_no")`);
+        await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_contract_generation_versions_task_version" ON "echoflow_contract_generation"."contract_generation_versions" ("task_id", "version_no")`);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_contract_templates_active_sort" ON "echoflow_contract_generation"."contract_templates" ("is_active", "sort_order")`);
     }
 
