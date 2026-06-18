@@ -29,7 +29,7 @@ export function ConsoleLogo() {
                   </AvatarFallback>
                 </Avatar>
               ) : (
-                <img className="size-8 rounded-md" src="/logo.svg" alt="EchoFlowAI" />
+                <img className="h-8 w-auto max-w-24 shrink-0 object-contain" src="/logo-full.png" alt="清云AI" />
               )}
               <div className="flex flex-1 flex-col justify-center text-left text-sm">
                 <span className="truncate font-medium">{websiteConfig?.webinfo.name}</span>

@@ -46,7 +46,7 @@ export function DefaultLogo() {
                       </AvatarFallback>
                     </Avatar>
                   ) : (
-                    <img className="size-8 rounded-md" src="/logo.svg" alt="EchoFlowAI" />
+                    <img className="size-8 rounded-md" src="/logo.png" alt="清云AI" />
                   )}
                 </>
               </Link>

@@ -22,7 +22,7 @@ const AppLogo = ({
             alt={websiteConfig?.webinfo.name}
           />
         ) : (
-          <img className="h-10 shrink-0" src="/logo-full.svg" alt="EchoFlowAI" />
+          <img className="h-10 w-auto shrink-0 object-contain" src="/logo-full.png" alt="清云AI" />
         )}
       </>
       {showAppName && (
