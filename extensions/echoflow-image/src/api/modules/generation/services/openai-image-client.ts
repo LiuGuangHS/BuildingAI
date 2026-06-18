@@ -719,11 +719,18 @@ function classifyHttpError(status: number, attempt: number, responseText?: strin
 
 function normalizeBaseURL(raw: string): string {
     try {
-        const url = new URL(raw);
+        const trimmed = raw.trim().replace(/\/+$/, "");
+        if (!trimmed) {
+            throw new Error("empty baseURL");
+        }
+        const url = new URL(trimmed);
         if (!["http:", "https:"].includes(url.protocol)) {
             throw new Error("unsupported protocol");
         }
-        return raw.replace(/\/+$/, "");
+        if (url.username || url.password) {
+            throw new Error("credentials not allowed");
+        }
+        return trimmed;
     } catch {
         throw HttpErrorFactory.badRequest("图片模型 baseURL 配置无效");
     }

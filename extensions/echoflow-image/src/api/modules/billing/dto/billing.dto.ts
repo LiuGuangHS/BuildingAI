@@ -4,16 +4,19 @@ import { IsBoolean, IsEnum, IsNumber, IsObject, IsOptional, IsUUID, Min } from "
 
 import { ImageGenerationMode } from "../../../db/entities/image-generation.entity";
 import type { ImageBillingMultipliers } from "../../../db/entities/image-billing-rule.entity";
+import { emptyStringToUndefined } from "../../common/dto-transforms";
 
 export class QueryBillingRuleDto extends PaginationDto {
-    @IsUUID("4")
+    @Transform(emptyStringToUndefined)
     @IsOptional()
+    @IsUUID("4")
     modelConfigId?: string;
 }
 
 export class CreateBillingRuleDto {
-    @IsUUID("4")
+    @Transform(emptyStringToUndefined)
     @IsOptional()
+    @IsUUID("4")
     modelConfigId?: string;
 
     @Transform(({ value }) => (value == null ? value : Number(value)))
@@ -58,8 +61,10 @@ export class CreateBillingRuleDto {
 export class UpdateBillingRuleDto extends CreateBillingRuleDto {}
 
 export class EstimateBillingDto {
+    @Transform(emptyStringToUndefined)
+    @IsOptional()
     @IsUUID("4")
-    modelConfigId: string;
+    modelConfigId?: string;
 
     @IsEnum(ImageGenerationMode)
     @IsOptional()

@@ -79,6 +79,7 @@ export interface ImageGeneration {
 
 export interface ImageModelOption {
     id: string;
+    pluginConfigId?: string;
     aiModelId?: string;
     name: string;
     model: string;
@@ -97,6 +98,7 @@ export interface ImageModelOption {
         maxImages?: number;
     };
     features?: string[];
+    source?: "main-system" | "plugin-config";
 }
 
 export interface QueryGenerationParams {
@@ -130,6 +132,8 @@ export interface CreateGenerationParams {
     inputFidelity?: string;
     moderation?: string;
     seed?: string;
+    source?: "main-system" | "plugin-config";
+    pluginConfigId?: string;
 }
 
 export interface PromptEnhanceParams {

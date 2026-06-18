@@ -27,11 +27,11 @@ export default function EchoflowImageConsolePage() {
                 <div>
                     <Badge variant="secondary" className="mb-2">Console</Badge>
                     <h1 className="text-2xl font-semibold tracking-tight">AI图像工作台运营台</h1>
-                    <p className="text-muted-foreground text-sm">配置模型、计费、风控和模板，查看全量生成任务。</p>
+                    <p className="text-muted-foreground text-sm">复用主站生图模型，按需覆盖计费、风控、模板和全量生成任务。</p>
                 </div>
                 <Button onClick={() => navigate("/console/models")}>
                     <Settings2 className="size-4" />
-                    配置模型
+                    模型覆盖
                 </Button>
             </div>
 
@@ -60,7 +60,7 @@ export default function EchoflowImageConsolePage() {
                         <CardDescription>建议按顺序完成首期配置闭环。</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                        <QuickAction label="模型配置" onClick={() => navigate("/console/models")} />
+                        <QuickAction label="模型覆盖" onClick={() => navigate("/console/models")} />
                         <QuickAction label="计费策略" onClick={() => navigate("/console/billing")} />
                         <QuickAction label="风控限流" onClick={() => navigate("/console/policies")} />
                         <QuickAction label="模板预设" onClick={() => navigate("/console/templates")} />

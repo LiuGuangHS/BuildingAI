@@ -2,14 +2,16 @@ import { Transform } from "class-transformer";
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsUUID, Min } from "class-validator";
 
 import { ImagePolicyScope } from "../../../db/entities/image-policy-config.entity";
+import { emptyStringToUndefined } from "../../common/dto-transforms";
 
 export class UpsertPolicyDto {
     @IsEnum(ImagePolicyScope)
     @IsOptional()
     scope?: ImagePolicyScope;
 
-    @IsUUID("4")
+    @Transform(emptyStringToUndefined)
     @IsOptional()
+    @IsUUID("4")
     modelConfigId?: string;
 
     @Transform(({ value }) => (value == null ? value : Number(value)))

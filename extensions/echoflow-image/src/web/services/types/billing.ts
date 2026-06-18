@@ -26,7 +26,7 @@ export interface SaveBillingRuleParams {
 }
 
 export interface EstimateBillingParams {
-    modelConfigId: string;
+    modelConfigId?: string;
     mode?: string;
     size?: string;
     n?: number;

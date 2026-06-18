@@ -43,6 +43,11 @@ function generateRequestKey(): string {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+function normalizeOptionalString(value?: string) {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : undefined;
+}
+
 export function GenerationForm({
     loading,
     models = [],
@@ -87,8 +92,22 @@ export function GenerationForm({
     }, [initialValues]);
 
     const selectedModel = useMemo(() => models.find((model) => model.id === modelId), [models, modelId]);
+
+    useEffect(() => {
+        if (modelsLoading) return;
+        if (!models.length) {
+            if (modelId) setModelId("");
+            return;
+        }
+        if (!modelId || !models.some((model) => model.id === modelId)) {
+            setModelId(models[0].id);
+        }
+    }, [models, modelsLoading, modelId]);
+
     const canUseImageToImage = selectedModel?.capabilities?.imageToImage === true;
     const canUseMultiReference = selectedModel?.capabilities?.multiReference === true;
+    const canUseMask = selectedModel?.capabilities?.mask === true;
+    const canUseNegativePrompt = selectedModel?.capabilities?.negativePrompt !== false;
     const sizeOptions = selectedModel?.allowedParams?.sizes?.length
         ? selectedModel.allowedParams.sizes
         : ["1024x1024", "1024x1792", "1792x1024"];
@@ -116,6 +135,44 @@ export function GenerationForm({
         ],
         [hasReferenceImage, referenceImageUrl, referenceImageFileId, additionalReferenceImages],
     );
+    const usableSourceImages = useMemo(
+        () =>
+            canUseImageToImage
+                ? sourceImages
+                    .map((item) => ({
+                        url: normalizeOptionalString(item.url),
+                        fileId: normalizeOptionalString(item.fileId),
+                    }))
+                    .filter((item) => item.url || item.fileId)
+                    .slice(0, canUseMultiReference ? undefined : 1)
+                : [],
+        [canUseImageToImage, canUseMultiReference, sourceImages],
+    );
+    const primarySourceImage = usableSourceImages[0];
+    const effectiveHasReferenceImage = usableSourceImages.length > 0;
+    const effectiveMaskImageUrl = canUseMask && effectiveHasReferenceImage ? normalizeOptionalString(maskImageUrl) : undefined;
+    const effectiveMaskImageFileId = canUseMask && effectiveHasReferenceImage ? normalizeOptionalString(maskImageFileId) : undefined;
+    const effectiveMode = effectiveHasReferenceImage ? ImageGenerationMode.IMAGE_TO_IMAGE : ImageGenerationMode.TEXT_TO_IMAGE;
+
+    const buildGenerationPayload = (includeRequestKey = false, includeClientMetadata = false): CreateGenerationParams => ({
+        prompt,
+        negativePrompt: canUseNegativePrompt ? normalizeOptionalString(negativePrompt) : undefined,
+        referenceImageUrl: primarySourceImage?.url,
+        referenceImageFileId: primarySourceImage?.fileId,
+        sourceImages: usableSourceImages,
+        maskImageUrl: effectiveMaskImageUrl,
+        maskImageFileId: effectiveMaskImageFileId,
+        modelId,
+        size,
+        n: imageCount,
+        quality,
+        style,
+        responseFormat,
+        mode: effectiveMode,
+        requestKey: includeRequestKey ? generateRequestKey() : undefined,
+        source: includeClientMetadata ? selectedModel?.source : undefined,
+        pluginConfigId: includeClientMetadata ? selectedModel?.pluginConfigId : undefined,
+    });
 
     const handleEnhancePrompt = async () => {
         const value = prompt.trim();
@@ -135,44 +192,35 @@ export function GenerationForm({
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
-        await onSubmit({
-            prompt,
-            negativePrompt: negativePrompt || undefined,
-            referenceImageUrl,
-            referenceImageFileId,
-            sourceImages,
-            maskImageUrl,
-            maskImageFileId,
-            modelId,
-            size,
-            n: imageCount,
-            quality,
-            style,
-            responseFormat,
-            mode: hasReferenceImage ? ImageGenerationMode.IMAGE_TO_IMAGE : ImageGenerationMode.TEXT_TO_IMAGE,
-            requestKey: generateRequestKey(),
-        });
+        await onSubmit(buildGenerationPayload(true));
     };
 
     useEffect(() => {
         if (!modelId || !prompt.trim()) return;
-        onEstimateChange?.({
-            prompt,
-            negativePrompt: negativePrompt || undefined,
-            referenceImageUrl,
-            referenceImageFileId,
-            sourceImages,
-            maskImageUrl,
-            maskImageFileId,
-            modelId,
-            size,
-            n: imageCount,
-            quality,
-            style,
-            responseFormat,
-            mode: hasReferenceImage ? ImageGenerationMode.IMAGE_TO_IMAGE : ImageGenerationMode.TEXT_TO_IMAGE,
-        });
-    }, [modelId, size, imageCount, quality, style, responseFormat, referenceImageUrl, referenceImageFileId, sourceImages]);
+        onEstimateChange?.(buildGenerationPayload(false, true));
+    }, [
+        modelId,
+        prompt,
+        negativePrompt,
+        size,
+        imageCount,
+        quality,
+        style,
+        responseFormat,
+        referenceImageUrl,
+        referenceImageFileId,
+        sourceImages,
+        usableSourceImages,
+        maskImageUrl,
+        maskImageFileId,
+        effectiveHasReferenceImage,
+        effectiveMaskImageUrl,
+        effectiveMaskImageFileId,
+        effectiveMode,
+        canUseNegativePrompt,
+        selectedModel?.source,
+        selectedModel?.pluginConfigId,
+    ]);
 
     useEffect(() => {
         if (selectedModel && !canUseImageToImage && hasReferenceImage) {
@@ -183,6 +231,13 @@ export function GenerationForm({
             setMaskImageFileId(undefined);
         }
     }, [selectedModel, canUseImageToImage, hasReferenceImage]);
+
+    useEffect(() => {
+        if (selectedModel && !canUseMask && hasMaskImage) {
+            setMaskImageUrl(undefined);
+            setMaskImageFileId(undefined);
+        }
+    }, [selectedModel, canUseMask, hasMaskImage]);
 
     const clearAll = () => {
         setPrompt("");
@@ -197,12 +252,12 @@ export function GenerationForm({
     const hasContent = !!(prompt || negativePrompt || hasReferenceImage || hasMaskImage);
 
     return (
-        <Card className="border-primary/10 bg-gradient-to-b from-background to-primary/[0.02] shadow-sm transition-shadow hover:shadow-md">
+        <Card className="rounded-md shadow-sm">
             <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                         <CardTitle className="flex items-center gap-2.5 text-xl">
-                            <div className="bg-primary/10 flex size-9 items-center justify-center rounded-xl">
+                            <div className="bg-primary/10 flex size-9 items-center justify-center rounded-md">
                                 <WandSparkles className="text-primary size-5" />
                             </div>
                             创作台
@@ -296,7 +351,7 @@ export function GenerationForm({
                                     {models.length === 0 && !modelsLoading && (
                                         <div className="text-muted-foreground px-3 py-5 text-center text-xs leading-relaxed">
                                             <p className="mb-1 font-medium">没有可用的图片模型</p>
-                                            <p>请在管理后台配置一个 modelType 含 &quot;image&quot; 的模型</p>
+                                            <p>请先在主系统模型管理中启用 text-to-image 模型</p>
                                         </div>
                                     )}
                                     {models.map((model) => (
@@ -318,94 +373,94 @@ export function GenerationForm({
                             )}
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <ReferenceImageUpload
-                                value={referenceImageUrl}
-                                disabled={loading || !selectedModel || !canUseImageToImage}
-                                helperText={
-                                    !selectedModel
-                                        ? "选择支持图生图的模型后可上传参考图。"
-                                        : canUseImageToImage
-                                            ? "上传参考图后将使用图生图模式。"
-                                            : "当前模型未启用图生图能力。"
-                                }
-                                onChange={(url, fileId) => {
-                                    setReferenceImageUrl(url);
-                                    setReferenceImageFileId(fileId);
-                                    if (!url && !fileId) {
-                                        setMaskImageUrl(undefined);
-                                        setMaskImageFileId(undefined);
-                                    }
-                                }}
-                            />
-                            {canUseMultiReference && (
-                                <div className="space-y-2">
-                                    {additionalReferenceImages.map((item, index) => (
-                                        <div key={index} className="relative">
-                                            <ReferenceImageUpload
-                                                value={item.url}
-                                                label={`参考图 ${index + 2}`}
-                                                description="Echoflow Image reference image"
-                                                disabled={loading || !hasReferenceImage}
-                                                helperText="作为额外参考图参与生成。"
-                                                onChange={(url, fileId) => {
-                                                    setAdditionalReferenceImages((prev) =>
-                                                        prev.map((image, currentIndex) =>
-                                                            currentIndex === index ? { url, fileId } : image,
-                                                        ),
-                                                    );
-                                                }}
-                                            />
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon-sm"
-                                                disabled={loading}
-                                                className="absolute right-1 top-1 text-destructive hover:text-destructive"
-                                                onClick={() =>
-                                                    setAdditionalReferenceImages((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
-                                                }
-                                            >
-                                                <Trash2 className="size-3.5" />
-                                            </Button>
-                                        </div>
-                                    ))}
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={loading || !hasReferenceImage || additionalReferenceImages.length >= 3}
-                                        onClick={() => setAdditionalReferenceImages((prev) => [...prev, {}])}
-                                    >
-                                        <Plus className="size-3.5" />
-                                        添加参考图
-                                    </Button>
-                                </div>
-                            )}
-                            <ReferenceImageUpload
-                                value={maskImageUrl}
-                                label="上传遮罩图"
-                                description="Echoflow Image mask image"
+                        {canUseImageToImage && (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <ReferenceImageUpload
+                                    value={referenceImageUrl}
+                                    disabled={loading || !selectedModel}
+                                    helperText="上传参考图后将使用图生图模式。"
+                                    onChange={(url, fileId) => {
+                                        setReferenceImageUrl(url);
+                                        setReferenceImageFileId(fileId);
+                                        if (!url && !fileId) {
+                                            setMaskImageUrl(undefined);
+                                            setMaskImageFileId(undefined);
+                                        }
+                                    }}
+                                />
+                                {canUseMultiReference && (
+                                    <div className="space-y-2">
+                                        {additionalReferenceImages.map((item, index) => (
+                                            <div key={index} className="relative">
+                                                <ReferenceImageUpload
+                                                    value={item.url}
+                                                    label={`参考图 ${index + 2}`}
+                                                    description="Echoflow Image reference image"
+                                                    disabled={loading || !hasReferenceImage}
+                                                    helperText="作为额外参考图参与生成。"
+                                                    onChange={(url, fileId) => {
+                                                        setAdditionalReferenceImages((prev) =>
+                                                            prev.map((image, currentIndex) =>
+                                                                currentIndex === index ? { url, fileId } : image,
+                                                            ),
+                                                        );
+                                                    }}
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    disabled={loading}
+                                                    className="absolute right-1 top-1 text-destructive hover:text-destructive"
+                                                    onClick={() =>
+                                                        setAdditionalReferenceImages((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
+                                                    }
+                                                >
+                                                    <Trash2 className="size-3.5" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={loading || !hasReferenceImage || additionalReferenceImages.length >= 3}
+                                            onClick={() => setAdditionalReferenceImages((prev) => [...prev, {}])}
+                                        >
+                                            <Plus className="size-3.5" />
+                                            添加参考图
+                                        </Button>
+                                    </div>
+                                )}
+                                {canUseMask && (
+                                    <ReferenceImageUpload
+                                        value={maskImageUrl}
+                                        label="上传遮罩图"
+                                        description="Echoflow Image mask image"
+                                        disabled={loading || !hasReferenceImage}
+                                        helperText={hasReferenceImage ? "黑白或透明遮罩用于局部重绘。" : "先上传参考图后可添加遮罩。"}
+                                        onChange={(url, fileId) => {
+                                            setMaskImageUrl(url);
+                                            setMaskImageFileId(fileId);
+                                        }}
+                                    />
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {canUseMask && (
+                        <div className="mt-3">
+                            <MaskCanvas
+                                referenceImageUrl={referenceImageUrl}
                                 disabled={loading || !hasReferenceImage}
-                                helperText={hasReferenceImage ? "黑白或透明遮罩用于局部重绘。" : "先上传参考图后可添加遮罩。"}
-                                onChange={(url, fileId) => {
+                                onMaskGenerated={(url, fileId) => {
                                     setMaskImageUrl(url);
                                     setMaskImageFileId(fileId);
                                 }}
                             />
                         </div>
-                    </div>
-
-                    <div className="mt-3">
-                        <MaskCanvas
-                            referenceImageUrl={referenceImageUrl}
-                            disabled={loading || !hasReferenceImage}
-                            onMaskGenerated={(url, fileId) => {
-                                setMaskImageUrl(url);
-                                setMaskImageFileId(fileId);
-                            }}
-                        />
-                    </div>
+                    )}
 
                     {/* ── Collapsible advanced settings ── */}
                     <div className="mt-3 rounded-xl border border-border/60">
@@ -542,7 +597,7 @@ export function GenerationForm({
                     {/* ── Submit row ── */}
                     <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-2">
-                            <div className="bg-primary/5 flex items-center gap-1.5 rounded-full border border-primary/10 px-3 py-1.5">
+                            <div className="bg-muted/40 flex items-center gap-1.5 rounded-md border px-3 py-1.5">
                                 <Zap className="text-amber-500 size-3.5" />
                                 <span className="text-xs font-medium">
                                     预计消耗 <span className="text-primary font-bold">{visibleEstimatedPower}</span> 算力
@@ -555,15 +610,11 @@ export function GenerationForm({
                             disabled={!prompt.trim() || !modelId || loading}
                             loading={loading}
                             className={cn(
-                                "group relative overflow-hidden border-0 shadow-md transition-all",
-                                "bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90",
+                                "group relative overflow-hidden shadow-sm transition-all",
                                 "active:scale-[0.98] disabled:opacity-50",
                                 "sm:min-w-44",
                             )}
                         >
-                            {!loading && (
-                                <span className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100" />
-                            )}
                             <Sparkles className="size-4" />
                             开始生成
                         </Button>

@@ -21,7 +21,6 @@ export class ModelOptionsWebController extends BaseController {
     @Get(":id")
     @Public()
     async findOne(@Param("id", UUIDValidationPipe) id: string) {
-        const config = await this.modelConfigService.findEnabledById(id);
-        return this.modelConfigService.toWebOption(config);
+        return this.modelConfigService.findWebOptionById(id);
     }
 }

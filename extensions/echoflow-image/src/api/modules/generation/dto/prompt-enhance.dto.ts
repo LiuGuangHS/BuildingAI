@@ -1,12 +1,16 @@
+import { Transform } from "class-transformer";
 import { IsOptional, IsString, IsUUID, Length } from "class-validator";
+
+import { emptyStringToUndefined } from "../../common/dto-transforms";
 
 export class PromptEnhanceDto {
     @IsString()
     @Length(1, 4000)
     prompt: string;
 
-    @IsUUID("4")
+    @Transform(emptyStringToUndefined)
     @IsOptional()
+    @IsUUID("4")
     modelId?: string;
 
     @IsString()

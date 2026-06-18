@@ -19,6 +19,7 @@ import {
     type ImageModelCapabilities,
     type ImageModelDefaultParams,
 } from "../../../db/entities/image-model-config.entity";
+import { emptyStringToUndefined } from "../../common/dto-transforms";
 
 export class QueryModelConfigDto extends PaginationDto {
     @IsString()
@@ -94,8 +95,9 @@ export class CreateModelConfigDto {
 }
 
 export class UpdateModelConfigDto extends CreateModelConfigDto {
-    @IsUUID("4")
+    @Transform(emptyStringToUndefined)
     @IsOptional()
+    @IsUUID("4")
     aiModelId: string;
 
     @IsString()

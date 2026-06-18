@@ -18,7 +18,7 @@ const defaults = {
     maxReferenceImageSizeMb: 10,
     maxConcurrentJobsPerUser: 1,
     dailyJobsPerUser: 100,
-    allowPublicUrlReference: true,
+    allowPublicUrlReference: false,
     enabled: true,
 };
 
@@ -57,7 +57,7 @@ export default function ConsolePoliciesPage() {
                     <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
                         <input
                             type="checkbox"
-                            checked={form.allowPublicUrlReference !== false}
+                            checked={form.allowPublicUrlReference === true}
                             onChange={(event) => setForm((prev) => ({ ...prev, allowPublicUrlReference: event.target.checked }))}
                         />
                         允许外部参考图 URL

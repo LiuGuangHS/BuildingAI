@@ -6,6 +6,7 @@ import { HttpErrorFactory } from "@buildingai/errors";
 import { Injectable } from "@nestjs/common";
 
 import { ImageGenerationMode } from "../../../db/entities/image-generation.entity";
+import { ImageModelConfig } from "../../../db/entities/image-model-config.entity";
 import { ImagePolicyConfig, ImagePolicyScope } from "../../../db/entities/image-policy-config.entity";
 import type { CreateGenerationDto } from "../../generation/dto";
 import { UpsertPolicyDto } from "../dto";
@@ -15,6 +16,8 @@ export class PolicyService extends BaseService<ImagePolicyConfig> {
     constructor(
         @InjectRepository(ImagePolicyConfig)
         private readonly policyRepository: Repository<ImagePolicyConfig>,
+        @InjectRepository(ImageModelConfig)
+        private readonly modelConfigRepository: Repository<ImageModelConfig>,
     ) {
         super(policyRepository);
     }
@@ -31,10 +34,11 @@ export class PolicyService extends BaseService<ImagePolicyConfig> {
     }
 
     async upsertModel(modelConfigId: string, dto: UpsertPolicyDto) {
+        await this.assertModelConfigExists(modelConfigId);
         return this.upsertPolicy({ ...dto, scope: ImagePolicyScope.MODEL, modelConfigId });
     }
 
-    async validateGeneration(modelConfigId: string, dto: CreateGenerationDto, activeCount = 0, todayCount = 0) {
+    async validateGeneration(modelConfigId: string | undefined, dto: CreateGenerationDto, activeCount = 0, todayCount = 0) {
         const policy = await this.resolvePolicy(modelConfigId);
 
         if (!policy.enabled) return policy;
@@ -54,15 +58,15 @@ export class PolicyService extends BaseService<ImagePolicyConfig> {
             throw HttpErrorFactory.badRequest("今日生成次数已达上限");
         }
         const sourceImages = this.collectSourceImages(dto);
-        if (dto.referenceImageUrl && !policy.allowPublicUrlReference && /^https?:\/\//i.test(dto.referenceImageUrl)) {
+        if (dto.referenceImageUrl && !policy.allowPublicUrlReference && !dto.referenceImageFileId && /^https?:\/\//i.test(dto.referenceImageUrl)) {
             throw HttpErrorFactory.badRequest("当前策略不允许使用外部参考图地址");
         }
         for (const item of sourceImages) {
-            if (item.url && !policy.allowPublicUrlReference && /^https?:\/\//i.test(item.url)) {
+            if (item.url && !policy.allowPublicUrlReference && !item.fileId && /^https?:\/\//i.test(item.url)) {
                 throw HttpErrorFactory.badRequest("当前策略不允许使用外部参考图地址");
             }
         }
-        if (dto.maskImageUrl && !policy.allowPublicUrlReference && /^https?:\/\//i.test(dto.maskImageUrl)) {
+        if (dto.maskImageUrl && !policy.allowPublicUrlReference && !dto.maskImageFileId && /^https?:\/\//i.test(dto.maskImageUrl)) {
             throw HttpErrorFactory.badRequest("当前策略不允许使用外部遮罩图地址");
         }
         if ((dto.mode === ImageGenerationMode.IMAGE_TO_IMAGE || sourceImages.length > 0) && policy.maxReferenceImages < 1) {
@@ -75,13 +79,17 @@ export class PolicyService extends BaseService<ImagePolicyConfig> {
         return policy;
     }
 
-    async resolvePolicy(modelConfigId: string) {
+    async resolvePolicy(modelConfigId?: string) {
         const global = await this.policyRepository.findOne({
             where: { scope: ImagePolicyScope.GLOBAL, enabled: true } as FindOptionsWhere<ImagePolicyConfig>,
+            order: { createdAt: "DESC" },
         });
-        const model = await this.policyRepository.findOne({
-            where: { scope: ImagePolicyScope.MODEL, modelConfigId, enabled: true } as FindOptionsWhere<ImagePolicyConfig>,
-        });
+        const model = modelConfigId
+            ? await this.policyRepository.findOne({
+                where: { scope: ImagePolicyScope.MODEL, modelConfigId, enabled: true } as FindOptionsWhere<ImagePolicyConfig>,
+                order: { createdAt: "DESC" },
+            })
+            : undefined;
 
         return this.policyRepository.create({
             ...this.defaultPolicy(),
@@ -97,6 +105,7 @@ export class PolicyService extends BaseService<ImagePolicyConfig> {
                 scope: dto.scope,
                 modelConfigId: dto.modelConfigId ?? IsNull(),
             } as FindOptionsWhere<ImagePolicyConfig>,
+            order: { createdAt: "DESC" },
         });
 
         if (existing) {
@@ -122,7 +131,7 @@ export class PolicyService extends BaseService<ImagePolicyConfig> {
             maxReferenceImageSizeMb: 10,
             maxConcurrentJobsPerUser: 1,
             dailyJobsPerUser: 100,
-            allowPublicUrlReference: true,
+            allowPublicUrlReference: false,
             enabled: true,
         };
     }
@@ -141,5 +150,14 @@ export class PolicyService extends BaseService<ImagePolicyConfig> {
             seen.add(key);
             return true;
         });
+    }
+
+    private async assertModelConfigExists(modelConfigId: string) {
+        const exists = await this.modelConfigRepository.exists({
+            where: { id: modelConfigId } as FindOptionsWhere<ImageModelConfig>,
+        });
+        if (!exists) {
+            throw HttpErrorFactory.badRequest("风控策略引用的模型覆盖配置不存在");
+        }
     }
 }

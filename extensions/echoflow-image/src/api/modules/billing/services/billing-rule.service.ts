@@ -7,6 +7,7 @@ import { Injectable } from "@nestjs/common";
 
 import { ImageGenerationMode } from "../../../db/entities/image-generation.entity";
 import { ImageBillingRule } from "../../../db/entities/image-billing-rule.entity";
+import { ImageModelConfig } from "../../../db/entities/image-model-config.entity";
 import { CreateBillingRuleDto, EstimateBillingDto, QueryBillingRuleDto, UpdateBillingRuleDto } from "../dto";
 
 @Injectable()
@@ -14,6 +15,8 @@ export class BillingRuleService extends BaseService<ImageBillingRule> {
     constructor(
         @InjectRepository(ImageBillingRule)
         private readonly billingRuleRepository: Repository<ImageBillingRule>,
+        @InjectRepository(ImageModelConfig)
+        private readonly modelConfigRepository: Repository<ImageModelConfig>,
     ) {
         super(billingRuleRepository);
     }
@@ -29,6 +32,7 @@ export class BillingRuleService extends BaseService<ImageBillingRule> {
     }
 
     async createRule(dto: CreateBillingRuleDto) {
+        await this.assertModelConfigExists(dto.modelConfigId);
         return this.billingRuleRepository.save(this.billingRuleRepository.create(this.normalizeRule(dto)));
     }
 
@@ -37,6 +41,7 @@ export class BillingRuleService extends BaseService<ImageBillingRule> {
         if (!rule) {
             throw HttpErrorFactory.notFound("计费规则不存在");
         }
+        await this.assertModelConfigExists(dto.modelConfigId);
         Object.assign(rule, this.normalizeRule(dto, rule as ImageBillingRule));
         return this.billingRuleRepository.save(rule as ImageBillingRule);
     }
@@ -62,14 +67,22 @@ export class BillingRuleService extends BaseService<ImageBillingRule> {
         const sizeMultiplier = Number(rule.sizeMultipliers?.[dto.size || "1024x1024"] ?? this.defaultSizeMultiplier(dto.size));
         const countMultiplier = rule.countMultiplierEnabled ? count : 1;
 
-        return roundPower(Number(rule.baseCost || 1) * modeMultiplier * qualityMultiplier * sizeMultiplier * countMultiplier);
+        return normalizePowerAmount(
+            Number(rule.baseCost || 1) *
+                modeMultiplier *
+                qualityMultiplier *
+                sizeMultiplier *
+                countMultiplier,
+        );
     }
 
-    async resolveRule(modelConfigId: string) {
-        const specific = await this.billingRuleRepository.findOne({
-            where: { modelConfigId, enabled: true } as FindOptionsWhere<ImageBillingRule>,
-            order: { createdAt: "DESC" },
-        });
+    async resolveRule(modelConfigId?: string) {
+        const specific = modelConfigId
+            ? await this.billingRuleRepository.findOne({
+                where: { modelConfigId, enabled: true } as FindOptionsWhere<ImageBillingRule>,
+                order: { createdAt: "DESC" },
+            })
+            : undefined;
         if (specific) return specific;
 
         const global = await this.billingRuleRepository.findOne({
@@ -131,8 +144,22 @@ export class BillingRuleService extends BaseService<ImageBillingRule> {
         const [width, height] = (size ?? "1024x1024").split("x").map((item) => Number(item));
         return width > 1024 || height > 1024 ? 2 : 1;
     }
+
+    private async assertModelConfigExists(modelConfigId?: string) {
+        if (!modelConfigId) return;
+        const exists = await this.modelConfigRepository.exists({
+            where: { id: modelConfigId } as FindOptionsWhere<ImageModelConfig>,
+        });
+        if (!exists) {
+            throw HttpErrorFactory.badRequest("计费规则引用的模型覆盖配置不存在");
+        }
+    }
 }
 
-function roundPower(value: number) {
-    return Math.round(value * 100) / 100;
+export function normalizePowerAmount(value: number) {
+    if (!Number.isFinite(value) || value < 0) {
+        throw HttpErrorFactory.badRequest("计费金额必须是非负数字");
+    }
+    if (value === 0) return 0;
+    return Math.ceil(value);
 }

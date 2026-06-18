@@ -3,6 +3,7 @@ import { Type } from "class-transformer";
 import { IsArray, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min, ValidateNested } from "class-validator";
 
 import { ImageGenerationMode, ImageResponseFormat } from "../../../db/entities/image-generation.entity";
+import { emptyStringToUndefined } from "../../common/dto-transforms";
 
 export class GenerationSourceImageDto {
     @IsString()
@@ -10,8 +11,9 @@ export class GenerationSourceImageDto {
     @IsOptional()
     url?: string;
 
-    @IsUUID("4")
+    @Transform(emptyStringToUndefined)
     @IsOptional()
+    @IsUUID("4")
     fileId?: string;
 }
 
@@ -30,8 +32,9 @@ export class CreateGenerationDto {
     @IsOptional()
     referenceImageUrl?: string;
 
-    @IsUUID("4")
+    @Transform(emptyStringToUndefined)
     @IsOptional()
+    @IsUUID("4")
     referenceImageFileId?: string;
 
     @IsArray()
@@ -45,8 +48,9 @@ export class CreateGenerationDto {
     @IsOptional()
     maskImageUrl?: string;
 
-    @IsUUID("4")
+    @Transform(emptyStringToUndefined)
     @IsOptional()
+    @IsUUID("4")
     maskImageFileId?: string;
 
     @IsUUID("4")
@@ -110,7 +114,8 @@ export class CreateGenerationDto {
     @IsOptional()
     mode?: ImageGenerationMode;
 
-    @IsUUID("4")
+    @Transform(emptyStringToUndefined)
     @IsOptional()
+    @IsUUID("4")
     requestKey?: string;
 }

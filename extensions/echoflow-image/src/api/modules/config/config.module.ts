@@ -1,5 +1,5 @@
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
-import { AiModel, AiProvider } from "@buildingai/db/entities";
+import { AiModel } from "@buildingai/db/entities";
 import { Module } from "@nestjs/common";
 
 import { ImageModelConfig } from "../../db/entities/image-model-config.entity";
@@ -11,7 +11,7 @@ import { ModelOptionsWebController } from "./controllers/web/model-options.web.c
 import { ModelConfigService } from "./services/model-config.service";
 
 @Module({
-    imports: [TypeOrmModule.forFeature([ImageModelConfig, ImageBillingRule, ImageGeneration, ImagePolicyConfig, AiModel, AiProvider])],
+    imports: [TypeOrmModule.forFeature([ImageModelConfig, ImageBillingRule, ImageGeneration, ImagePolicyConfig, AiModel])],
     controllers: [ModelConfigController, ModelOptionsWebController],
     providers: [ModelConfigService],
     exports: [ModelConfigService],

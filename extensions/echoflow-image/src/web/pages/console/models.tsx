@@ -51,7 +51,7 @@ const capabilityOptions = [
 ] as const;
 
 export default function ConsoleModelsPage() {
-    useDocumentHead({ title: "绘画模型配置" });
+    useDocumentHead({ title: "绘画模型覆盖" });
     const { data, isLoading, refetch } = useConsoleModelConfigsQuery({ page: 1, pageSize: 50 });
     const createMutation = useCreateModelConfigMutation();
     const updateMutation = useUpdateModelConfigMutation();
@@ -82,23 +82,23 @@ export default function ConsoleModelsPage() {
         <div className="space-y-5 p-4 md:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold tracking-tight">模型配置</h1>
-                    <p className="text-muted-foreground text-sm">将主系统 AI 模型启用为绘画模型，并配置能力与默认参数。</p>
+                    <h1 className="text-2xl font-semibold tracking-tight">模型覆盖</h1>
+                    <p className="text-muted-foreground text-sm">用户端默认直接使用主站启用的生图模型；这里只按需覆盖展示名、能力、默认参数与允许参数。</p>
                 </div>
                 <Button onClick={() => {
                     setEditing(createDraft());
                     setEditorNonce((value) => value + 1);
                 }}>
                     <Plus className="size-4" />
-                    新增模型
+                    新增覆盖
                 </Button>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
                 <Card>
                     <CardHeader>
-                        <CardTitle>已配置模型</CardTitle>
-                        <CardDescription>Web 用户端只会看到已启用且主系统模型可用的项。</CardDescription>
+                        <CardTitle>模型覆盖</CardTitle>
+                        <CardDescription>这里不是必填项；未覆盖的主站生图模型也会直接出现在用户端。</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         {isLoading ? <div className="text-muted-foreground text-sm">加载中...</div> : null}
@@ -148,7 +148,7 @@ export default function ConsoleModelsPage() {
                         ))}
                         {!isLoading && items.length === 0 ? (
                             <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
-                                尚未配置绘画模型。先在主系统模型管理中配置 Provider 和模型，再在这里启用。
+                                尚未配置覆盖项。用户端仍会直接使用主系统已启用的图像生成模型。
                             </div>
                         ) : null}
                     </CardContent>
@@ -235,9 +235,9 @@ function ModelConfigEditor({
             <Card>
                 <CardHeader>
                     <CardTitle>配置编辑</CardTitle>
-                    <CardDescription>选择左侧模型或新增配置。</CardDescription>
+                    <CardDescription>选择左侧覆盖项或新增覆盖。</CardDescription>
                 </CardHeader>
-                <CardContent className="text-muted-foreground text-sm">模型、计费和风控配置会共同决定用户端可用能力。</CardContent>
+                <CardContent className="text-muted-foreground text-sm">主站模型负责 Provider、密钥、baseURL 和模型类型；这里仅覆盖插件侧展示和参数策略。</CardContent>
             </Card>
         );
     }
@@ -249,7 +249,7 @@ function ModelConfigEditor({
                     <CheckCircle2 className="size-5" />
                     配置编辑
                 </CardTitle>
-                <CardDescription>主系统模型 ID 必须来自后台模型管理。</CardDescription>
+                <CardDescription>主站模型已提供 Provider、密钥、baseURL 和生图能力，这里只保存插件侧覆盖。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -281,7 +281,7 @@ function ModelConfigEditor({
                         ))}
                         {!modelsLoading && (availableModels ?? []).length === 0 ? (
                             <div className="text-muted-foreground px-2 py-5 text-center text-xs">
-                                未找到图片模型。请先在主系统模型管理中新增并启用 image 类型模型。
+                                未找到生图模型。请先在主系统模型管理中新增并启用 text-to-image 类型模型。
                             </div>
                         ) : null}
                     </div>

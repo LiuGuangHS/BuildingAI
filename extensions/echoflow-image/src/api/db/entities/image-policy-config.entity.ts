@@ -47,7 +47,7 @@ export class ImagePolicyConfig {
     @Column({ type: "int", default: 100 })
     dailyJobsPerUser: number;
 
-    @Column({ type: "boolean", default: true })
+    @Column({ type: "boolean", default: false })
     allowPublicUrlReference: boolean;
 
     @Column({ type: "boolean", default: true })

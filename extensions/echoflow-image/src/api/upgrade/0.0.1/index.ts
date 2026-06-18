@@ -12,6 +12,7 @@ export class Upgrade {
         await this.ensureGenerationTable();
         await this.ensureIndexes();
         await this.backfillSourceImages();
+        await this.cleanupOrphanModelScopedRules();
         await this.ensureExtensionRecord();
         this.logger.log("Echoflow Image initial database setup completed");
     }
@@ -83,7 +84,7 @@ export class Upgrade {
                 "max_reference_image_size_mb" int NOT NULL DEFAULT 10,
                 "max_concurrent_jobs_per_user" int NOT NULL DEFAULT 1,
                 "daily_jobs_per_user" int NOT NULL DEFAULT 100,
-                "allow_public_url_reference" boolean NOT NULL DEFAULT true,
+                "allow_public_url_reference" boolean NOT NULL DEFAULT false,
                 "enabled" boolean NOT NULL DEFAULT true,
                 "created_at" timestamp NOT NULL DEFAULT now(),
                 "updated_at" timestamp NOT NULL DEFAULT now()
@@ -95,7 +96,7 @@ export class Upgrade {
         await this.ensureColumn("image_policy_config", "max_reference_image_size_mb", "int NOT NULL DEFAULT 10");
         await this.ensureColumn("image_policy_config", "max_concurrent_jobs_per_user", "int NOT NULL DEFAULT 1");
         await this.ensureColumn("image_policy_config", "daily_jobs_per_user", "int NOT NULL DEFAULT 100");
-        await this.ensureColumn("image_policy_config", "allow_public_url_reference", "boolean NOT NULL DEFAULT true");
+        await this.ensureColumn("image_policy_config", "allow_public_url_reference", "boolean NOT NULL DEFAULT false");
 
         await this.dataSource.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_image"."image_prompt_template" (
@@ -226,6 +227,27 @@ export class Upgrade {
             )))
             WHERE COALESCE(jsonb_array_length("source_images"), 0) = 0
               AND ("reference_image_url" IS NOT NULL OR "reference_image_file_id" IS NOT NULL)
+        `);
+    }
+
+    private async cleanupOrphanModelScopedRules(): Promise<void> {
+        await this.dataSource.query(`
+            DELETE FROM "echoflow_image"."image_billing_rule" rule
+            WHERE rule."model_config_id" IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM "echoflow_image"."image_model_config" config
+                WHERE config."id" = rule."model_config_id"
+              )
+        `);
+        await this.dataSource.query(`
+            DELETE FROM "echoflow_image"."image_policy_config" policy
+            WHERE policy."model_config_id" IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM "echoflow_image"."image_model_config" config
+                WHERE config."id" = policy."model_config_id"
+              )
         `);
     }
 

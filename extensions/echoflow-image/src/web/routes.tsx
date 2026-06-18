@@ -36,7 +36,7 @@ export const routeOption = defineRouteOption({
             icon: "bar-chart-3",
         },
         {
-            title: "模型配置",
+            title: "模型覆盖",
             path: "/models",
             icon: "settings-2",
         },

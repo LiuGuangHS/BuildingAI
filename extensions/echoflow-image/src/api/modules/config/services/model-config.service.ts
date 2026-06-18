@@ -1,4 +1,5 @@
 import { BaseService } from "@buildingai/base";
+import { MODEL_TYPES } from "@buildingai/ai-sdk";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { AiModel } from "@buildingai/db/entities";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
@@ -40,14 +41,12 @@ const DEFAULT_PARAMS: ImageModelDefaultParams = {
     style: "vivid",
     n: 1,
     responseFormat: "b64_json",
-    outputFormat: "png",
 };
 
 const DEFAULT_ALLOWED_PARAMS: ImageModelAllowedParams = {
     sizes: ["1024x1024", "1024x1792", "1792x1024"],
     qualities: ["standard", "hd"],
     styles: ["vivid", "natural"],
-    outputFormats: ["png"],
     maxImages: 4,
 };
 
@@ -82,13 +81,29 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     }
 
     async listEnabledForWeb() {
-        const configs = await this.modelConfigRepository.find({
-            where: { enabled: true } as FindOptionsWhere<ImageModelConfig>,
-            relations: ["aiModel", "aiModel.provider"],
-            order: { sortOrder: "DESC", createdAt: "DESC" },
-        });
+        const [configs, imageModels] = await Promise.all([
+            this.modelConfigRepository.find({
+                where: { enabled: true } as FindOptionsWhere<ImageModelConfig>,
+                relations: ["aiModel", "aiModel.provider"],
+                order: { sortOrder: "DESC", createdAt: "DESC" },
+            }),
+            this.aiModelRepository.find({
+                where: { modelType: MODEL_TYPES.TEXT_TO_IMAGE, isActive: true } as FindOptionsWhere<AiModel>,
+                relations: ["provider"],
+                order: { sortOrder: "DESC", createdAt: "DESC" },
+            }),
+        ]);
 
-        return configs.filter((config) => this.isConfigUsable(config)).map((config) => this.toWebOption(config));
+        const configuredModelIds = new Set(configs.map((config) => config.aiModelId));
+        const configuredOptions = configs
+            .filter((config) => this.isConfigUsable(config))
+            .map((config) => this.toWebOption(config));
+        const mainSystemOptions = imageModels
+            .filter((model) => !configuredModelIds.has(model.id))
+            .filter((model) => this.isAiModelUsableForImage(model))
+            .map((model) => this.toWebOptionFromAiModel(model));
+
+        return [...configuredOptions, ...mainSystemOptions];
     }
 
     async listAvailableAiModels(query: QueryAvailableAiModelDto) {
@@ -115,6 +130,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         const configuredIds = new Set(configured.map((item) => item.aiModelId));
 
         return models
+            .filter((model) => !query.activeOnly || model.provider?.isActive !== false)
             .filter((model) => !query.imageOnly || this.looksLikeImageModel(model))
             .map((model) => ({
                 id: model.id,
@@ -147,6 +163,47 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         }
 
         return config;
+    }
+
+    async findEnabledConfigByModelId(aiModelId: string) {
+        const config = await this.modelConfigRepository.findOne({
+            where: { aiModelId, enabled: true } as FindOptionsWhere<ImageModelConfig>,
+            relations: ["aiModel", "aiModel.provider"],
+        });
+
+        if (!config || !this.isConfigUsable(config)) {
+            return undefined;
+        }
+
+        return config;
+    }
+
+    async findEnabledImageModelById(id: string) {
+        const model = await this.aiModelRepository.findOne({
+            where: { id, modelType: MODEL_TYPES.TEXT_TO_IMAGE, isActive: true } as FindOptionsWhere<AiModel>,
+            relations: ["provider"],
+        });
+
+        if (!model || !this.isAiModelUsableForImage(model)) {
+            throw HttpErrorFactory.badRequest("所选主站生图模型未启用或不可用");
+        }
+
+        return model;
+    }
+
+    async findWebOptionById(id: string) {
+        const config = await this.modelConfigRepository.findOne({
+            where: { id, enabled: true } as FindOptionsWhere<ImageModelConfig>,
+            relations: ["aiModel", "aiModel.provider"],
+        });
+
+        if (config && this.isConfigUsable(config)) {
+            return this.toWebOption(config);
+        }
+
+        const model = await this.findEnabledImageModelById(id);
+        const modelConfig = await this.findEnabledConfigByModelId(model.id);
+        return modelConfig ? this.toWebOption(modelConfig) : this.toWebOptionFromAiModel(model);
     }
 
     async findByIdOrFail(id: string) {
@@ -215,8 +272,10 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     }
 
     toWebOption(config: ImageModelConfig) {
+        const capabilities = this.normalizeCapabilities(config.capabilities);
         return {
-            id: config.id,
+            id: config.aiModelId,
+            pluginConfigId: config.id,
             aiModelId: config.aiModelId,
             name: config.displayName,
             model: config.aiModel?.model,
@@ -225,11 +284,68 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             providerName: config.aiModel?.provider?.name,
             apiMode: config.apiMode,
             requestPolicy: config.requestPolicy,
-            capabilities: config.capabilities ?? {},
-            defaultParams: config.defaultParams ?? {},
-            allowedParams: config.allowedParams ?? {},
+            capabilities,
+            defaultParams: this.normalizeDefaultParams(config.defaultParams, capabilities),
+            allowedParams: this.normalizeAllowedParams(config.allowedParams, capabilities),
             features: config.aiModel?.features ?? [],
+            source: "plugin-config",
         };
+    }
+
+    toWebOptionFromAiModel(model: AiModel) {
+        return {
+            id: model.id,
+            aiModelId: model.id,
+            name: model.name,
+            model: model.model,
+            modelType: model.modelType,
+            provider: model.provider?.provider,
+            providerName: model.provider?.name,
+            apiMode: ImageApiMode.IMAGES,
+            requestPolicy: ImageRequestPolicy.OPENAI,
+            capabilities: DEFAULT_CAPABILITIES,
+            defaultParams: DEFAULT_PARAMS,
+            allowedParams: DEFAULT_ALLOWED_PARAMS,
+            features: model.features ?? [],
+            source: "main-system",
+        };
+    }
+
+    private normalizeCapabilities(capabilities?: ImageModelCapabilities): ImageModelCapabilities {
+        return {
+            ...DEFAULT_CAPABILITIES,
+            ...(capabilities ?? {}),
+        };
+    }
+
+    private normalizeDefaultParams(
+        defaultParams?: ImageModelDefaultParams,
+        capabilities?: ImageModelCapabilities,
+    ): ImageModelDefaultParams {
+        const normalizedCapabilities = this.normalizeCapabilities(capabilities);
+        const normalized = {
+            ...DEFAULT_PARAMS,
+            ...(defaultParams ?? {}),
+        };
+        if (!normalizedCapabilities.outputFormat) {
+            delete normalized.outputFormat;
+        }
+        return normalized;
+    }
+
+    private normalizeAllowedParams(
+        allowedParams?: ImageModelAllowedParams,
+        capabilities?: ImageModelCapabilities,
+    ): ImageModelAllowedParams {
+        const normalizedCapabilities = this.normalizeCapabilities(capabilities);
+        const normalized = {
+            ...DEFAULT_ALLOWED_PARAMS,
+            ...(allowedParams ?? {}),
+        };
+        if (!normalizedCapabilities.outputFormat) {
+            delete normalized.outputFormats;
+        }
+        return normalized;
     }
 
     private normalizeConfig(
@@ -270,6 +386,9 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         if (!model) {
             throw HttpErrorFactory.badRequest("主系统模型不存在");
         }
+        if (!this.isAiModelUsableForImage(model)) {
+            throw HttpErrorFactory.badRequest("请选择已启用且支持图片能力的主系统模型");
+        }
     }
 
     private async assertAiModelNotConfigured(aiModelId: string, ignoreConfigId?: string) {
@@ -282,13 +401,20 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     }
 
     private isConfigUsable(config: ImageModelConfig) {
-        return config.enabled && config.aiModel?.isActive !== false && config.aiModel?.provider?.isActive !== false;
+        return config.enabled && Boolean(config.aiModel) && this.isAiModelUsableForImage(config.aiModel);
     }
 
     private looksLikeImageModel(model: AiModel) {
+        if (model.modelType === MODEL_TYPES.TEXT_TO_IMAGE) {
+            return true;
+        }
         const fields = [model.modelType, model.model, model.name, ...(model.features ?? [])]
             .filter(Boolean)
             .map((item) => String(item).toLowerCase());
         return fields.some((item) => item.includes("image") || item.includes("dall") || item.includes("gpt-image"));
+    }
+
+    private isAiModelUsableForImage(model: AiModel) {
+        return model.isActive !== false && model.provider?.isActive !== false && this.looksLikeImageModel(model);
     }
 }

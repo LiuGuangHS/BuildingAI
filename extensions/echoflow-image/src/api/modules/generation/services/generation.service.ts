@@ -1,14 +1,17 @@
 import { BaseService } from "@buildingai/base";
-import { SecretService } from "@buildingai/core";
+import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants/shared/account-log.constants";
 import { FileUploadService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog, AiModel, AiProvider, Secret, SecretTemplate, User } from "@buildingai/db/entities";
-import type { FindOptionsWhere } from "@buildingai/db/typeorm";
+import { AccountLog, type AiModel } from "@buildingai/db/entities";
+import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThan, Like, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { ExtensionBillingService, PublicAiModelService } from "@buildingai/extension-sdk";
 import { buildWhere } from "@buildingai/utils";
+import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import type { Queue } from "bullmq";
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Readable } from "node:stream";
@@ -22,14 +25,33 @@ import {
     ImageResponseFormat,
 } from "../../../db/entities/image-generation.entity";
 import { ImageBillingRule } from "../../../db/entities/image-billing-rule.entity";
-import { ImageModelConfig } from "../../../db/entities/image-model-config.entity";
+import {
+    ImageApiMode,
+    ImageModelConfig,
+    ImageRequestPolicy,
+    type ImageModelAllowedParams,
+    type ImageModelCapabilities,
+    type ImageModelDefaultParams,
+} from "../../../db/entities/image-model-config.entity";
 import { ImagePolicyConfig } from "../../../db/entities/image-policy-config.entity";
 import { ImagePromptTemplate } from "../../../db/entities/image-prompt-template.entity";
-import { BillingRuleService } from "../../billing/services/billing-rule.service";
+import { BillingRuleService, normalizePowerAmount } from "../../billing/services/billing-rule.service";
 import { ModelConfigService } from "../../config/services/model-config.service";
 import { PolicyService } from "../../policy/services/policy.service";
 import { CreateGenerationDto, PromptEnhanceDto, QueryGenerationDto } from "../dto";
+import { IMAGE_GENERATION_JOB, IMAGE_GENERATION_QUEUE } from "./generation-queue.constants";
 import { OpenAIImageClient } from "./openai-image-client";
+
+type EffectiveImageModelConfig = {
+    id?: string;
+    aiModelId: string;
+    displayName: string;
+    apiMode: ImageApiMode;
+    requestPolicy: ImageRequestPolicy;
+    capabilities: ImageModelCapabilities;
+    defaultParams: ImageModelDefaultParams;
+    allowedParams: ImageModelAllowedParams;
+};
 
 @Injectable()
 export class GenerationService extends BaseService<ImageGeneration> implements OnModuleInit {
@@ -38,12 +60,16 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     constructor(
         @InjectRepository(ImageGeneration)
         private readonly generationRepository: Repository<ImageGeneration>,
+        @InjectRepository(AccountLog)
+        private readonly accountLogRepository: Repository<AccountLog>,
         private readonly aiModelService: PublicAiModelService,
         private readonly billingService: ExtensionBillingService,
         private readonly modelConfigService: ModelConfigService,
         private readonly billingRuleService: BillingRuleService,
         private readonly policyService: PolicyService,
         private readonly fileUploadService: FileUploadService,
+        @InjectQueue(IMAGE_GENERATION_QUEUE)
+        private readonly generationQueue: Queue,
     ) {
         super(generationRepository);
     }
@@ -81,10 +107,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             }
         }
 
-        // --- Validate plugin model config (fail fast before any DB writes) ---
-        const modelConfig = await this.modelConfigService.findEnabledById(dto.modelId);
-        const modelInfo = await this.aiModelService.getModelInfo(modelConfig.aiModelId);
-        const normalizedRequest = this.normalizeGenerationRequest(dto, modelConfig);
+        // --- Validate main-system image model and optional plugin overrides ---
+        const { modelConfig, effectiveConfig, modelInfo } = await this.resolveImageModelSelection(dto.modelId);
+        const normalizedRequest = this.normalizeGenerationRequest(dto, effectiveConfig);
         const normalizedDto = {
             ...dto,
             referenceImageUrl: normalizedRequest.referenceImageUrl,
@@ -99,22 +124,23 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             responseFormat: normalizedRequest.responseFormat,
             outputFormat: normalizedRequest.outputFormat,
         };
-        this.validateAllowedParams(normalizedDto, modelConfig);
+        this.validateAllowedParams(normalizedDto, effectiveConfig);
         const usage = await this.getUserPolicyUsage(userId);
-        const policy = await this.policyService.validateGeneration(modelConfig.id, normalizedDto, usage.activeCount, usage.todayCount);
+        const modelConfigId = modelConfig?.id;
+        const policy = await this.policyService.validateGeneration(modelConfigId, normalizedDto, usage.activeCount, usage.todayCount);
 
         const billingAmount = await this.billingRuleService.calculateAmount({
-            modelConfigId: modelConfig.id,
+            modelConfigId,
             mode: normalizedRequest.mode,
             size: normalizedRequest.size,
             n: normalizedRequest.n,
             quality: normalizedRequest.quality,
         });
         const providerConfig = this.flattenProviderConfig(
-            await this.aiModelService.getProviderConfig(modelConfig.aiModelId),
+            await this.aiModelService.getProviderConfig(modelInfo.id),
         );
 
-        const provider = await this.aiModelService.getProviderAdapter(modelConfig.aiModelId, providerConfig);
+        const provider = await this.aiModelService.getProviderAdapter(modelInfo.id, providerConfig);
         if (!provider.supports("image")) {
             throw HttpErrorFactory.badRequest("所选模型不支持图片生成，请选择图片模型");
         }
@@ -135,7 +161,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         const record = this.generationRepository.create({
             userId,
             requestKey: dto.requestKey,
-            modelConfigId: modelConfig.id,
+            modelConfigId: modelConfig?.id,
             mode: normalizedRequest.mode,
             status: ImageGenerationStatus.PENDING,
             billingStatus: ImageGenerationBillingStatus.PENDING,
@@ -143,8 +169,8 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             negativePrompt: dto.negativePrompt ? this.sanitizeText(dto.negativePrompt, 2000) : undefined,
             referenceImageUrl: normalizedRequest.referenceImageUrl,
             referenceImageFileId: normalizedRequest.primarySourceImage?.fileId,
-            modelId: modelConfig.aiModelId,
-            modelName: modelConfig.displayName || modelInfo.name,
+            modelId: modelInfo.id,
+            modelName: effectiveConfig.displayName || modelInfo.name,
             provider: modelInfo.provider?.provider,
             baseURL: baseURLSummary,
             size: normalizedRequest.size,
@@ -152,8 +178,8 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             quality: normalizedRequest.quality,
             style: normalizedRequest.style,
             responseFormat: normalizedRequest.responseFormat,
-            apiMode: modelConfig.apiMode,
-            requestPolicy: modelConfig.requestPolicy,
+            apiMode: effectiveConfig.apiMode,
+            requestPolicy: effectiveConfig.requestPolicy,
             sourceImages: normalizedRequest.sourceImages,
             maskImage: normalizedRequest.hasMaskImage
                 ? { url: normalizedRequest.maskImageUrl, fileId: dto.maskImageFileId }
@@ -187,7 +213,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             throw error;
         }
 
-        this.runGenerationInBackground(saved.id);
+        await this.enqueueGenerationJob(saved.id);
         return saved;
     }
 
@@ -221,7 +247,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             item.status = ImageGenerationStatus.PENDING;
             item.progress = Math.min(item.progress ?? 0, 10);
             await this.generationRepository.save(item);
-            this.runGenerationInBackground(item.id);
+            await this.enqueueGenerationJob(item.id);
             resumed += 1;
         }
 
@@ -232,7 +258,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     }
 
     async executeGenerationJob(id: string) {
-        const saved = await this.generationRepository.findOne({
+        let saved = await this.generationRepository.findOne({
             where: { id } as FindOptionsWhere<ImageGeneration>,
         });
 
@@ -260,7 +286,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
         const modelConfig = saved.modelConfigId
             ? await this.modelConfigService.findEnabledById(saved.modelConfigId)
-            : undefined;
+            : await this.modelConfigService.findEnabledConfigByModelId(saved.modelId);
         const modelInfo = await this.aiModelService.getModelInfo(saved.modelId);
         const providerConfig = this.flattenProviderConfig(
             await this.aiModelService.getProviderConfig(saved.modelId),
@@ -269,7 +295,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         if (!provider.supports("image")) {
             throw HttpErrorFactory.badRequest("所选模型不支持图片生成，请选择图片模型");
         }
-        const modelConfigId = modelConfig?.id ?? saved.modelConfigId ?? "";
+        const modelConfigId = modelConfig?.id ?? saved.modelConfigId;
         const policy = await this.policyService.resolvePolicy(modelConfigId);
         const billingRule = await this.billingRuleService.resolveRule(modelConfigId);
 
@@ -279,18 +305,10 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
         // --- Stage 2: Deduct power ---
         try {
-            if (saved.billingStatus === ImageGenerationBillingStatus.PENDING) {
-                await this.billingService.deductUserPower({
-                    userId: saved.userId,
-                    amount: saved.billingAmount,
-                    remark: `Echoflow Image: ${modelConfig?.displayName || modelInfo.name || modelInfo.model}`,
-                    associationNo: saved.id,
-                    associationUserId: saved.userId,
-                });
-                saved.billingStatus = ImageGenerationBillingStatus.DEDUCTED;
-                saved.progress = 15;
-                await this.generationRepository.save(saved);
-            }
+            saved = await this.deductGenerationBilling(
+            saved,
+            `Echoflow Image: ${modelConfig?.displayName || modelInfo.name || modelInfo.model}`,
+            );
         } catch (deductError) {
             saved.status = ImageGenerationStatus.FAILED;
             saved.billingStatus = ImageGenerationBillingStatus.FAILED;
@@ -325,16 +343,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             saved.failureCategory = this.classifyFailure(generateError);
             saved.completedAt = new Date();
 
-            if (saved.billingStatus === ImageGenerationBillingStatus.DEDUCTED && billingRule.refundOnFailure !== false) {
+            if (billingRule.refundOnFailure !== false) {
                 try {
-                    await this.billingService.addUserPower({
-                        userId: saved.userId,
-                        amount: saved.billingAmount,
-                        remark: `Refund for failed generation ${saved.id}`,
-                        associationNo: saved.id,
-                        associationUserId: saved.userId,
-                    });
-                    saved.billingStatus = ImageGenerationBillingStatus.REFUNDED;
+                    await this.refundGenerationBilling(saved, `Refund for failed generation ${saved.id}`);
                 } catch (refundError) {
                     saved.billingStatus = ImageGenerationBillingStatus.DEDUCTED;
                     saved.errorMessage = this.truncateText(
@@ -351,6 +362,25 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
     }
 
+    private async enqueueGenerationJob(id: string) {
+        try {
+            await this.generationQueue.add(
+                IMAGE_GENERATION_JOB,
+                { id },
+                {
+                    jobId: `image-generation-${id}-${Date.now()}`,
+                    attempts: 1,
+                    removeOnComplete: true,
+                    removeOnFail: false,
+                },
+            );
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Queue image generation ${id} failed, using local fallback: ${message}`, error);
+            this.runGenerationInBackground(id);
+        }
+    }
+
     private runGenerationInBackground(id: string) {
         setTimeout(() => {
             void this.executeGenerationJob(id).catch((error) => {
@@ -361,7 +391,107 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }, 0);
     }
 
-    private async markGenerationCrashed(id: string, error: unknown) {
+    private async resolveImageModelSelection(id: string) {
+        const modelConfig = await this.modelConfigService.findByIdOrFail(id).catch(() => undefined);
+        if (modelConfig) {
+            const modelInfo = await this.aiModelService.getModelInfo(modelConfig.aiModelId);
+            return {
+                modelConfig,
+                modelInfo,
+                effectiveConfig: this.toEffectiveModelConfig(modelConfig, modelInfo),
+            };
+        }
+
+        const modelInfo = await this.modelConfigService.findEnabledImageModelById(id);
+        const override = await this.modelConfigService.findEnabledConfigByModelId(modelInfo.id);
+        return {
+            modelConfig: override,
+            modelInfo,
+            effectiveConfig: override
+                ? this.toEffectiveModelConfig(override, modelInfo)
+                : this.toEffectiveMainSystemModelConfig(modelInfo),
+        };
+    }
+
+    private toEffectiveModelConfig(config: ImageModelConfig, modelInfo: AiModel): EffectiveImageModelConfig {
+        return {
+            id: config.id,
+            aiModelId: config.aiModelId,
+            displayName: config.displayName || modelInfo.name,
+            apiMode: config.apiMode,
+            requestPolicy: config.requestPolicy,
+            capabilities: this.normalizeCapabilities(config.capabilities),
+            defaultParams: this.normalizeDefaultParams(config.defaultParams, config.capabilities),
+            allowedParams: this.normalizeAllowedParams(config.allowedParams, config.capabilities),
+        };
+    }
+
+    private toEffectiveMainSystemModelConfig(modelInfo: AiModel): EffectiveImageModelConfig {
+        return {
+            aiModelId: modelInfo.id,
+            displayName: modelInfo.name,
+            apiMode: ImageApiMode.IMAGES,
+            requestPolicy: ImageRequestPolicy.OPENAI,
+            capabilities: this.normalizeCapabilities(),
+            defaultParams: this.normalizeDefaultParams(),
+            allowedParams: this.normalizeAllowedParams(),
+        };
+    }
+
+    private normalizeCapabilities(capabilities?: ImageModelCapabilities): ImageModelCapabilities {
+        return {
+            textToImage: true,
+            imageToImage: false,
+            mask: false,
+            multiReference: false,
+            seed: false,
+            negativePrompt: true,
+            outputFormat: false,
+            background: false,
+            moderation: false,
+            inputFidelity: false,
+            ...(capabilities ?? {}),
+        };
+    }
+
+    private normalizeDefaultParams(
+        defaultParams?: ImageModelDefaultParams,
+        capabilities?: ImageModelCapabilities,
+    ): ImageModelDefaultParams {
+        const normalizedCapabilities = this.normalizeCapabilities(capabilities);
+        const normalized: ImageModelDefaultParams = {
+            size: "1024x1024",
+            quality: "standard",
+            style: "vivid",
+            n: 1,
+            responseFormat: ImageResponseFormat.B64_JSON,
+            ...(defaultParams ?? {}),
+        };
+        if (!normalizedCapabilities.outputFormat) {
+            delete normalized.outputFormat;
+        }
+        return normalized;
+    }
+
+    private normalizeAllowedParams(
+        allowedParams?: ImageModelAllowedParams,
+        capabilities?: ImageModelCapabilities,
+    ): ImageModelAllowedParams {
+        const normalizedCapabilities = this.normalizeCapabilities(capabilities);
+        const normalized: ImageModelAllowedParams = {
+            sizes: ["1024x1024", "1024x1792", "1792x1024"],
+            qualities: ["standard", "hd"],
+            styles: ["vivid", "natural"],
+            maxImages: 4,
+            ...(allowedParams ?? {}),
+        };
+        if (!normalizedCapabilities.outputFormat) {
+            delete normalized.outputFormats;
+        }
+        return normalized;
+    }
+
+    async markGenerationCrashed(id: string, error: unknown) {
         const saved = await this.generationRepository.findOne({
             where: { id } as FindOptionsWhere<ImageGeneration>,
         });
@@ -375,18 +505,16 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         saved.failureCategory = this.classifyFailure(error);
         saved.completedAt = new Date();
 
-        const billingRule = await this.billingRuleService.resolveRule(saved.modelConfigId ?? "");
-        if (saved.billingStatus === ImageGenerationBillingStatus.DEDUCTED && billingRule.refundOnFailure !== false) {
+        const billingRule = await this.billingRuleService.resolveRule(saved.modelConfigId);
+        if (billingRule.refundOnFailure !== false) {
             try {
-                await this.billingService.addUserPower({
-                    userId: saved.userId,
-                    amount: saved.billingAmount,
-                    remark: `Refund for crashed generation ${saved.id}`,
-                    associationNo: saved.id,
-                    associationUserId: saved.userId,
-                });
-                saved.billingStatus = ImageGenerationBillingStatus.REFUNDED;
+                await this.refundGenerationBilling(saved, `Refund for crashed generation ${saved.id}`);
             } catch (refundError) {
+                saved.billingStatus = ImageGenerationBillingStatus.DEDUCTED;
+                saved.errorMessage = this.truncateText(
+                    `${saved.errorMessage} (退款失败，请联系管理员)`,
+                    2000,
+                );
                 this.logger.error(`Crash refund failed for generation ${saved.id}`, refundError);
             }
         }
@@ -529,10 +657,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     async enhancePrompt(dto: PromptEnhanceDto) {
         if (dto.modelId) {
             try {
-                const modelConfig = await this.modelConfigService.findEnabledById(dto.modelId);
-                const modelInfo = await this.aiModelService.getModelInfo(modelConfig.aiModelId);
+                const { modelInfo } = await this.resolveImageModelSelection(dto.modelId);
                 const providerConfig = this.flattenProviderConfig(
-                    await this.aiModelService.getProviderConfig(modelConfig.aiModelId),
+                    await this.aiModelService.getProviderConfig(modelInfo.id),
                 );
                 const client = new OpenAIImageClient({
                     apiKey: providerConfig.apiKey,
@@ -583,6 +710,106 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         return { activeCount, todayCount };
     }
 
+    private async deductGenerationBilling(record: ImageGeneration, remark: string) {
+        return this.withTransaction(async (manager) => {
+            const locked = await manager.findOne(ImageGeneration, {
+                where: { id: record.id } as FindOptionsWhere<ImageGeneration>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!locked) {
+                throw HttpErrorFactory.notFound("生成记录不存在");
+            }
+            if (locked.billingStatus !== ImageGenerationBillingStatus.PENDING) {
+                return locked;
+            }
+
+            if (!locked.billingAmount || locked.billingAmount <= 0) {
+                locked.billingStatus = ImageGenerationBillingStatus.DEDUCTED;
+                locked.progress = Math.max(locked.progress ?? 0, 15);
+                return manager.save(ImageGeneration, locked);
+            }
+
+            const duplicateDeduction = await this.hasGenerationBillingLog(locked.id, ACTION.DEC, manager);
+            if (!duplicateDeduction) {
+                const amount = normalizePowerAmount(Number(locked.billingAmount));
+                await this.billingService.deductUserPower({
+                    userId: locked.userId,
+                    amount,
+                    remark,
+                    associationNo: locked.id,
+                    associationUserId: locked.userId,
+                }, manager);
+            }
+
+            locked.billingStatus = ImageGenerationBillingStatus.DEDUCTED;
+            locked.progress = Math.max(locked.progress ?? 0, 15);
+            return manager.save(ImageGeneration, locked);
+        });
+    }
+
+    private async refundGenerationBilling(record: ImageGeneration, remark: string) {
+        await this.withTransaction(async (manager) => {
+            const locked = await manager.findOne(ImageGeneration, {
+                where: { id: record.id } as FindOptionsWhere<ImageGeneration>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!locked) {
+                throw HttpErrorFactory.notFound("生成记录不存在");
+            }
+            if (!locked.billingAmount || locked.billingAmount <= 0) {
+                return;
+            }
+
+            const wasDeducted =
+                locked.billingStatus === ImageGenerationBillingStatus.DEDUCTED ||
+                await this.hasGenerationBillingLog(locked.id, ACTION.DEC, manager);
+            if (!wasDeducted) {
+                return;
+            }
+
+            const alreadyRefunded =
+                locked.billingStatus === ImageGenerationBillingStatus.REFUNDED ||
+                await this.hasGenerationBillingLog(locked.id, ACTION.INC, manager);
+            if (alreadyRefunded) {
+                locked.billingStatus = ImageGenerationBillingStatus.REFUNDED;
+                await manager.save(ImageGeneration, locked);
+                record.billingStatus = locked.billingStatus;
+                return;
+            }
+
+            const duplicateRefund = await this.hasGenerationBillingLog(locked.id, ACTION.INC, manager);
+            if (!duplicateRefund) {
+                const amount = normalizePowerAmount(Number(locked.billingAmount));
+                await this.billingService.addUserPower({
+                    userId: locked.userId,
+                    amount,
+                    remark,
+                    associationNo: locked.id,
+                    associationUserId: locked.userId,
+                }, manager);
+            }
+
+            locked.billingStatus = ImageGenerationBillingStatus.REFUNDED;
+            await manager.save(ImageGeneration, locked);
+            record.billingStatus = locked.billingStatus;
+        });
+    }
+
+    private async hasGenerationBillingLog(
+        associationNo: string,
+        action: (typeof ACTION)[keyof typeof ACTION],
+        manager?: EntityManager,
+    ) {
+        const repository = manager?.getRepository(AccountLog) ?? this.accountLogRepository;
+        return repository.exists({
+            where: {
+                associationNo,
+                accountType: ACCOUNT_LOG_TYPE.PLUGIN_DEC,
+                action,
+            } as FindOptionsWhere<AccountLog>,
+        });
+    }
+
     private async generateWithProvider(
         record: ImageGeneration,
         modelInfo: AiModel,
@@ -594,7 +821,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             baseURL: providerConfig.baseURL,
         });
         const referenceImages = await this.resolveReferenceImages(record, maxReferenceImageSizeMb);
-        const maskImage = await this.resolveStoredImage(record.maskImage, maxReferenceImageSizeMb, "遮罩图");
+        const maskImage = await this.resolveStoredImage(record.maskImage, maxReferenceImageSizeMb, "遮罩图", record.userId);
 
         this.logger.log(
             `Generating image: model=${modelInfo.model} size=${record.size} n=${record.n} baseURL=${this.sanitizeBaseURL(providerConfig.baseURL)}`,
@@ -638,17 +865,23 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             ? record.sourceImages
             : [{ url: record.referenceImageUrl, fileId: record.referenceImageFileId }];
         const resolved = await Promise.all(
-            sources.map((source, index) => this.resolveStoredImage(source, maxReferenceImageSizeMb, `参考图 ${index + 1}`)),
+            sources.map((source, index) => this.resolveStoredImage(source, maxReferenceImageSizeMb, `参考图 ${index + 1}`, record.userId)),
         );
         return resolved.filter((item): item is NonNullable<typeof item> => Boolean(item));
     }
 
-    private async resolveStoredImage(source: ImageSourceRecord | undefined, maxReferenceImageSizeMb: number, label: string) {
+    private async resolveStoredImage(
+        source: ImageSourceRecord | undefined,
+        maxReferenceImageSizeMb: number,
+        label: string,
+        userId: string,
+    ) {
         if (!source?.fileId) {
             return source?.url ? { url: source.url, source: source.url } : undefined;
         }
 
         const file = await this.fileUploadService.findOneById(source.fileId);
+        this.assertPluginUploadOwnedByUser(file, userId, label);
         const mimeType = this.normalizeReferenceImageMimeType(file.mimeType, file.originalName);
         const maxBytes = maxReferenceImageSizeMb * 1024 * 1024;
 
@@ -656,7 +889,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             throw HttpErrorFactory.badRequest(`${label}不能超过 ${maxReferenceImageSizeMb}MB`);
         }
 
-        const stream = await this.fileUploadService.createReadStream(source.fileId);
+        const stream = await this.fileUploadService.createReadStream(source.fileId, { extensionId: "echoflow-image" });
         if (!stream) {
             throw HttpErrorFactory.badRequest(`${label}文件不存在或无法读取`);
         }
@@ -675,11 +908,27 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         };
     }
 
+    private assertPluginUploadOwnedByUser(
+        file: { uploaderId?: string; extensionIdentifier?: string } | null | undefined,
+        userId: string,
+        label: string,
+    ) {
+        if (!file) {
+            throw HttpErrorFactory.badRequest(`${label}文件不存在或无法读取`);
+        }
+        if (file.uploaderId !== userId) {
+            throw HttpErrorFactory.badRequest(`${label}不属于当前用户`);
+        }
+        if (file.extensionIdentifier !== "echoflow-image") {
+            throw HttpErrorFactory.badRequest(`${label}不属于当前插件上传文件`);
+        }
+    }
+
     private normalizeGenerationRequest(dto: CreateGenerationDto, modelConfig: ImageModelConfig) {
         const sourceImages = this.normalizeSourceImages(dto);
         const primarySourceImage = sourceImages[0];
         const referenceImageUrl = primarySourceImage?.url;
-        const maskImageUrl = this.normalizeReferenceImageUrl(dto.maskImageUrl);
+        const maskImageUrl = this.normalizeReferenceImageUrl(dto.maskImageUrl, Boolean(dto.maskImageFileId));
         const hasReferenceImage = sourceImages.length > 0;
         const hasMaskImage = Boolean(maskImageUrl || dto.maskImageFileId);
         const mode =
@@ -896,30 +1145,55 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             if (!["http:", "https:"].includes(url.protocol)) {
                 throw new Error("unsupported protocol");
             }
+            if (url.username || url.password) {
+                throw new Error("credentials not allowed");
+            }
+            if (this.isPrivateOrLocalHost(url.hostname)) {
+                throw new Error("private host not allowed");
+            }
             return url.toString();
         } catch {
             throw HttpErrorFactory.badRequest("图片服务返回了不安全的图片地址");
         }
     }
 
-    private normalizeReferenceImageUrl(raw?: string): string | undefined {
+    private normalizeReferenceImageUrl(raw?: string, trustedFile = false): string | undefined {
         if (!raw) return undefined;
         const value = raw.trim();
         if (!value) return undefined;
-
-        if (value.startsWith("/") && !value.startsWith("//") && !value.includes("\\")) {
-            return value.slice(0, 2000);
-        }
 
         try {
             const url = new URL(value);
             if (!["http:", "https:"].includes(url.protocol)) {
                 throw new Error("unsupported protocol");
             }
+            if (url.username || url.password) {
+                throw new Error("credentials not allowed");
+            }
+            if (!trustedFile && this.isPrivateOrLocalHost(url.hostname)) {
+                throw new Error("private host not allowed");
+            }
             return url.toString().slice(0, 2000);
         } catch {
-            throw HttpErrorFactory.badRequest("参考图地址无效或不安全");
+            throw HttpErrorFactory.badRequest("参考图地址无效或不安全；平台上传文件请提交 fileId");
         }
+    }
+
+    private isPrivateOrLocalHost(hostname: string): boolean {
+        const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+        return (
+            host === "localhost" ||
+            host === "0.0.0.0" ||
+            host === "127.0.0.1" ||
+            host === "::1" ||
+            host.endsWith(".local") ||
+            host.startsWith("10.") ||
+            host.startsWith("127.") ||
+            host.startsWith("169.254.") ||
+            host.startsWith("192.168.") ||
+            /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
+            /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+        );
     }
 
     private normalizeSourceImages(dto: CreateGenerationDto): ImageSourceRecord[] {
@@ -933,8 +1207,8 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         const normalized: ImageSourceRecord[] = [];
 
         for (const item of images) {
-            const url = this.normalizeReferenceImageUrl(item.url);
             const fileId = item.fileId;
+            const url = this.normalizeReferenceImageUrl(item.url, Boolean(fileId));
             const key = fileId || url;
             if (!key || seen.has(key)) continue;
             seen.add(key);
@@ -989,7 +1263,40 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     }
 
     private getExtensionUploadRoot(): string {
-        return path.join(process.cwd(), "..", "..", "extensions", "echoflow-image", "storage", "uploads");
+        return path.join(this.resolveExtensionRoot(), "storage", "uploads");
+    }
+
+    private resolveExtensionRoot(): string {
+        const directCandidates = [
+            path.resolve(__dirname),
+            path.resolve(process.cwd(), "extensions", "echoflow-image"),
+            path.resolve(process.cwd(), "..", "..", "extensions", "echoflow-image"),
+            path.resolve(process.cwd()),
+        ];
+
+        for (const start of directCandidates) {
+            const root = this.findExtensionRootFrom(start);
+            if (root) return root;
+        }
+
+        return path.resolve(process.cwd(), "extensions", "echoflow-image");
+    }
+
+    private findExtensionRootFrom(start: string): string | undefined {
+        let current = start;
+        for (let depth = 0; depth < 8; depth += 1) {
+            if (
+                path.basename(current) === "echoflow-image" &&
+                existsSync(path.join(current, "manifest.json")) &&
+                existsSync(path.join(current, "package.json"))
+            ) {
+                return current;
+            }
+            const parent = path.dirname(current);
+            if (parent === current) break;
+            current = parent;
+        }
+        return undefined;
     }
 
     private isUniqueConstraintError(error: unknown): boolean {
@@ -1009,17 +1316,9 @@ export const generationModuleEntities = [
     ImageBillingRule,
     ImagePolicyConfig,
     ImagePromptTemplate,
-    User,
     AccountLog,
-    AiModel,
-    AiProvider,
-    Secret,
-    SecretTemplate,
 ];
 
 export const generationModuleProviders = [
     GenerationService,
-    PublicAiModelService,
-    ExtensionBillingService,
-    SecretService,
 ];
