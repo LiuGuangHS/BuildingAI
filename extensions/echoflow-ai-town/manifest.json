@@ -6,7 +6,7 @@
     "icon": "/echoflow-ai-town/static/icon.png",
     "description": "治愈系小镇经营与 AI 趣味玩法应用。经营、探索、NPC 对话和随机事件动态串联，帮助用户打造个性乐园。",
     "author": {
-        "avatar": "/static/avatars/buildingai.png",
+        "avatar": "/echoflow-ai-town/static/icon.png",
         "name": "EchoflowAI Teams",
         "homepage": ""
     },

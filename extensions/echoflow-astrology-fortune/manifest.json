@@ -7,7 +7,7 @@
     "description": "基于出生信息、星座生肖、个人档案和 AI 推理，生成每日运势、性格洞察、事业财富、情感关系、星座配对与生活决策建议。",
     "homepage": "",
     "author": {
-        "avatar": "/static/avatars/buildingai.png",
+        "avatar": "/echoflow-astrology-fortune/static/icon.png",
         "name": "EchoflowAI Teams",
         "homepage": ""
     },
