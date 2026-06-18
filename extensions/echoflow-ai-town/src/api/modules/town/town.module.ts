@@ -1,7 +1,6 @@
-import { SecretService } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
-import { AiModel, AiProvider, Secret, SecretTemplate } from "@buildingai/db/entities";
-import { PublicAiModelService } from "@buildingai/extension-sdk";
+import { AiModel } from "@buildingai/db/entities";
+import { AiPublicModule } from "@buildingai/extension-sdk";
 import { Module } from "@nestjs/common";
 
 import { TownAiCallLog, TownAiConfig, TownCharacter, TownEvent, TownSave } from "../../db/entities";
@@ -14,9 +13,9 @@ import { TownService } from "./services/town.service";
 import { TownWorldRulesService } from "./services/town-world-rules.service";
 
 @Module({
-    imports: [TypeOrmModule.forFeature([TownSave, TownCharacter, TownEvent, TownAiConfig, TownAiCallLog, AiModel, AiProvider, Secret, SecretTemplate])],
+    imports: [TypeOrmModule.forFeature([TownSave, TownCharacter, TownEvent, TownAiConfig, TownAiCallLog, AiModel]), AiPublicModule],
     controllers: [TownWebController, TownConsoleController],
-    providers: [TownService, TownAiService, TownWorldRulesService, TownRelationshipRulesService, TownProgressRulesService, PublicAiModelService, SecretService],
+    providers: [TownService, TownAiService, TownWorldRulesService, TownRelationshipRulesService, TownProgressRulesService],
     exports: [TownService],
 })
 export class TownModule {}
