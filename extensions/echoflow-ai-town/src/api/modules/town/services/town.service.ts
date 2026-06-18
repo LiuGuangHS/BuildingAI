@@ -29,6 +29,14 @@ type ActionConfig = {
 };
 
 type TownSettlement = NonNullable<TownWorldState["lastSettlement"]>;
+type PreparedActionAi = {
+    content?: string;
+    eventTitle?: string;
+    eventChoices?: TownEventChoice[];
+    strategy?: TownEventResult["strategy"];
+    fallbackUsed?: boolean;
+};
+
 @Injectable()
 export class TownService {
     private readonly saveRepo: Repository<TownSave>;
@@ -153,80 +161,68 @@ export class TownService {
     }
 
     async runAction(userId: string, saveId: string, dto: TownActionDto) {
-        const save = await this.ensureSaveOwner(userId, saveId);
-        const characters = await this.characterRepo.find({ where: { userId, saveId }, order: { relationship: "DESC" } });
-        const bonuses = this.getRelationshipBonuses(characters, dto.action);
-        const choice = this.resolveChoice(dto);
-        const config = this.applyRelationshipBonuses(this.createActionConfig(dto.action, save, characters, choice, dto.buildingId), bonuses);
-        this.ensureActionAffordable(save, dto.action, config);
-        const settlement = dto.action === "rest" ? this.createDailySettlement(save) : null;
-        const result = this.applyResult(save, {
-            coins: config.coins,
-            stamina: config.stamina,
-            reputation: config.reputation + (settlement?.reputation ?? 0),
-        });
-        if (bonuses.length) {
-            result.bonuses = bonuses.map((bonus) => bonus.label);
-        }
-        if (settlement) {
-            result.coins = (result.coins ?? 0) + settlement.income - settlement.maintenance;
-            save.coins = Math.max(0, save.coins + settlement.income - settlement.maintenance);
-        }
-
-        save.day += dto.action === "rest" ? 1 : 0;
-        save.mood = config.mood;
-        save.worldState = { ...this.normalizeWorldState(save.worldState), focus: config.focus };
-        if (settlement) {
-            const currentDay = save.day;
-            save.worldState = {
-                ...save.worldState,
-                weather: settlement.weather,
-                focus: "新的一天",
-                lastSettlement: settlement,
-                dailyTasks: this.createDailyTasks(currentDay),
-                weeklyGoal: this.shouldRefreshWeeklyGoal(save.worldState.weeklyGoal, currentDay) ? this.createWeeklyGoal({ ...save, day: currentDay }) : save.worldState.weeklyGoal,
-            };
-        }
-        if (config.upgradedBuildingId) {
-            save.worldState = this.upgradeBuilding(save.worldState, config.upgradedBuildingId);
-        }
-        const progress = this.applyProgress(save, {
-            action: dto.action,
-            coinsDelta: result.coins,
-            reputationDelta: result.reputation,
-        });
-        const unlockedAreas = this.applyAreaUnlocks(save);
-        const relationshipTarget = await this.pickRelationshipTarget(userId, save, choice?.id ?? dto.action);
-        if (relationshipTarget) {
-            result.relationship = { [relationshipTarget.id]: this.getRelationshipDelta(choice?.id ?? dto.action) };
-        }
-
-        const aiContext = dto.action === "advice" || dto.action === "explore" ? { ...(await this.buildAiContext(userId, save)), choice } : null;
-        let eventTitle = config.title;
-        let eventChoices = this.createNextChoices(dto.action);
-        const content = dto.action === "advice"
-            ? await this.townAiService.generateStrategy(aiContext!, config.content).then((advice) => {
-                result.strategy = advice.strategy;
-                if (advice.fallbackUsed) {
-                    result.fallbackUsed = true;
-                }
-                return advice.strategy.summary;
-            })
-            : dto.action === "explore"
-                ? await this.townAiService.generateStructuredEvent(aiContext!, config.content).then((event) => {
-                    eventTitle = event.title || eventTitle;
-                    eventChoices = event.choices ?? eventChoices;
-                    if (event.fallbackUsed) {
-                        result.fallbackUsed = true;
-                    }
-                    return event.content;
-                })
-                : settlement
-                    ? `${config.content}\n${settlement.summary}`
-                    : config.content;
-        const activityEvents = this.createActivityEvents(userId, saveId, save, dto.action);
+        const preparedAi = await this.prepareActionAi(userId, saveId, dto);
 
         await this.saveRepo.manager.transaction(async (manager) => {
+            const save = await this.ensureSaveOwnerForUpdate(userId, saveId, manager);
+            const characters = await manager.find(TownCharacter, { where: { userId, saveId }, order: { relationship: "DESC" } });
+            const bonuses = this.getRelationshipBonuses(characters, dto.action);
+            const choice = this.resolveChoice(dto);
+            const config = this.applyRelationshipBonuses(this.createActionConfig(dto.action, save, characters, choice, dto.buildingId), bonuses);
+            this.ensureActionAffordable(save, dto.action, config);
+            const settlement = dto.action === "rest" ? this.createDailySettlement(save) : null;
+            const result = this.applyResult(save, {
+                coins: config.coins,
+                stamina: config.stamina,
+                reputation: config.reputation + (settlement?.reputation ?? 0),
+            });
+            if (bonuses.length) {
+                result.bonuses = bonuses.map((bonus) => bonus.label);
+            }
+            if (settlement) {
+                result.coins = (result.coins ?? 0) + settlement.income - settlement.maintenance;
+                save.coins = Math.max(0, save.coins + settlement.income - settlement.maintenance);
+            }
+
+            save.day += dto.action === "rest" ? 1 : 0;
+            save.mood = config.mood;
+            save.worldState = { ...this.normalizeWorldState(save.worldState), focus: config.focus };
+            if (settlement) {
+                const currentDay = save.day;
+                save.worldState = {
+                    ...save.worldState,
+                    weather: settlement.weather,
+                    focus: "新的一天",
+                    lastSettlement: settlement,
+                    dailyTasks: this.createDailyTasks(currentDay),
+                    weeklyGoal: this.shouldRefreshWeeklyGoal(save.worldState.weeklyGoal, currentDay) ? this.createWeeklyGoal({ ...save, day: currentDay }) : save.worldState.weeklyGoal,
+                };
+            }
+            if (config.upgradedBuildingId) {
+                save.worldState = this.upgradeBuilding(save.worldState, config.upgradedBuildingId);
+            }
+            const progress = this.applyProgress(save, {
+                action: dto.action,
+                coinsDelta: result.coins,
+                reputationDelta: result.reputation,
+            });
+            const unlockedAreas = this.applyAreaUnlocks(save);
+            const relationshipTarget = await this.pickRelationshipTarget(userId, save, choice?.id ?? dto.action, manager);
+            if (relationshipTarget) {
+                result.relationship = { [relationshipTarget.id]: this.getRelationshipDelta(choice?.id ?? dto.action) };
+            }
+
+            if (preparedAi?.strategy) {
+                result.strategy = preparedAi.strategy;
+            }
+            if (preparedAi?.fallbackUsed) {
+                result.fallbackUsed = true;
+            }
+            const eventTitle = preparedAi?.eventTitle || config.title;
+            const eventChoices = preparedAi?.eventChoices ?? this.createNextChoices(dto.action);
+            const content = preparedAi?.content ?? (settlement ? `${config.content}\n${settlement.summary}` : config.content);
+            const activityEvents = this.createActivityEvents(userId, saveId, save, dto.action);
+
             await manager.save(TownSave, save);
             const relationshipEvents = await this.applyRelationshipResult(manager, userId, saveId, result, relationshipTarget, dto.action);
             await manager.save(
@@ -272,39 +268,80 @@ export class TownService {
         return this.getSaveDetail(userId, saveId);
     }
 
-    async chat(userId: string, saveId: string, dto: TownChatDto) {
+    private async prepareActionAi(userId: string, saveId: string, dto: TownActionDto): Promise<PreparedActionAi | null> {
+        if (dto.action !== "advice" && dto.action !== "explore") return null;
+
         const save = await this.ensureSaveOwner(userId, saveId);
-        const character = await this.characterRepo.findOne({ where: { id: dto.characterId, userId, saveId } });
-        if (!character) {
-            throw new NotFoundException("小镇居民不存在");
+        const characters = await this.characterRepo.find({ where: { userId, saveId }, order: { relationship: "DESC" } });
+        const choice = this.resolveChoice(dto);
+        const bonuses = this.getRelationshipBonuses(characters, dto.action);
+        const config = this.applyRelationshipBonuses(
+            this.createActionConfig(dto.action, save, characters, choice, dto.buildingId),
+            bonuses,
+        );
+        this.ensureActionAffordable(save, dto.action, config);
+        const aiContext = { ...(await this.buildAiContext(userId, save)), choice };
+
+        if (dto.action === "advice") {
+            const advice = await this.townAiService.generateStrategy(aiContext, config.content);
+            return {
+                content: advice.strategy.summary,
+                strategy: advice.strategy,
+                fallbackUsed: advice.fallbackUsed,
+            };
         }
 
-        const fallbackReply = this.createNpcReply(character, dto.message);
-        const reply = await this.townAiService.generateNpcReply(
+        const event = await this.townAiService.generateStructuredEvent(aiContext, config.content);
+        return {
+            content: event.content,
+            eventTitle: event.title || config.title,
+            eventChoices: event.choices ?? this.createNextChoices(dto.action),
+            fallbackUsed: event.fallbackUsed,
+        };
+    }
+
+    async chat(userId: string, saveId: string, dto: TownChatDto) {
+        let characterResult: TownCharacter | null = null;
+        const saveSnapshot = await this.ensureSaveOwner(userId, saveId);
+        const selectedCharacter = await this.characterRepo.findOne({ where: { id: dto.characterId, userId, saveId } });
+        if (!selectedCharacter) {
+            throw new NotFoundException("小镇居民不存在");
+        }
+        const fallbackReply = this.createNpcReply(selectedCharacter, dto.message);
+        const replyResult = await this.townAiService.generateNpcReply(
             {
-                ...(await this.buildAiContext(userId, save)),
-                character,
+                ...(await this.buildAiContext(userId, saveSnapshot)),
+                character: selectedCharacter,
                 message: dto.message,
             },
             fallbackReply,
         );
-        const oldLevel = this.getRelationshipLevel(character.relationship);
-        character.relationship = Math.min(100, character.relationship + 3);
-        const newLevel = this.getRelationshipLevel(character.relationship);
-        character.status = "刚聊过天";
-        const recentMessages = Array.isArray(character.memory?.recentMessages) ? character.memory.recentMessages.slice(-4) : [];
-        character.memory = {
-            ...(character.memory ?? {}),
-            lastMessage: dto.message,
-            lastReply: reply,
-            relationshipLevel: this.getRelationshipLevel(character.relationship),
-            summary: `${character.name}记得你聊过“${dto.message.trim().slice(0, 24)}”。`,
-            recentMessages: [...recentMessages, { user: dto.message, reply, at: new Date().toISOString() }],
-        };
-
-        const progress = this.applyProgress(save, { action: "chat" });
 
         await this.saveRepo.manager.transaction(async (manager) => {
+            const save = await this.ensureSaveOwnerForUpdate(userId, saveId, manager);
+            const character = await manager.findOne(TownCharacter, {
+                where: { id: dto.characterId, userId, saveId },
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!character) {
+                throw new NotFoundException("小镇居民不存在");
+            }
+
+            const oldLevel = this.getRelationshipLevel(character.relationship);
+            character.relationship = Math.min(100, character.relationship + 3);
+            const newLevel = this.getRelationshipLevel(character.relationship);
+            character.status = "刚聊过天";
+            const recentMessages = Array.isArray(character.memory?.recentMessages) ? character.memory.recentMessages.slice(-4) : [];
+            character.memory = {
+                ...(character.memory ?? {}),
+                lastMessage: dto.message,
+                lastReply: replyResult,
+                relationshipLevel: this.getRelationshipLevel(character.relationship),
+                summary: `${character.name}记得你聊过“${dto.message.trim().slice(0, 24)}”。`,
+                recentMessages: [...recentMessages, { user: dto.message, reply: replyResult, at: new Date().toISOString() }],
+            };
+
+            const progress = this.applyProgress(save, { action: "chat" });
             await manager.save(TownCharacter, character);
             await manager.save(TownSave, save);
             await manager.save(
@@ -314,7 +351,7 @@ export class TownService {
                     saveId,
                     type: "chat",
                     title: `和${character.name}聊天`,
-                    content: reply,
+                    content: replyResult,
                     choices: null,
                     result: { relationship: { [character.id]: 3 } },
                 }),
@@ -326,9 +363,10 @@ export class TownService {
             if (oldLevel !== newLevel) {
                 await manager.save(TownEvent, this.createRelationshipLevelEvent(userId, saveId, character, oldLevel, newLevel, 3));
             }
+            characterResult = character;
         });
 
-        return { character, reply, save: await this.getSaveDetail(userId, saveId) };
+        return { character: characterResult, reply: replyResult, save: await this.getSaveDetail(userId, saveId) };
     }
 
     private createProgressEvents(userId: string, saveId: string, progress: ProgressResult, action: TownActionDto["action"]): TownEvent[] {
@@ -444,6 +482,17 @@ export class TownService {
 
     private async ensureSaveOwner(userId: string, saveId: string) {
         const save = await this.saveRepo.findOne({ where: { id: saveId, userId } });
+        if (!save) {
+            throw new NotFoundException("小镇存档不存在");
+        }
+        return save;
+    }
+
+    private async ensureSaveOwnerForUpdate(userId: string, saveId: string, manager: EntityManager) {
+        const save = await manager.findOne(TownSave, {
+            where: { id: saveId, userId },
+            lock: { mode: "pessimistic_write" },
+        });
         if (!save) {
             throw new NotFoundException("小镇存档不存在");
         }
@@ -683,10 +732,12 @@ export class TownService {
         return { ...config, ...override };
     }
 
-    private async buildAiContext(userId: string, save: TownSave) {
+    private async buildAiContext(userId: string, save: TownSave, manager?: EntityManager) {
+        const characterRepository = manager?.getRepository(TownCharacter) ?? this.characterRepo;
+        const eventRepository = manager?.getRepository(TownEvent) ?? this.eventRepo;
         const [characters, events] = await Promise.all([
-            this.characterRepo.find({ where: { userId, saveId: save.id }, order: { relationship: "DESC" } }),
-            this.eventRepo.find({ where: { userId, saveId: save.id }, order: { createdAt: "DESC" }, take: 8 }),
+            characterRepository.find({ where: { userId, saveId: save.id }, order: { relationship: "DESC" } }),
+            eventRepository.find({ where: { userId, saveId: save.id }, order: { createdAt: "DESC" }, take: 8 }),
         ]);
 
         return { userId, save, characters, events };
@@ -756,9 +807,10 @@ export class TownService {
         return result;
     }
 
-    private async pickRelationshipTarget(userId: string, save: TownSave, action: string) {
+    private async pickRelationshipTarget(userId: string, save: TownSave, action: string, manager?: EntityManager) {
         if (!["visit", "chat", "explore", "decorate"].includes(action)) return null;
-        const characters = await this.characterRepo.find({ where: { userId, saveId: save.id }, order: { relationship: "ASC" } });
+        const characterRepository = manager?.getRepository(TownCharacter) ?? this.characterRepo;
+        const characters = await characterRepository.find({ where: { userId, saveId: save.id }, order: { relationship: "ASC" } });
         return this.townRelationshipRulesService.pickTarget(characters, save, action);
     }
 
