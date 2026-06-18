@@ -12,6 +12,7 @@ build/
 # Storage
 storage/*
 !storage/static
+!storage/.gitkeep
 
 # Node dependencies
 node_modules

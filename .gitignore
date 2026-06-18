@@ -94,4 +94,7 @@ extensions/*/.nuxt/
 extensions/*/.nuxt/**
 extensions/*/data/versions/
 extensions/*/data/versions/**
+extensions/*/data/.installed
+extensions/*/.od-skills/
+extensions/*/.od-skills/**
 releases

@@ -37,12 +37,12 @@
         "simple-blog": {
             "manifest": {
                 "identifier": "simple-blog",
-                "name": "文章资讯",
+                "name": "Simple Blog",
                 "version": "0.0.1",
-                "description": "文章资讯发布与浏览应用",
+                "description": "A simple blog application",
                 "author": {
                     "avatar": "/static/avatars/buildingai.png",
-                    "name": "EchoflowAI Teams",
+                    "name": "BuildingAI Teams",
                     "homepage": ""
                 }
             },
@@ -53,7 +53,7 @@
         "echoflow-contract-generation": {
             "manifest": {
                 "identifier": "echoflow-contract-generation",
-                "name": "AI合同 | 多行业模板",
+                "name": "AI合同生成与审查",
                 "version": "0.0.1",
                 "description": "面向企业法务、创业者和个人用户的 AI 合同起草与审查工具，支持多行业合同模板、在线编辑、风险提示、法律术语解释、合规检查和 Word 合同导出。",
                 "icon": "/echoflow-contract-generation/static/icon.png",
@@ -87,7 +87,7 @@
         "echoflow-ai-town": {
             "manifest": {
                 "identifier": "echoflow-ai-town",
-                "name": "AI乐园小镇｜开放世界",
+                "name": "AI乐园小镇",
                 "version": "0.0.1",
                 "description": "治愈系小镇经营与 AI 趣味玩法应用。经营、探索、NPC 对话和随机事件动态串联，帮助用户打造个性乐园。",
                 "icon": "/echoflow-ai-town/static/icon.png",
