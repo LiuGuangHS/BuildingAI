@@ -6,6 +6,9 @@ export class AstrologyFortuneSetting {
     @PrimaryGeneratedColumn("uuid")
     id: string;
 
+    @Column({ type: "varchar", length: 50, default: "default", unique: true, comment: "Setting key" })
+    key: string;
+
     @Column({ type: "uuid", nullable: true, comment: "Default LLM model ID" })
     defaultModelId?: string | null;
 

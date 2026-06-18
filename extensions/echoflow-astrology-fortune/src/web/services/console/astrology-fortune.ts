@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { consoleHttpClient } from "../base";
-import type { AiModelOption, AstrologyFortuneSetting, AstrologyProfile, AstrologyReport, PaginatedResponse, QueryAstrologyProfilesParams, QueryAstrologyReportsParams, UpdateAstrologyFortuneSettingParams } from "../types";
+import type { AiModelOption, AstrologyFortuneSetting, AstrologyProfile, AstrologyReport, AstrologyReportStats, PaginatedResponse, QueryAstrologyProfilesParams, QueryAstrologyReportsParams, UpdateAstrologyFortuneSettingParams } from "../types";
 
 const SETTING_QUERY_KEY = ["echoflow-astrology-fortune", "console", "settings"] as const;
 const MODEL_QUERY_KEY = ["echoflow-astrology-fortune", "console", "llm-models"] as const;
@@ -24,12 +24,20 @@ export function listConsoleAstrologyReports(params?: QueryAstrologyReportsParams
     return consoleHttpClient.get<PaginatedResponse<AstrologyReport>>("/astrology-fortune/reports", { params });
 }
 
+export function getConsoleAstrologyReportStats(params?: QueryAstrologyReportsParams) {
+    return consoleHttpClient.get<AstrologyReportStats>("/astrology-fortune/reports/stats", { params });
+}
+
 export function getConsoleAstrologyReport(reportId: string) {
     return consoleHttpClient.get<AstrologyReport>(`/astrology-fortune/reports/${reportId}`);
 }
 
 export function deleteConsoleAstrologyReport(reportId: string) {
     return consoleHttpClient.delete<{ success: boolean }>(`/astrology-fortune/reports/${reportId}`);
+}
+
+export function cleanupStaleAstrologyReports() {
+    return consoleHttpClient.post<{ affected: number }>("/astrology-fortune/reports/cleanup-stale");
 }
 
 export function listConsoleAstrologyProfiles(params?: QueryAstrologyProfilesParams) {
@@ -46,6 +54,10 @@ export function useAvailableLlmModelsQuery() {
 
 export function useConsoleAstrologyReportsQuery(params?: QueryAstrologyReportsParams) {
     return useQuery({ queryKey: [...REPORTS_QUERY_KEY, params], queryFn: () => listConsoleAstrologyReports(params) });
+}
+
+export function useConsoleAstrologyReportStatsQuery(params?: QueryAstrologyReportsParams) {
+    return useQuery({ queryKey: [...REPORTS_QUERY_KEY, "stats", params], queryFn: () => getConsoleAstrologyReportStats(params) });
 }
 
 export function useConsoleAstrologyProfilesQuery(params?: QueryAstrologyProfilesParams) {
@@ -67,4 +79,12 @@ export function useUpdateAstrologyFortuneSettingMutation() {
 export function useDeleteConsoleAstrologyReportMutation() {
     const queryClient = useQueryClient();
     return useMutation({ mutationFn: deleteConsoleAstrologyReport, onSuccess: () => queryClient.invalidateQueries({ queryKey: REPORTS_QUERY_KEY }) });
+}
+
+export function useCleanupStaleAstrologyReportsMutation() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: cleanupStaleAstrologyReports,
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: REPORTS_QUERY_KEY }),
+    });
 }

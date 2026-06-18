@@ -1,7 +1,7 @@
 import { BaseController } from "@buildingai/base";
 import { ExtensionConsoleController } from "@buildingai/core/decorators";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
-import { Body, Delete, Get, Param, Patch, Query } from "@nestjs/common";
+import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
 import { QueryAstrologyProfileDto, QueryAstrologyReportDto, UpdateAstrologyFortuneSettingDto } from "../../dto";
 import { AstrologyFortuneService } from "../../services";
@@ -37,9 +37,19 @@ export class AstrologyFortuneConsoleController extends BaseController {
         return this.astrologyFortuneService.getAllReports(query);
     }
 
+    @Get("reports/stats")
+    reportStats(@Query() query: QueryAstrologyReportDto) {
+        return this.astrologyFortuneService.getReportStats(query);
+    }
+
     @Get("reports/:id")
     reportDetail(@Param("id", UUIDValidationPipe) id: string) {
         return this.astrologyFortuneService.getAdminReportDetail(id);
+    }
+
+    @Post("reports/cleanup-stale")
+    cleanupStaleReports() {
+        return this.astrologyFortuneService.cleanupStaleReports();
     }
 
     @Delete("reports/:id")

@@ -50,13 +50,25 @@ export type AstrologyReport = {
     score?: number | null;
     tags: string[];
     isFavorite: boolean;
+    costCredits: number | string;
     errorMessage?: string | null;
     createdAt: string;
     updatedAt: string;
 };
 
+export type AstrologyReportStats = {
+    total: number;
+    success: number;
+    failed: number;
+    pending: number;
+    processing: number;
+    busy: number;
+    favorite: number;
+};
+
 export type AstrologyFortuneSetting = {
     id: string;
+    key: string;
     defaultModelId?: string | null;
     dailyPrice: number;
     reportPrice: number;

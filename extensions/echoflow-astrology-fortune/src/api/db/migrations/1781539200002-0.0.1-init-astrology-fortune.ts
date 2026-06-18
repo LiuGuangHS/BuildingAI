@@ -8,6 +8,7 @@ export class InitAstrologyFortune1781539200002 {
         await queryRunner.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_astrology_fortune"."astrology_fortune_settings" (
                 "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                "key" varchar(50) NOT NULL DEFAULT 'default',
                 "default_model_id" uuid,
                 "daily_price" numeric(18,4) NOT NULL DEFAULT 0,
                 "report_price" numeric(18,4) NOT NULL DEFAULT 0,
@@ -15,7 +16,8 @@ export class InitAstrologyFortune1781539200002 {
                 "decision_price" numeric(18,4) NOT NULL DEFAULT 0,
                 "metadata" jsonb NOT NULL DEFAULT '{}',
                 "created_at" timestamptz NOT NULL DEFAULT now(),
-                "updated_at" timestamptz NOT NULL DEFAULT now()
+                "updated_at" timestamptz NOT NULL DEFAULT now(),
+                CONSTRAINT "uq_astrology_fortune_settings_key" UNIQUE ("key")
             )
         `);
 

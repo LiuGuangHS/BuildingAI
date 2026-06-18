@@ -712,6 +712,9 @@ importers:
       '@buildingai/extension-sdk':
         specifier: workspace:*
         version: link:../../packages/@buildingai/extension-sdk
+      '@buildingai/hooks':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/hooks
       '@buildingai/pipe':
         specifier: workspace:*
         version: link:../../packages/@buildingai/pipe
@@ -727,12 +730,18 @@ importers:
       '@buildingai/web-core':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/core
+      '@nestjs/bullmq':
+        specifier: catalog:api
+        version: 11.0.4(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.17)(bullmq@5.71.0)
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.4)
       ai:
         specifier: ^6.0.138
         version: 6.0.138(zod@4.3.6)
+      bullmq:
+        specifier: catalog:api
+        version: 5.71.0
       class-transformer:
         specifier: catalog:api
         version: 0.5.1
@@ -818,12 +827,18 @@ importers:
       '@buildingai/web-core':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/core
+      '@nestjs/bullmq':
+        specifier: catalog:api
+        version: 11.0.4(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.17)(bullmq@5.71.0)
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.4)
       ai:
         specifier: ^6.0.138
         version: 6.0.138(zod@4.3.6)
+      bullmq:
+        specifier: catalog:api
+        version: 5.71.0
       class-transformer:
         specifier: catalog:api
         version: 0.5.1
@@ -921,9 +936,15 @@ importers:
       '@buildingai/web-core':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/core
+      '@nestjs/bullmq':
+        specifier: catalog:api
+        version: 11.0.4(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.17)(bullmq@5.71.0)
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.4)
+      bullmq:
+        specifier: catalog:api
+        version: 5.71.0
       lucide-react:
         specifier: catalog:web
         version: 0.561.0(react@19.2.4)
@@ -970,6 +991,9 @@ importers:
       '@buildingai/base':
         specifier: workspace:*
         version: link:../../packages/@buildingai/base
+      '@buildingai/cache':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/cache
       '@buildingai/constants':
         specifier: workspace:*
         version: link:../../packages/@buildingai/constants
