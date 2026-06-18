@@ -24,9 +24,9 @@ export type EchoFlowVideoModel =
 export interface VideoModelEndpointConfig {
     id?: string;
     name: string;
-    baseUrl: string;
-    apiKey?: string;
-    apiKeyMasked?: string;
+    secretId?: string;
+    secretName?: string;
+    baseUrlOverride?: string;
     enabled: boolean;
     priority: number;
     requestTimeoutMs?: number;
@@ -55,7 +55,6 @@ const defaultEndpoint = (): VideoModelEndpointConfig[] => [
     {
         id: "primary",
         name: "主接口",
-        baseUrl: "https://api.echoflow.cn",
         enabled: false,
         priority: 100,
         requestTimeoutMs: 120_000,

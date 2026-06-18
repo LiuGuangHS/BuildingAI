@@ -1,25 +1,84 @@
 import { PaginationDto } from "@buildingai/dto";
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
+    IsArray,
     IsBoolean,
-    IsEnum,
     IsInt,
     IsObject,
     IsOptional,
     IsString,
-    IsUUID,
     Length,
+    Max,
+    Min,
+    ValidateNested,
 } from "class-validator";
 
-import {
-    ImageApiMode,
-    ImageRequestPolicy,
-    ImageResponsesTransport,
-    type ImageModelAllowedParams,
-    type ImageModelCapabilities,
-    type ImageModelDefaultParams,
+import type {
+    ImageModelAllowedParams,
+    ImageModelCapabilities,
+    ImageModelDefaultParams,
 } from "../../../db/entities/image-model-config.entity";
-import { emptyStringToUndefined } from "../../common/dto-transforms";
+
+export class ImageModelEndpointDto {
+    @IsString()
+    @Length(1, 80)
+    @IsOptional()
+    id?: string;
+
+    @IsString()
+    @Length(1, 80)
+    name: string;
+
+    @IsString()
+    @Length(1, 80)
+    @IsOptional()
+    secretId?: string;
+
+    @IsString()
+    @Length(1, 500)
+    @IsOptional()
+    baseUrlOverride?: string;
+
+    @Transform(({ value }) => (value === undefined ? value : value === "true" || value === true))
+    @IsBoolean()
+    @IsOptional()
+    enabled?: boolean;
+
+    @Transform(({ value }) => (value == null ? value : Number(value)))
+    @IsInt()
+    @Min(0)
+    @Max(100000)
+    @IsOptional()
+    priority?: number;
+
+    @Transform(({ value }) => (value == null ? value : Number(value)))
+    @IsInt()
+    @Min(3000)
+    @Max(300000)
+    @IsOptional()
+    requestTimeoutMs?: number;
+
+    @Transform(({ value }) => (value == null ? value : Number(value)))
+    @IsInt()
+    @Min(3000)
+    @Max(60000)
+    @IsOptional()
+    testTimeoutMs?: number;
+
+    @Transform(({ value }) => (value == null ? value : Number(value)))
+    @IsInt()
+    @Min(0)
+    @Max(5)
+    @IsOptional()
+    maxRetries?: number;
+
+    @Transform(({ value }) => (value == null ? value : Number(value)))
+    @IsInt()
+    @Min(100)
+    @Max(10000)
+    @IsOptional()
+    retryDelayMs?: number;
+}
 
 export class QueryModelConfigDto extends PaginationDto {
     @IsString()
@@ -32,25 +91,15 @@ export class QueryModelConfigDto extends PaginationDto {
     enabled?: boolean;
 }
 
-export class QueryAvailableAiModelDto {
-    @IsString()
-    @IsOptional()
-    keyword?: string;
-
-    @Transform(({ value }) => (value === undefined ? true : value === "true" || value === true))
-    @IsBoolean()
-    @IsOptional()
-    imageOnly?: boolean;
-
-    @Transform(({ value }) => (value === undefined ? false : value === "true" || value === true))
-    @IsBoolean()
-    @IsOptional()
-    activeOnly?: boolean;
-}
-
 export class CreateModelConfigDto {
-    @IsUUID("4")
-    aiModelId: string;
+    @IsString()
+    @Length(1, 50)
+    @IsOptional()
+    provider?: string;
+
+    @IsString()
+    @Length(1, 100)
+    model: string;
 
     @IsString()
     @Length(1, 120)
@@ -64,17 +113,9 @@ export class CreateModelConfigDto {
     @IsOptional()
     enabled?: boolean;
 
-    @IsEnum(ImageApiMode)
+    @IsBoolean()
     @IsOptional()
-    apiMode?: ImageApiMode;
-
-    @IsEnum(ImageResponsesTransport)
-    @IsOptional()
-    responsesTransport?: ImageResponsesTransport;
-
-    @IsEnum(ImageRequestPolicy)
-    @IsOptional()
-    requestPolicy?: ImageRequestPolicy;
+    visibleToUser?: boolean;
 
     @IsObject()
     @IsOptional()
@@ -88,6 +129,12 @@ export class CreateModelConfigDto {
     @IsOptional()
     allowedParams?: ImageModelAllowedParams;
 
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => ImageModelEndpointDto)
+    @IsOptional()
+    endpoints?: ImageModelEndpointDto[];
+
     @Transform(({ value }) => (value == null ? value : Number(value)))
     @IsInt()
     @IsOptional()
@@ -95,10 +142,10 @@ export class CreateModelConfigDto {
 }
 
 export class UpdateModelConfigDto extends CreateModelConfigDto {
-    @Transform(emptyStringToUndefined)
+    @IsString()
+    @Length(1, 100)
     @IsOptional()
-    @IsUUID("4")
-    aiModelId: string;
+    model: string;
 
     @IsString()
     @Length(1, 120)

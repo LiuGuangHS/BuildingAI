@@ -36,7 +36,7 @@ export default function EchoflowImagePublicPage() {
         isLoading: historyLoading,
         isError: historyError,
         refetch: refetchHistory,
-    } = useWebGenerationListQuery({ page: 1, pageSize: 6 }, { enabled: false });
+    } = useWebGenerationListQuery({ page: 1, pageSize: 6 });
     const { data: models = [], isLoading: modelsLoading } = useWebImageModelOptionsQuery();
     const { data: templateData } = useWebTemplatesQuery({ page: 1, pageSize: 20 });
 
@@ -119,82 +119,80 @@ export default function EchoflowImagePublicPage() {
     const isGenerating = createMutation.isPending || retryMutation.isPending || currentIsRunning;
 
     return (
-        <div className="min-h-screen space-y-6 p-4 md:p-6 lg:p-8">
-            <div className="rounded-md border bg-card p-4 shadow-sm md:p-5">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                        <div className="mb-2 flex flex-wrap items-center gap-2">
-                            <Badge variant="secondary">主站生图模型</Badge>
-                            <Badge variant="outline">OpenAI-compatible Images API</Badge>
+        <div className="min-h-screen bg-muted/20 p-4 md:p-6 lg:p-8">
+            <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5">
+                <div className="flex flex-col gap-3 rounded-md border bg-card/90 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between md:px-5">
+                    <div className="flex min-w-0 items-start gap-3">
+                        <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
+                            <WandSparkles className="size-5 text-primary-foreground" />
                         </div>
-                        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                            <div className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                                <WandSparkles className="size-5 text-primary-foreground" />
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h1 className="text-2xl font-semibold tracking-tight">AI 绘画</h1>
+                                <Badge variant="secondary">主站生图模型</Badge>
+                                <Badge variant="outline">OpenAI-compatible</Badge>
                             </div>
-                            AI 绘画
-                        </h1>
-                        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                            直接使用主系统已启用的生图模型。插件只保留参数覆盖、计费策略、风控和历史记录。
-                        </p>
+                            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                                输入提示词即可生成图片，参数覆盖、计费策略、风控和历史记录由插件托管。
+                            </p>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => navigate("history")}>
-                            <History className="size-4" />
-                            全部历史
-                        </Button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Content Grid */}
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(380px,0.7fr)] xl:grid-cols-[minmax(0,1fr)_minmax(440px,0.85fr)]">
-                <div className="space-y-6">
-                    <GenerationForm
-                        loading={isGenerating}
-                        models={models}
-                        modelsLoading={modelsLoading}
-                        initialValues={reuseValues}
-                        templates={templateData?.items ?? []}
-                        estimatedPower={estimateMutation.data?.amount}
-                        onEstimateChange={(data) => {
-                            estimateMutation.mutate({
-                                modelConfigId: data.pluginConfigId,
-                                mode: data.mode,
-                                size: data.size,
-                                n: data.n,
-                                quality: data.quality,
-                            });
-                        }}
-                        onEnhancePrompt={async (data) => {
-                            const result = await promptEnhanceMutation.mutateAsync(data);
-                            toast.success(result.source === "ai" ? "已使用 AI 润色提示词" : "已使用本地规则润色提示词");
-                            return result;
-                        }}
-                        onSubmit={handleSubmit}
-                    />
+                    <Button variant="outline" size="sm" onClick={() => navigate("history")} className="w-full sm:w-auto">
+                        <History className="size-4" />
+                        全部历史
+                    </Button>
                 </div>
 
-                <div className="space-y-6">
-                    <ResultGallery generation={currentGeneration} isLoading={isGenerating && !currentGeneration?.resultImages?.length} />
+                <div className="grid items-start gap-5 xl:grid-cols-[minmax(560px,0.95fr)_minmax(520px,1fr)]">
+                    <div className="min-w-0">
+                        <GenerationForm
+                            loading={isGenerating}
+                            models={models}
+                            modelsLoading={modelsLoading}
+                            initialValues={reuseValues}
+                            templates={templateData?.items ?? []}
+                            estimatedPower={estimateMutation.data?.amount}
+                            onEstimateChange={(data) => {
+                                estimateMutation.mutate({
+                                    modelConfigId: data.pluginConfigId,
+                                    mode: data.mode,
+                                    size: data.size,
+                                    n: data.n,
+                                    quality: data.quality,
+                                });
+                            }}
+                            onEnhancePrompt={async (data) => {
+                                const result = await promptEnhanceMutation.mutateAsync(data);
+                                toast.success(result.source === "ai" ? "已使用 AI 润色提示词" : "已使用本地规则润色提示词");
+                                return result;
+                            }}
+                            onSubmit={handleSubmit}
+                        />
+                    </div>
 
-                    {historyError ? (
-                        <ErrorState
-                            title="加载历史失败"
-                            message="无法获取最近作品，请检查网络后重试"
-                            onRetry={() => refetchHistory()}
-                        />
-                    ) : (
-                        <HistoryList
-                            items={historyData?.items || []}
-                            loading={historyLoading}
-                            detailBasePath="history"
-                            title="最近作品"
-                            description="保留最近生成结果，方便继续查看或重试"
-                            onDelete={handleDelete}
-                            onRetry={handleRetry}
-                            onReuse={handleReuse}
-                        />
-                    )}
+                    <div className="min-w-0 space-y-5 xl:sticky xl:top-6">
+                        <ResultGallery generation={currentGeneration} isLoading={isGenerating && !currentGeneration?.resultImages?.length} />
+
+                        {historyError ? (
+                            <ErrorState
+                                title="加载历史失败"
+                                message="无法获取最近作品，请检查网络后重试"
+                                onRetry={() => refetchHistory()}
+                            />
+                        ) : (
+                            <HistoryList
+                                items={historyData?.items || []}
+                                loading={historyLoading}
+                                detailBasePath="history"
+                                title="最近作品"
+                                description="点击缩略图查看、复用或重试"
+                                compact
+                                onDelete={handleDelete}
+                                onRetry={handleRetry}
+                                onReuse={handleReuse}
+                            />
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

@@ -1,7 +1,6 @@
 import type { DataSource } from "@buildingai/db/typeorm";
 import { Logger } from "@nestjs/common";
 
-import { encryptApiKey, isEncrypted } from "../../common/crypto/encryption";
 import { defaultVideoModelConfigs } from "../../modules/generation/services/model-config.service";
 
 const defaultVideoPromptTemplates = [
@@ -57,7 +56,6 @@ export class Upgrade {
         await this.seedDefaultModels();
         await this.seedDefaultTemplates();
         await this.migrateProviderTemplates();
-        await this.migratePlaintextApiKeys();
         await this.ensureExtensionRecord();
         this.logger.log("Echoflow Video initial database setup completed");
     }
@@ -73,12 +71,6 @@ export class Upgrade {
             CREATE TABLE IF NOT EXISTS "echoflow_video"."video_provider_config" (
                 "id" uuid NOT NULL DEFAULT gen_random_uuid(),
                 "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
-                "api_key" text NOT NULL DEFAULT '',
-                "base_url" varchar(500) NOT NULL DEFAULT 'https://api.echoflow.cn',
-                "request_timeout_ms" integer NOT NULL DEFAULT 120000,
-                "test_timeout_ms" integer NOT NULL DEFAULT 15000,
-                "max_retries" integer NOT NULL DEFAULT 2,
-                "retry_delay_ms" integer NOT NULL DEFAULT 1000,
                 "webhook_secret" text,
                 "prompt_optimizer_enabled" boolean NOT NULL DEFAULT true,
                 "prompt_optimizer_model_id" uuid,
@@ -95,11 +87,6 @@ export class Upgrade {
                 CONSTRAINT "uq_video_provider_config_provider" UNIQUE ("provider")
             )
         `);
-        await this.ensureColumn("video_provider_config", "base_url", "varchar(500) NOT NULL DEFAULT 'https://api.echoflow.cn'");
-        await this.ensureColumn("video_provider_config", "request_timeout_ms", "integer NOT NULL DEFAULT 120000");
-        await this.ensureColumn("video_provider_config", "test_timeout_ms", "integer NOT NULL DEFAULT 15000");
-        await this.ensureColumn("video_provider_config", "max_retries", "integer NOT NULL DEFAULT 2");
-        await this.ensureColumn("video_provider_config", "retry_delay_ms", "integer NOT NULL DEFAULT 1000");
         await this.ensureColumn("video_provider_config", "webhook_secret", "text");
         await this.ensureColumn("video_provider_config", "prompt_optimizer_enabled", "boolean NOT NULL DEFAULT true");
         await this.ensureColumn("video_provider_config", "prompt_optimizer_model_id", "uuid");
@@ -514,20 +501,6 @@ export class Upgrade {
                     [template.label.slice(0, 120), template.prompt],
                 );
             }
-        }
-    }
-
-    private async migratePlaintextApiKeys(): Promise<void> {
-        const rows: Array<{ id: string; api_key: string }> = await this.dataSource.query(`
-            SELECT "id", "api_key" FROM "echoflow_video"."video_provider_config"
-        `);
-
-        for (const row of rows) {
-            if (!row.api_key || isEncrypted(row.api_key)) continue;
-            await this.dataSource.query(
-                `UPDATE "echoflow_video"."video_provider_config" SET "api_key" = $1 WHERE "id" = $2`,
-                [encryptApiKey(row.api_key), row.id],
-            );
         }
     }
 

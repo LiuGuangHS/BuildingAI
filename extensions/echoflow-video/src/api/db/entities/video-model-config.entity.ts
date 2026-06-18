@@ -44,9 +44,9 @@ export interface VideoModelDefaultParams {
 export interface VideoModelEndpoint {
     id?: string;
     name: string;
-    baseUrl: string;
-    apiKey?: string;
-    apiKeyMasked?: string;
+    secretId?: string;
+    secretName?: string;
+    baseUrlOverride?: string;
     enabled: boolean;
     priority: number;
     requestTimeoutMs?: number;

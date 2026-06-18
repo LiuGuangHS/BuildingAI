@@ -50,11 +50,6 @@ export const routeOption = defineRouteOption({
             icon: "settings-2",
         },
         {
-            title: "计费策略",
-            path: "/billing",
-            icon: "coins",
-        },
-        {
             title: "风控限流",
             path: "/policies",
             icon: "shield",
@@ -70,7 +65,7 @@ export const routeOption = defineRouteOption({
             icon: "history",
         },
         {
-            title: "优化配置",
+            title: "高级配置",
             path: "/config",
             icon: "settings",
         },

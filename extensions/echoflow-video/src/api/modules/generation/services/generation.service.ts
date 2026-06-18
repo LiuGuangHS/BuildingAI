@@ -2,7 +2,7 @@ import { BaseService } from "@buildingai/base";
 import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants/shared/account-log.constants";
 import { ExtensionBillingService, PublicAiModelService } from "@buildingai/extension-sdk";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog, File } from "@buildingai/db/entities";
+import { AccountLog, AiModel, File } from "@buildingai/db/entities";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThanOrEqual, Like, MoreThanOrEqual, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -106,9 +106,8 @@ export class GenerationService extends BaseService<VideoGeneration> {
             throw HttpErrorFactory.badRequest("可用算力不足，请充值后重试");
         }
 
-        const endpoint = this.modelConfigService.pickRuntimeEndpoint(modelConfig);
-        const endpointApiKey = this.modelConfigService.decryptEndpointApiKey(endpoint);
-        const client = new VideoGatewayClient(modelConfig, endpoint, endpointApiKey);
+        const { endpoint, apiKey, baseUrl } = await this.modelConfigService.resolveRuntimeEndpoint(modelConfig);
+        const client = new VideoGatewayClient(modelConfig, endpoint, apiKey, baseUrl);
 
         // Create DB record
         const record = this.generationRepository.create({
@@ -304,7 +303,7 @@ export class GenerationService extends BaseService<VideoGeneration> {
         const recentFailureStats = await this.getRecentFailureStats();
         const missingEndpointModels = enabledModels.filter((model) => {
             const endpoints = model.endpoints ?? [];
-            return !endpoints.some((endpoint) => endpoint.enabled && endpoint.apiKeyMasked);
+            return !endpoints.some((endpoint) => endpoint.enabled && endpoint.secretId);
         });
 
         return {
@@ -335,9 +334,8 @@ export class GenerationService extends BaseService<VideoGeneration> {
         }
 
         const modelConfig = await this.modelConfigService.findEnabledByModel(record.model);
-        const endpoint = this.modelConfigService.pickRuntimeEndpoint(modelConfig);
-        const endpointApiKey = this.modelConfigService.decryptEndpointApiKey(endpoint);
-        const client = new VideoGatewayClient(modelConfig, endpoint, endpointApiKey);
+        const { endpoint, apiKey, baseUrl } = await this.modelConfigService.resolveRuntimeEndpoint(modelConfig);
+        const client = new VideoGatewayClient(modelConfig, endpoint, apiKey, baseUrl);
 
         try {
             const pollResult = await client.pollTask(record.taskId);
@@ -1077,6 +1075,7 @@ export const generationModuleEntities = [
     VideoPromptOptimization,
     AccountLog,
     File,
+    AiModel,
 ];
 export const generationModuleProviders = [
     GenerationService,

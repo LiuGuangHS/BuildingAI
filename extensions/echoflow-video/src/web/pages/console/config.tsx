@@ -4,73 +4,47 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Switch } from "@buildingai/ui/components/ui/switch";
-import { Textarea } from "@buildingai/ui/components/ui/textarea";
-import { CheckCircle2, KeyRound, Loader2, PlugZap, RotateCcw, Save, ServerCog, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { CheckCircle2, Loader2, Save, ShieldCheck, Sparkles } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { ErrorState } from "../../components/error-state";
 import {
     queryClient,
-    useClearProviderConfigMutation,
     useProviderConfigAuditsQuery,
     useProviderConfigQuery,
-    useTestProviderConfigMutation,
+    usePromptOptimizerModelsQuery,
     useUpdateProviderConfigMutation,
 } from "../../services";
 
 export default function ProviderConfigPage() {
     useDocumentHead({ title: "AI视频工作台配置" });
-    const [apiKey, setApiKey] = useState("");
-    const [baseUrl, setBaseUrl] = useState("https://api.echoflow.cn");
-    const [requestTimeoutMs, setRequestTimeoutMs] = useState(120000);
-    const [testTimeoutMs, setTestTimeoutMs] = useState(15000);
-    const [maxRetries, setMaxRetries] = useState(2);
-    const [retryDelayMs, setRetryDelayMs] = useState(1000);
     const [webhookSecret, setWebhookSecret] = useState("");
     const [clearWebhookSecret, setClearWebhookSecret] = useState(false);
     const [promptOptimizerEnabled, setPromptOptimizerEnabled] = useState(true);
     const [promptOptimizerModelId, setPromptOptimizerModelId] = useState("");
-    const [promptOptimizerAllowedModelIds, setPromptOptimizerAllowedModelIds] = useState("");
     const [promptOptimizerBillingEnabled, setPromptOptimizerBillingEnabled] = useState(true);
     const [promptOptimizerBillingPower, setPromptOptimizerBillingPower] = useState(1);
     const [promptOptimizerBillingTokens, setPromptOptimizerBillingTokens] = useState(1000);
     const [promptOptimizerEstimatedTokens, setPromptOptimizerEstimatedTokens] = useState(500);
     const [enabled, setEnabled] = useState(true);
-    const { data, isLoading, isError, refetch } = useProviderConfigQuery();
+    const { data, isError, refetch } = useProviderConfigQuery();
     const { data: audits = [] } = useProviderConfigAuditsQuery();
+    const { data: promptOptimizerModels = [] } = usePromptOptimizerModelsQuery();
     const updateMutation = useUpdateProviderConfigMutation({
         onSuccess: () => {
-            setApiKey("");
             queryClient.invalidateQueries({ queryKey: ["echoflow-video", "provider-config"] });
             toast.success("配置已保存");
         },
     });
-    const testMutation = useTestProviderConfigMutation({
-        onSuccess: (result) => toast.success(result.message || "配置可用"),
-        onError: (error) => toast.error(error.message || "连接测试失败"),
-    });
-    const clearMutation = useClearProviderConfigMutation({
-        onSuccess: () => {
-            setApiKey("");
-            queryClient.invalidateQueries({ queryKey: ["echoflow-video", "provider-config"] });
-            toast.success("配置已清除");
-        },
-    });
-
     useEffect(() => {
         if (data) {
             setEnabled(data.enabled);
-            setBaseUrl(data.baseUrl);
-            setRequestTimeoutMs(data.requestTimeoutMs);
-            setTestTimeoutMs(data.testTimeoutMs);
-            setMaxRetries(data.maxRetries);
-            setRetryDelayMs(data.retryDelayMs);
             setClearWebhookSecret(false);
             setPromptOptimizerEnabled(data.promptOptimizerEnabled);
             setPromptOptimizerModelId(data.promptOptimizerModelId ?? "");
-            setPromptOptimizerAllowedModelIds((data.promptOptimizerAllowedModelIds ?? []).join("\n"));
             setPromptOptimizerBillingEnabled(data.promptOptimizerBillingEnabled ?? true);
             setPromptOptimizerBillingPower(data.promptOptimizerBillingPower ?? 1);
             setPromptOptimizerBillingTokens(data.promptOptimizerBillingTokens ?? 1000);
@@ -80,23 +54,12 @@ export default function ProviderConfigPage() {
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
-        if (!apiKey.trim() && !data?.configured) {
-            toast.error("请输入兼容接口 API Key，或到模型配置页为模型接入点配置密钥");
-            return;
-        }
         await updateMutation.mutateAsync({
-            apiKey: apiKey.trim() || undefined,
-            baseUrl: baseUrl.trim(),
-            requestTimeoutMs,
-            testTimeoutMs,
-            maxRetries,
-            retryDelayMs,
             webhookSecret: webhookSecret.trim() || undefined,
             clearWebhookSecret,
             promptOptimizerEnabled,
             promptOptimizerModelId: promptOptimizerModelId.trim() || undefined,
             clearPromptOptimizerModelId: !promptOptimizerModelId.trim(),
-            promptOptimizerAllowedModelIds: parseModelIds(promptOptimizerAllowedModelIds),
             promptOptimizerBillingEnabled,
             promptOptimizerBillingPower,
             promptOptimizerBillingTokens,
@@ -105,25 +68,6 @@ export default function ProviderConfigPage() {
         });
         setWebhookSecret("");
         setClearWebhookSecret(false);
-    };
-
-    const handleTest = async () => {
-        await testMutation.mutateAsync({
-            apiKey: apiKey.trim() || undefined,
-            baseUrl: baseUrl.trim(),
-            requestTimeoutMs,
-            testTimeoutMs,
-            maxRetries,
-            retryDelayMs,
-        });
-    };
-
-    const handleResetRuntime = () => {
-        setBaseUrl("https://api.echoflow.cn");
-        setRequestTimeoutMs(120000);
-        setTestTimeoutMs(15000);
-        setMaxRetries(2);
-        setRetryDelayMs(1000);
     };
 
     if (isError) {
@@ -139,24 +83,24 @@ export default function ProviderConfigPage() {
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <Badge variant="secondary" className="mb-3 shadow-sm">管理后台</Badge>
-                    <h1 className="text-3xl font-semibold tracking-tight">优化配置</h1>
+                    <h1 className="text-3xl font-semibold tracking-tight">高级配置</h1>
                     <p className="text-muted-foreground mt-2 text-sm">
-                        视频模型的 Base URL / API Key 在模型配置页维护；这里保留提示词优化、Webhook 和旧兼容配置。
+                        视频模型的接入密钥在模型配置页绑定主站 Secret；这里保留主站 LLM 选择、提示词优化和 Webhook。
                     </p>
                 </div>
-                <Badge variant={data?.configured && data.enabled ? "default" : "secondary"} className="w-fit">
-                    {data?.configured ? (data.enabled ? "已启用" : "已配置，未启用") : "未配置"}
+                <Badge variant={data?.promptOptimizerEnabled ? "default" : "secondary"} className="w-fit">
+                    {data?.promptOptimizerEnabled ? "提示词优化已启用" : "提示词优化关闭"}
                 </Badge>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
                 <Card>
                     <CardContent className="flex items-center gap-3 p-4">
-                        <KeyRound className="size-5 text-primary" />
+                        <ShieldCheck className="size-5 text-primary" />
                         <div>
-                            <p className="text-sm font-medium">兼容密钥</p>
+                            <p className="text-sm font-medium">模型密钥</p>
                             <p className="text-muted-foreground text-xs">
-                                {isLoading ? "加载中" : data?.configured ? data.apiKeyMasked : "未配置"}
+                                在模型配置页绑定主站 Secret
                             </p>
                         </div>
                     </CardContent>
@@ -172,10 +116,10 @@ export default function ProviderConfigPage() {
                 </Card>
                 <Card>
                     <CardContent className="flex items-center gap-3 p-4">
-                        <ServerCog className="size-5 text-primary" />
+                        <Sparkles className="size-5 text-primary" />
                         <div>
-                            <p className="text-sm font-medium">旧兼容地址</p>
-                            <p className="text-muted-foreground text-xs">{data?.baseUrl ?? "https://api.echoflow.cn"}</p>
+                            <p className="text-sm font-medium">主站 LLM</p>
+                            <p className="text-muted-foreground text-xs">{data?.promptOptimizerModelId ? "已选择默认优化模型" : "自动选择可用模型"}</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -183,86 +127,13 @@ export default function ProviderConfigPage() {
 
             <Card className="max-w-4xl">
                 <CardHeader>
-                    <CardTitle>兼容配置</CardTitle>
+                    <CardTitle>高级配置</CardTitle>
                     <CardDescription>
-                        新视频模型优先读取模型配置页的接入点；这里的密钥仅保留给旧回调和兼容测试。
+                        模型调用密钥复用主站密钥管理；这里仅配置提示词优化和 Webhook。
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form className="space-y-5" onSubmit={handleSubmit}>
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="happyhorse-api-key">API Key</Label>
-                                <Input
-                                    id="happyhorse-api-key"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    value={apiKey}
-                                    placeholder={data?.configured ? "输入新密钥以替换当前配置" : "输入兼容接口 API Key"}
-                                    onChange={(event) => setApiKey(event.target.value)}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="happyhorse-base-url">Base URL</Label>
-                                <Input
-                                    id="happyhorse-base-url"
-                                    value={baseUrl}
-                                    onChange={(event) => setBaseUrl(event.target.value)}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="happyhorse-request-timeout">请求超时 ms</Label>
-                                <Input
-                                    id="happyhorse-request-timeout"
-                                    type="number"
-                                    min={3000}
-                                    max={300000}
-                                    step={1000}
-                                    value={requestTimeoutMs}
-                                    onChange={(event) => setRequestTimeoutMs(Number(event.target.value))}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="happyhorse-test-timeout">测试超时 ms</Label>
-                                <Input
-                                    id="happyhorse-test-timeout"
-                                    type="number"
-                                    min={3000}
-                                    max={60000}
-                                    step={1000}
-                                    value={testTimeoutMs}
-                                    onChange={(event) => setTestTimeoutMs(Number(event.target.value))}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="happyhorse-max-retries">重试次数</Label>
-                                <Input
-                                    id="happyhorse-max-retries"
-                                    type="number"
-                                    min={0}
-                                    max={5}
-                                    value={maxRetries}
-                                    onChange={(event) => setMaxRetries(Number(event.target.value))}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="happyhorse-retry-delay">重试延迟 ms</Label>
-                                <Input
-                                    id="happyhorse-retry-delay"
-                                    type="number"
-                                    min={100}
-                                    max={10000}
-                                    step={100}
-                                    value={retryDelayMs}
-                                    onChange={(event) => setRetryDelayMs(Number(event.target.value))}
-                                />
-                            </div>
-                        </div>
-
                         <div className="grid gap-4 md:grid-cols-[1fr_220px]">
                             <div className="space-y-2">
                                 <Label htmlFor="happyhorse-webhook-secret">Webhook Secret</Label>
@@ -304,7 +175,7 @@ export default function ProviderConfigPage() {
                             <div className="flex items-center gap-2">
                                 <Switch id="happyhorse-enabled" checked={enabled} onCheckedChange={setEnabled} />
                                 <Label htmlFor="happyhorse-enabled" className="cursor-pointer">
-                                    启用兼容配置
+                                    启用高级配置
                                 </Label>
                             </div>
                             <Badge variant={data?.webhookSecretConfigured ? "default" : "secondary"} className="gap-1">
@@ -321,7 +192,7 @@ export default function ProviderConfigPage() {
                                         <p className="text-sm font-medium">提示词优化</p>
                                     </div>
                                     <p className="text-muted-foreground mt-1 text-xs">
-                                        生成前优化用户提示词；默认模型与模型池会开放给用户选择，扣费优先按主站模型计费规则计算 token。
+                                        生成前调用主站 LLM 优化用户提示词，扣费直接走主站模型的计费规则。
                                     </p>
                                 </div>
                                 <Switch
@@ -331,23 +202,33 @@ export default function ProviderConfigPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="prompt-optimizer-model-id">主站 AI 模型 ID</Label>
-                                <Input
-                                    id="prompt-optimizer-model-id"
-                                    value={promptOptimizerModelId}
-                                    placeholder="默认优化模型，留空使用本地规则"
-                                    onChange={(event) => setPromptOptimizerModelId(event.target.value)}
-                                />
+                                <Label htmlFor="prompt-optimizer-model-id">主站 LLM 模型</Label>
+                                <Select
+                                    value={promptOptimizerModelId || "auto"}
+                                    onValueChange={(value) => setPromptOptimizerModelId(value === "auto" ? "" : value)}
+                                >
+                                    <SelectTrigger id="prompt-optimizer-model-id">
+                                        <SelectValue placeholder="自动选择可用 LLM" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="auto">自动选择可用 LLM</SelectItem>
+                                        {promptOptimizerModels.map((model) => (
+                                            <SelectItem key={model.id} value={model.id}>
+                                                {model.name} · {model.model}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="mt-4 space-y-2">
-                                <Label htmlFor="prompt-optimizer-allowed-models">允许用户选择的模型 ID</Label>
-                                <Textarea
-                                    id="prompt-optimizer-allowed-models"
-                                    rows={4}
-                                    value={promptOptimizerAllowedModelIds}
-                                    placeholder="每行一个主站 AI 模型 ID；默认模型会自动加入可选列表"
-                                    onChange={(event) => setPromptOptimizerAllowedModelIds(event.target.value)}
-                                />
+                                <Label>可用主站模型</Label>
+                                <div className="text-muted-foreground rounded-md border bg-muted/30 p-3 text-xs">
+                                    {promptOptimizerModels.length ? (
+                                        promptOptimizerModels.slice(0, 6).map((model) => `${model.name} · ${model.model}`).join(" / ")
+                                    ) : (
+                                        "暂无可用 LLM，请先在主站模型管理中启用文本模型"
+                                    )}
+                                </div>
                             </div>
                             <div className="mt-4 flex flex-wrap items-center gap-4">
                                 <div className="flex items-center gap-2">
@@ -404,38 +285,6 @@ export default function ProviderConfigPage() {
                                 )}
                                 保存配置
                             </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={testMutation.isPending || (!apiKey.trim() && !data?.configured)}
-                                onClick={handleTest}
-                            >
-                                {testMutation.isPending ? (
-                                    <Loader2 className="size-4 animate-spin" />
-                                ) : (
-                                    <PlugZap className="size-4" />
-                                )}
-                                测试连接
-                            </Button>
-                            <Button type="button" variant="outline" onClick={handleResetRuntime}>
-                                <RotateCcw className="size-4" />
-                                恢复默认
-                            </Button>
-                            {data?.configured && (
-                                <Button
-                                    type="button"
-                                    variant="destructive"
-                                    disabled={clearMutation.isPending}
-                                    onClick={() => clearMutation.mutate()}
-                                >
-                                    {clearMutation.isPending ? (
-                                        <Loader2 className="size-4 animate-spin" />
-                                    ) : (
-                                        <Trash2 className="size-4" />
-                                    )}
-                                    清除密钥
-                                </Button>
-                            )}
                         </div>
                     </form>
                 </CardContent>
@@ -470,16 +319,5 @@ export default function ProviderConfigPage() {
                 </CardContent>
             </Card>
         </div>
-    );
-}
-
-function parseModelIds(value: string): string[] {
-    return Array.from(
-        new Set(
-            value
-                .split(/[\n,，\s]+/)
-                .map((item) => item.trim())
-                .filter(Boolean),
-        ),
     );
 }

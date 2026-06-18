@@ -6,13 +6,6 @@ import { consoleHttpClient } from "../base";
 export interface ProviderConfig {
     provider: string;
     enabled: boolean;
-    configured: boolean;
-    apiKeyMasked: string;
-    baseUrl: string;
-    requestTimeoutMs: number;
-    testTimeoutMs: number;
-    maxRetries: number;
-    retryDelayMs: number;
     webhookSecretConfigured: boolean;
     webhookSecretMasked: string;
     promptOptimizerEnabled: boolean;
@@ -31,6 +24,26 @@ export interface PromptTemplate {
     prompt: string;
 }
 
+export interface PromptOptimizerModelOption {
+    id: string;
+    name: string;
+    model: string;
+    modelType?: string;
+    description?: string;
+    features?: string[];
+    isActive?: boolean;
+    billingRule?: {
+        power?: number;
+        tokens?: number;
+    };
+    provider?: {
+        id: string;
+        name?: string;
+        provider?: string;
+        isActive?: boolean;
+    };
+}
+
 export interface ProviderConfigAudit {
     id: string;
     action: string;
@@ -40,12 +53,6 @@ export interface ProviderConfigAudit {
 }
 
 export interface UpdateProviderConfigParams {
-    apiKey?: string;
-    baseUrl?: string;
-    requestTimeoutMs?: number;
-    testTimeoutMs?: number;
-    maxRetries?: number;
-    retryDelayMs?: number;
     webhookSecret?: string;
     clearWebhookSecret?: boolean;
     promptOptimizerEnabled?: boolean;
@@ -77,27 +84,20 @@ export function useProviderConfigAuditsQuery(options?: QueryOptionsUtil<Provider
     });
 }
 
+export function usePromptOptimizerModelsQuery(options?: QueryOptionsUtil<PromptOptimizerModelOption[]>) {
+    return useQuery<PromptOptimizerModelOption[]>({
+        queryKey: ["echoflow-video", "prompt-optimizer-models"],
+        queryFn: () => consoleHttpClient.get<PromptOptimizerModelOption[]>("/config/prompt-optimizer-models"),
+        staleTime: 30_000,
+        ...options,
+    });
+}
+
 export function useUpdateProviderConfigMutation(
     options?: MutationOptionsUtil<ProviderConfig, UpdateProviderConfigParams>,
 ) {
     return useMutation<ProviderConfig, Error, UpdateProviderConfigParams>({
         mutationFn: (data) => consoleHttpClient.post<ProviderConfig>("/config", data),
-        ...options,
-    });
-}
-
-export function useTestProviderConfigMutation(
-    options?: MutationOptionsUtil<{ success: boolean; message: string }, Partial<UpdateProviderConfigParams>>,
-) {
-    return useMutation<{ success: boolean; message: string }, Error, Partial<UpdateProviderConfigParams>>({
-        mutationFn: (data) => consoleHttpClient.post<{ success: boolean; message: string }>("/config/test", data),
-        ...options,
-    });
-}
-
-export function useClearProviderConfigMutation(options?: MutationOptionsUtil<ProviderConfig, void>) {
-    return useMutation<ProviderConfig, Error, void>({
-        mutationFn: () => consoleHttpClient.delete<ProviderConfig>("/config"),
         ...options,
     });
 }

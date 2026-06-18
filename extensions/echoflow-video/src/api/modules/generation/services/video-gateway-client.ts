@@ -14,9 +14,13 @@ export class VideoGatewayClient {
         private readonly modelConfig: ResolvedVideoModelConfig,
         private readonly endpoint: VideoModelEndpoint,
         private readonly apiKey: string,
+        private readonly baseUrl: string,
     ) {
         if (!apiKey) {
             throw HttpErrorFactory.badRequest(`模型 ${modelConfig.displayName} 的接入点未配置 API Key`);
+        }
+        if (!baseUrl) {
+            throw HttpErrorFactory.badRequest(`模型 ${modelConfig.displayName} 的接入点未配置 Base URL`);
         }
     }
 
@@ -210,7 +214,7 @@ export class VideoGatewayClient {
     }
 
     private url(path: string) {
-        return `${this.endpoint.baseUrl.replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+        return `${this.baseUrl.replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
     }
 
     private headers() {

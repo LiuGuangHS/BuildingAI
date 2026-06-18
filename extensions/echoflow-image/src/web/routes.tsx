@@ -3,7 +3,6 @@ import { defineRouteOption } from "@buildingai/web-core";
 import packageJson from "./../../package.json";
 import WebDetailPage from "./pages/detail";
 import WebHistoryPage from "./pages/history";
-import ConsoleBillingPage from "./pages/console/billing";
 import ConsoleDetailPage from "./pages/console/detail";
 import ConsoleHistoryPage from "./pages/console/history";
 import EchoflowImageConsolePage from "./pages/console/index";
@@ -36,14 +35,9 @@ export const routeOption = defineRouteOption({
             icon: "bar-chart-3",
         },
         {
-            title: "模型覆盖",
+            title: "模型配置",
             path: "/models",
             icon: "settings-2",
-        },
-        {
-            title: "计费策略",
-            path: "/billing",
-            icon: "coins",
         },
         {
             title: "风控限流",
@@ -69,10 +63,6 @@ export const routeOption = defineRouteOption({
         {
             path: "models",
             element: <ConsoleModelsPage />,
-        },
-        {
-            path: "billing",
-            element: <ConsoleBillingPage />,
         },
         {
             path: "policies",

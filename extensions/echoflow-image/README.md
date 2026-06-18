@@ -6,7 +6,7 @@
 
 - **OpenAI 兼容**：对接任何 OpenAI-compatible Images API（Echoflow、DALL·E 等），通过 baseURL 切换服务
 - **文生图**：输入 prompt，选择模型和参数（尺寸、数量、质量、风格），一键生成图片
-- **双入口**：Web 用户端直接提供绘画工作台，Console 管理端提供运营概览、模型覆盖、计费策略、风控限流、模板预设和全量历史
+- **双入口**：Web 用户端直接提供绘画工作台，Console 管理端提供运营概览、模型配置、计费策略、风控限流、模板预设和全量历史
 - **参考图生成**：支持启用图生图能力的模型使用服务端可访问的 http(s) 参考图或平台 `fileId`，并支持 mask 局部重绘
 - **提示词模板**：管理员可发布全站模板，用户端可一键套用
 - **配置化计费**：生成前按插件计费规则预估与扣费，生成失败按计费规则决定是否退款，billingStatus 独立追踪
@@ -76,32 +76,28 @@ Image Studio 使用 AGPL-3.0-only 许可，因此只做能力分析和交互参�
 
 插件随仓库一同部署，确保 `extensions/echoflow-image/` 目录存在即可。启动后插件会自动注册。
 
-### 2. 配置主站生图模型
+### 2. 配置主站密钥
 
-先在 BuildingAI 主系统后台 → 模型管理中配置 Provider、API Key、baseURL 和基础图片模型。插件默认直接读取主站启用的 `text-to-image` 模型，不要求在插件内重复配置模型：
+先在 BuildingAI 主系统后台 → 密钥管理中创建可用 Secret。Secret 字段建议包含：
 
 | 字段 | 说明 | 示例 |
 |------|------|------|
-| 模型名 | 任意标识 | `Echoflow FLUX.1` |
-| Model ID | 服务商模型名 | `flux.1-dev` |
-| Model Type | 图像生成类型 | `text-to-image` |
-| Provider | 选择或新建 provider | `echoflow` |
-| API Key | 服务商密钥 | `sk-xxx` |
-| baseURL | OpenAI-compatible 端点 | `https://echoflow.ai/v1` |
+| apiKey / api_key | 服务商密钥 | `sk-xxx` |
+| baseURL / baseUrl / base_url | OpenAI-compatible 端点 | `https://api.openai.com/v1` |
 
-### 3. 可选：插件模型覆盖
+### 3. 配置固定绘画模型
 
-插件 Console → 模型覆盖 只用于覆盖主站模型在本插件中的展示名、默认参数、允许参数和高级能力开关。未配置覆盖时，用户端仍会直接显示并使用主站已启用的生图模型。
+插件 Console → 模型配置 使用插件内置固定模型目录。管理员只需要为模型绑定一组或多组主站 Secret，并按需调整展示名、默认参数、允许参数和计费规则。
 
-可选覆盖项包括：
+可配置项包括：
 
-- 展示名称、排序、启用状态
-- API 形态：`images` / `responses`
-- 请求策略：`openai` / `compat`
-- 能力矩阵：文生图、图生图、seed、negative prompt、输出格式等
-- 默认参数和允许参数
+- 展示名称、排序、启用状态、用户可见性
+- 请求协议：`responses` / `images` / `openai-compatible-images`
+- 接入点：主站 Secret、可选 Base URL 覆盖、优先级、超时和重试
+- 能力矩阵：文生图、图生图、多参考图、negative prompt、输出格式等
+- 默认参数、允许参数和模型级计费
 
-> **注意**：Provider 密钥、baseURL、模型类型和启停状态仍由主系统模型管理维护，插件不重复保存密钥，也不要求重复启用模型。
+> **注意**：插件不保存业务 API Key 明文，也不新增供应商配置；密钥统一复用主站密钥管理。
 
 ### 4. 配置计费、风控与模板
 

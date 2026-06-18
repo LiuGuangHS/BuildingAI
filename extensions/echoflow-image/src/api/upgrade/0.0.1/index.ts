@@ -26,27 +26,32 @@ export class Upgrade {
         await this.dataSource.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_image"."image_model_config" (
                 "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                "ai_model_id" uuid NOT NULL,
+                "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
+                "model" varchar(100),
+                "external_model_id" varchar(100) NOT NULL DEFAULT '',
+                "request_contract" varchar(50) NOT NULL DEFAULT 'responses',
                 "display_name" varchar(120) NOT NULL,
                 "description" text,
                 "enabled" boolean NOT NULL DEFAULT true,
-                "api_mode" varchar(30) NOT NULL DEFAULT 'images',
-                "responses_transport" varchar(30) NOT NULL DEFAULT 'sse',
-                "request_policy" varchar(30) NOT NULL DEFAULT 'openai',
+                "visible_to_user" boolean NOT NULL DEFAULT true,
                 "capabilities" jsonb NOT NULL DEFAULT '{}',
                 "default_params" jsonb NOT NULL DEFAULT '{}',
                 "allowed_params" jsonb NOT NULL DEFAULT '{}',
+                "endpoints" jsonb NOT NULL DEFAULT '[]',
                 "sort_order" int NOT NULL DEFAULT 0,
                 "created_at" timestamp NOT NULL DEFAULT now(),
                 "updated_at" timestamp NOT NULL DEFAULT now()
             )
         `);
-        await this.ensureColumn("image_model_config", "api_mode", "varchar(30) NOT NULL DEFAULT 'images'");
-        await this.ensureColumn("image_model_config", "responses_transport", "varchar(30) NOT NULL DEFAULT 'sse'");
-        await this.ensureColumn("image_model_config", "request_policy", "varchar(30) NOT NULL DEFAULT 'openai'");
+        await this.ensureColumn("image_model_config", "provider", "varchar(50) NOT NULL DEFAULT 'echoflow-api'");
+        await this.ensureColumn("image_model_config", "model", "varchar(100)");
+        await this.ensureColumn("image_model_config", "external_model_id", "varchar(100) NOT NULL DEFAULT ''");
+        await this.ensureColumn("image_model_config", "request_contract", "varchar(50) NOT NULL DEFAULT 'responses'");
+        await this.ensureColumn("image_model_config", "visible_to_user", "boolean NOT NULL DEFAULT true");
         await this.ensureColumn("image_model_config", "capabilities", "jsonb NOT NULL DEFAULT '{}'");
         await this.ensureColumn("image_model_config", "default_params", "jsonb NOT NULL DEFAULT '{}'");
         await this.ensureColumn("image_model_config", "allowed_params", "jsonb NOT NULL DEFAULT '{}'");
+        await this.ensureColumn("image_model_config", "endpoints", "jsonb NOT NULL DEFAULT '[]'");
         await this.ensureColumn("image_model_config", "sort_order", "int NOT NULL DEFAULT 0");
 
         await this.dataSource.query(`
@@ -189,7 +194,7 @@ export class Upgrade {
     }
 
     private async ensureIndexes(): Promise<void> {
-        await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_model_config_ai_model_id" ON "echoflow_image"."image_model_config" ("ai_model_id")`);
+        await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_model_config_enabled" ON "echoflow_image"."image_model_config" ("enabled", "visible_to_user")`);
         await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_billing_rule_model_config_id" ON "echoflow_image"."image_billing_rule" ("model_config_id")`);
         await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_policy_config_scope_model" ON "echoflow_image"."image_policy_config" ("scope", "model_config_id")`);
         await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_prompt_template_enabled" ON "echoflow_image"."image_prompt_template" ("enabled", "sort_order")`);

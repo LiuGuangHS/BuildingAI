@@ -1,29 +1,10 @@
 import { ExtensionEntity } from "@buildingai/core/decorators";
-import { AiModel } from "@buildingai/db/entities";
 import {
     Column,
     CreateDateColumn,
-    JoinColumn,
-    ManyToOne,
     PrimaryGeneratedColumn,
     UpdateDateColumn,
 } from "@buildingai/db/typeorm";
-
-export enum ImageApiMode {
-    IMAGES = "images",
-    RESPONSES = "responses",
-}
-
-export enum ImageResponsesTransport {
-    SSE = "sse",
-    WEBSOCKET = "websocket",
-    AUTO = "auto",
-}
-
-export enum ImageRequestPolicy {
-    OPENAI = "openai",
-    COMPAT = "compat",
-}
 
 export interface ImageModelCapabilities {
     textToImage?: boolean;
@@ -50,9 +31,24 @@ export interface ImageModelDefaultParams {
 export interface ImageModelAllowedParams {
     sizes?: string[];
     qualities?: string[];
-    styles?: string[];
     outputFormats?: string[];
     maxImages?: number;
+}
+
+export type ImageRequestContract = "responses" | "images" | "openai-compatible-images" | "provider-native";
+
+export interface ImageModelEndpoint {
+    id?: string;
+    name: string;
+    secretId?: string;
+    secretName?: string;
+    baseUrlOverride?: string;
+    enabled: boolean;
+    priority: number;
+    requestTimeoutMs?: number;
+    testTimeoutMs?: number;
+    maxRetries?: number;
+    retryDelayMs?: number;
 }
 
 @ExtensionEntity()
@@ -60,8 +56,17 @@ export class ImageModelConfig {
     @PrimaryGeneratedColumn("uuid")
     id: string;
 
-    @Column({ type: "uuid", comment: "Base AI model ID" })
-    aiModelId: string;
+    @Column({ type: "varchar", length: 50, default: "echoflow-api", comment: "Provider identifier" })
+    provider: string;
+
+    @Column({ type: "varchar", length: 100, unique: true, comment: "Product model identifier" })
+    model: string;
+
+    @Column({ type: "varchar", length: 100, comment: "Upstream model identifier" })
+    externalModelId: string;
+
+    @Column({ type: "varchar", length: 50, default: "responses", comment: "Request contract" })
+    requestContract: ImageRequestContract;
 
     @Column({ type: "varchar", length: 120, comment: "Display name" })
     displayName: string;
@@ -72,14 +77,8 @@ export class ImageModelConfig {
     @Column({ type: "boolean", default: true, comment: "Whether enabled for web users" })
     enabled: boolean;
 
-    @Column({ type: "varchar", length: 30, default: ImageApiMode.IMAGES })
-    apiMode: ImageApiMode;
-
-    @Column({ type: "varchar", length: 30, default: ImageResponsesTransport.SSE })
-    responsesTransport: ImageResponsesTransport;
-
-    @Column({ type: "varchar", length: 30, default: ImageRequestPolicy.OPENAI })
-    requestPolicy: ImageRequestPolicy;
+    @Column({ type: "boolean", default: true, comment: "Whether visible to web users" })
+    visibleToUser: boolean;
 
     @Column({ type: "jsonb", default: () => "'{}'", comment: "Supported image features" })
     capabilities: ImageModelCapabilities;
@@ -90,6 +89,9 @@ export class ImageModelConfig {
     @Column({ type: "jsonb", default: () => "'{}'", comment: "Allowed generation params" })
     allowedParams: ImageModelAllowedParams;
 
+    @Column({ type: "jsonb", default: () => "'[]'", comment: "Model-level API endpoints" })
+    endpoints: ImageModelEndpoint[];
+
     @Column({ type: "int", default: 0, comment: "Sort order" })
     sortOrder: number;
 
@@ -99,7 +101,4 @@ export class ImageModelConfig {
     @UpdateDateColumn({ comment: "Updated time" })
     updatedAt: Date;
 
-    @ManyToOne(() => AiModel, { nullable: false })
-    @JoinColumn({ name: "ai_model_id" })
-    aiModel: AiModel;
 }

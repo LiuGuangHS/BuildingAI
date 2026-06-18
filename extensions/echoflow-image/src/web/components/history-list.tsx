@@ -20,6 +20,7 @@ interface HistoryListProps {
     title?: string;
     description?: string;
     showUserId?: boolean;
+    compact?: boolean;
     onDelete?: (id: string) => Promise<void> | void;
     onRetry?: (id: string) => Promise<void> | void;
     onReuse?: (generation: ImageGeneration) => void;
@@ -46,6 +47,7 @@ export function HistoryList({
     title = "生成历史",
     description = "查看、重试或删除你的历史作品",
     showUserId = false,
+    compact = false,
     onDelete,
     onRetry,
     onReuse,
@@ -78,8 +80,8 @@ export function HistoryList({
 
     return (
         <>
-            <Card className="shadow-sm transition-shadow hover:shadow-md">
-                <CardHeader className="pb-3">
+            <Card className={cn("rounded-md shadow-sm transition-shadow hover:shadow-md", compact && "gap-0 overflow-hidden py-0")}>
+                <CardHeader className={compact ? "px-4 py-4" : "pb-3"}>
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             <CardTitle className="flex items-center gap-2 text-lg">
@@ -93,11 +95,14 @@ export function HistoryList({
                         )}
                     </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className={compact ? "px-4 pb-4" : undefined}>
                     {loading ? (
                         <HistorySkeleton />
                     ) : items.length === 0 ? (
-                        <div className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted/10 px-4 text-center">
+                        <div className={cn(
+                            "flex flex-col items-center justify-center rounded-md border border-dashed border-border/60 bg-muted/10 px-4 text-center",
+                            compact ? "min-h-28" : "min-h-[180px]",
+                        )}>
                             <div className="mb-3 rounded-full bg-muted/40 p-3">
                                 <HistoryIcon className="size-6 text-muted-foreground/60" />
                             </div>
@@ -105,10 +110,61 @@ export function HistoryList({
                             <p className="mt-1 text-sm text-muted-foreground/70">完成一次生成后会出现在这里</p>
                         </div>
                     ) : (
-                        <div className="space-y-2.5">
+                        <div className={compact ? "grid grid-cols-2 gap-2 sm:grid-cols-3" : "space-y-2.5"}>
                             {items.map((item) => {
                                 const src = resolveImageSrc(item.resultImages?.[0]);
                                 const isRetrying = retryingId === item.id;
+                                if (compact) {
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            className="group cursor-pointer overflow-hidden rounded-md border bg-background transition-all duration-200 hover:border-primary/30 hover:shadow-sm"
+                                            onClick={() => navigate(`${detailBasePath}/${item.id}`)}
+                                        >
+                                            <div className="relative aspect-square bg-muted">
+                                                {src ? (
+                                                    <img src={src} alt={item.prompt} className="size-full object-cover transition duration-500 group-hover:scale-105" />
+                                                ) : (
+                                                    <div className="flex size-full items-center justify-center">
+                                                        <ImageIcon className="size-6 text-muted-foreground" />
+                                                    </div>
+                                                )}
+                                                {item.status === ImageGenerationStatus.PROCESSING && (
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+                                                        <div className="size-5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                                                    </div>
+                                                )}
+                                                <Badge
+                                                    variant={statusVariantMap[item.status] || "secondary"}
+                                                    className="absolute left-2 top-2 text-[10px]"
+                                                >
+                                                    {statusLabelMap[item.status] || item.status}
+                                                </Badge>
+                                            </div>
+                                            <div className="p-2">
+                                                <p className="line-clamp-1 text-xs font-medium">{item.prompt}</p>
+                                                <div className="mt-1 flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
+                                                    <TimeText value={item.createdAt} variant="relative" />
+                                                    <div
+                                                        className="flex shrink-0 items-center gap-0.5 opacity-100"
+                                                        onClick={(event) => event.stopPropagation()}
+                                                    >
+                                                        {onRetry && (
+                                                            <Button size="icon-sm" variant="ghost" disabled={isRetrying} loading={isRetrying} onClick={() => handleRetry(item.id)}>
+                                                                <RefreshCcw className="size-3.5" />
+                                                            </Button>
+                                                        )}
+                                                        {onReuse && (
+                                                            <Button size="icon-sm" variant="ghost" onClick={() => onReuse(item)}>
+                                                                <CopyPlus className="size-3.5" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                }
                                 return (
                                     <div
                                         key={item.id}

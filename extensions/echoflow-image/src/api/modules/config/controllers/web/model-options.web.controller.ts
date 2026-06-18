@@ -1,8 +1,7 @@
 import { BaseController } from "@buildingai/base";
 import { ExtensionWebController } from "@buildingai/core/decorators";
 import { Public } from "@buildingai/decorators/public.decorator";
-import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
-import { Get, Param } from "@nestjs/common";
+import { Get } from "@nestjs/common";
 
 import { ModelConfigService } from "../../services/model-config.service";
 
@@ -18,9 +17,4 @@ export class ModelOptionsWebController extends BaseController {
         return this.modelConfigService.listEnabledForWeb();
     }
 
-    @Get(":id")
-    @Public()
-    async findOne(@Param("id", UUIDValidationPipe) id: string) {
-        return this.modelConfigService.findWebOptionById(id);
-    }
 }

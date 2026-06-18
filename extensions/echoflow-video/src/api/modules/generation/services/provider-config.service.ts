@@ -1,7 +1,9 @@
 import { BaseService } from "@buildingai/base";
+import { MODEL_TYPES } from "@buildingai/ai-sdk";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
+import { AiModel } from "@buildingai/db/entities";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { PublicAiModelService } from "@buildingai/extension-sdk";
 import { maskSensitiveValue } from "@buildingai/utils";
@@ -11,18 +13,8 @@ import { encryptApiKey, decryptApiKey } from "../../../common/crypto/encryption"
 import { PromptTemplate, VideoProviderConfig } from "../../../db/entities/video-provider-config.entity";
 import { VideoConfigAudit } from "../../../db/entities/video-config-audit.entity";
 import { UpdateProviderConfigDto } from "../dto";
-import {
-    HappyHorseClient,
-    defaultHappyHorseClientOptions,
-    type HappyHorseClientOptions,
-} from "./happyhorse-client";
 
 const HAPPYHORSE_PROVIDER = "happyhorse";
-
-export interface HappyHorseRuntimeConfig {
-    apiKey: string;
-    clientOptions: Required<HappyHorseClientOptions>;
-}
 
 @Injectable()
 export class ProviderConfigService extends BaseService<VideoProviderConfig> {
@@ -31,6 +23,8 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         private readonly configRepository: Repository<VideoProviderConfig>,
         @InjectRepository(VideoConfigAudit)
         private readonly auditRepository: Repository<VideoConfigAudit>,
+        @InjectRepository(AiModel)
+        private readonly aiModelRepository: Repository<AiModel>,
         private readonly aiModelService: PublicAiModelService,
     ) {
         super(configRepository);
@@ -42,13 +36,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
             return {
                 provider: HAPPYHORSE_PROVIDER,
                 enabled: false,
-                configured: false,
-                apiKeyMasked: "",
-                baseUrl: defaultHappyHorseClientOptions.baseUrl,
-                requestTimeoutMs: defaultHappyHorseClientOptions.requestTimeoutMs,
-                testTimeoutMs: defaultHappyHorseClientOptions.testTimeoutMs,
-                maxRetries: defaultHappyHorseClientOptions.maxRetries,
-                retryDelayMs: defaultHappyHorseClientOptions.retryDelayMs,
                 webhookSecretConfigured: false,
                 webhookSecretMasked: "",
                 promptOptimizerEnabled: true,
@@ -61,18 +48,10 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
             };
         }
 
-        const plainKey = config.apiKey ? decryptApiKey(config.apiKey) : "";
         const webhookSecret = this.decryptOptional(config.webhookSecret);
         return {
             provider: config.provider,
             enabled: config.enabled,
-            configured: Boolean(plainKey),
-            apiKeyMasked: maskSensitiveValue(plainKey),
-            baseUrl: config.baseUrl || defaultHappyHorseClientOptions.baseUrl,
-            requestTimeoutMs: config.requestTimeoutMs ?? defaultHappyHorseClientOptions.requestTimeoutMs,
-            testTimeoutMs: config.testTimeoutMs ?? defaultHappyHorseClientOptions.testTimeoutMs,
-            maxRetries: config.maxRetries ?? defaultHappyHorseClientOptions.maxRetries,
-            retryDelayMs: config.retryDelayMs ?? defaultHappyHorseClientOptions.retryDelayMs,
             webhookSecretConfigured: Boolean(webhookSecret),
             webhookSecretMasked: webhookSecret ? maskSensitiveValue(webhookSecret) : "",
             promptOptimizerEnabled: config.promptOptimizerEnabled ?? true,
@@ -94,12 +73,10 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
     }
 
     async getPublicStatus() {
-        const config = await this.findHappyHorseConfig();
-        const plainKey = config?.apiKey ? decryptApiKey(config.apiKey) : "";
         return {
-            available: Boolean(plainKey && config?.enabled),
-            configured: Boolean(plainKey),
-            enabled: Boolean(config?.enabled),
+            available: true,
+            configured: true,
+            enabled: true,
         };
     }
 
@@ -107,34 +84,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         const existing = await this.findHappyHorseConfig();
         const config = existing ?? this.configRepository.create({ provider: HAPPYHORSE_PROVIDER });
 
-        if (dto.apiKey) {
-            config.apiKey = encryptApiKey(dto.apiKey);
-        }
-        config.baseUrl = this.normalizeBaseUrl(dto.baseUrl ?? config.baseUrl ?? defaultHappyHorseClientOptions.baseUrl);
-        config.requestTimeoutMs = this.normalizeInteger(
-            dto.requestTimeoutMs ?? config.requestTimeoutMs ?? defaultHappyHorseClientOptions.requestTimeoutMs,
-            3000,
-            300000,
-            "请求超时",
-        );
-        config.testTimeoutMs = this.normalizeInteger(
-            dto.testTimeoutMs ?? config.testTimeoutMs ?? defaultHappyHorseClientOptions.testTimeoutMs,
-            3000,
-            60000,
-            "测试超时",
-        );
-        config.maxRetries = this.normalizeInteger(
-            dto.maxRetries ?? config.maxRetries ?? defaultHappyHorseClientOptions.maxRetries,
-            0,
-            5,
-            "重试次数",
-        );
-        config.retryDelayMs = this.normalizeInteger(
-            dto.retryDelayMs ?? config.retryDelayMs ?? defaultHappyHorseClientOptions.retryDelayMs,
-            100,
-            10000,
-            "重试延迟",
-        );
         if (dto.clearWebhookSecret) {
             config.webhookSecret = undefined;
         } else if (dto.webhookSecret) {
@@ -200,37 +149,34 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         });
     }
 
-    async testConsoleConfig(dto: Partial<UpdateProviderConfigDto> = {}) {
-        const config = await this.findHappyHorseConfig();
-        const key = dto.apiKey?.trim() || (config?.apiKey ? decryptApiKey(config.apiKey) : "");
-        if (!key) {
-            throw HttpErrorFactory.badRequest("请先配置 HappyHorse API Key");
-        }
+    async listPromptOptimizerModels() {
+        const models = await this.aiModelRepository.find({
+            where: { modelType: MODEL_TYPES.LLM, isActive: true } as FindOptionsWhere<AiModel>,
+            relations: ["provider"],
+            order: { sortOrder: "DESC", createdAt: "DESC" },
+            take: 100,
+        });
 
-        await new HappyHorseClient(key, this.resolveClientOptions(config, dto)).testConnection();
-        return { success: true, message: "HappyHorse 配置可用" };
-    }
-
-    async getHappyHorseApiKey() {
-        const config = await this.findHappyHorseConfig();
-        const plainKey = config?.apiKey ? decryptApiKey(config.apiKey) : "";
-        if (!plainKey || !config?.enabled) {
-            throw HttpErrorFactory.badRequest("HappyHorse 未配置或未启用，请在 Echoflow Video 管理后台完成配置");
-        }
-        return plainKey;
-    }
-
-    async getHappyHorseRuntimeConfig(): Promise<HappyHorseRuntimeConfig> {
-        const config = await this.findHappyHorseConfig();
-        const apiKey = config?.apiKey ? decryptApiKey(config.apiKey) : "";
-        if (!apiKey || !config?.enabled) {
-            throw HttpErrorFactory.badRequest("HappyHorse 未配置或未启用，请在 Echoflow Video 管理后台完成配置");
-        }
-
-        return {
-            apiKey,
-            clientOptions: this.resolveClientOptions(config),
-        };
+        return models
+            .filter((model) => model.provider?.isActive !== false)
+            .map((model) => ({
+                id: model.id,
+                name: model.name,
+                model: model.model,
+                modelType: model.modelType,
+                description: model.description,
+                features: model.features ?? [],
+                isActive: model.isActive,
+                billingRule: model.billingRule,
+                provider: model.provider
+                    ? {
+                        id: model.provider.id,
+                        name: model.provider.name,
+                        provider: model.provider.provider,
+                        isActive: model.provider.isActive,
+                    }
+                    : undefined,
+            }));
     }
 
     async verifyHappyHorseWebhookSecret(secret?: string): Promise<boolean> {
@@ -264,96 +210,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
                     .map((modelId) => modelId.trim())
                     .filter(Boolean),
             ),
-        );
-    }
-
-    private resolveClientOptions(
-        config?: VideoProviderConfig | null,
-        override: Partial<UpdateProviderConfigDto> = {},
-    ): Required<HappyHorseClientOptions> {
-        return {
-            baseUrl: this.normalizeBaseUrl(
-                override.baseUrl ?? config?.baseUrl ?? defaultHappyHorseClientOptions.baseUrl,
-            ),
-            requestTimeoutMs:
-                this.normalizeInteger(
-                    override.requestTimeoutMs ??
-                    config?.requestTimeoutMs ??
-                    defaultHappyHorseClientOptions.requestTimeoutMs,
-                    3000,
-                    300000,
-                    "请求超时",
-                ),
-            testTimeoutMs:
-                this.normalizeInteger(
-                    override.testTimeoutMs ??
-                    config?.testTimeoutMs ??
-                    defaultHappyHorseClientOptions.testTimeoutMs,
-                    3000,
-                    60000,
-                    "测试超时",
-                ),
-            maxRetries:
-                this.normalizeInteger(
-                    override.maxRetries ??
-                    config?.maxRetries ??
-                    defaultHappyHorseClientOptions.maxRetries,
-                    0,
-                    5,
-                    "重试次数",
-                ),
-            retryDelayMs:
-                this.normalizeInteger(
-                    override.retryDelayMs ??
-                    config?.retryDelayMs ??
-                    defaultHappyHorseClientOptions.retryDelayMs,
-                    100,
-                    10000,
-                    "重试延迟",
-                ),
-        };
-    }
-
-    private normalizeBaseUrl(value: string): string {
-        const trimmed = value.trim().replace(/\/+$/, "");
-        if (!trimmed) {
-            throw HttpErrorFactory.badRequest("HappyHorse Base URL 不能为空");
-        }
-
-        let url: URL;
-        try {
-            url = new URL(trimmed);
-        } catch {
-            throw HttpErrorFactory.badRequest("HappyHorse Base URL 格式不正确");
-        }
-
-        if (!["http:", "https:"].includes(url.protocol)) {
-            throw HttpErrorFactory.badRequest("HappyHorse Base URL 仅支持 http/https");
-        }
-        if (url.username || url.password) {
-            throw HttpErrorFactory.badRequest("HappyHorse Base URL 不允许包含用户名或密码");
-        }
-        if (this.isPrivateOrLocalHost(url.hostname)) {
-            throw HttpErrorFactory.badRequest("HappyHorse Base URL 不允许指向本机或内网地址");
-        }
-
-        return trimmed;
-    }
-
-    private isPrivateOrLocalHost(hostname: string): boolean {
-        const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-        return (
-            host === "localhost" ||
-            host === "0.0.0.0" ||
-            host === "127.0.0.1" ||
-            host === "::1" ||
-            host.endsWith(".local") ||
-            host.startsWith("10.") ||
-            host.startsWith("127.") ||
-            host.startsWith("169.254.") ||
-            host.startsWith("192.168.") ||
-            /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
-            /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
         );
     }
 
@@ -397,12 +253,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
                 snapshot: {
                     provider: config.provider,
                     enabled: config.enabled,
-                    configured: Boolean(config.apiKey),
-                    baseUrl: config.baseUrl,
-                    requestTimeoutMs: config.requestTimeoutMs,
-                    testTimeoutMs: config.testTimeoutMs,
-                    maxRetries: config.maxRetries,
-                    retryDelayMs: config.retryDelayMs,
                     webhookSecretConfigured: Boolean(config.webhookSecret),
                     promptOptimizerEnabled: config.promptOptimizerEnabled,
                     promptOptimizerModelId: config.promptOptimizerModelId,

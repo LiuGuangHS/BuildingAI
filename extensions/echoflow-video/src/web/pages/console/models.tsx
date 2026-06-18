@@ -12,11 +12,21 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
+    useConsoleVideoBillingRulesQuery,
     useConsoleVideoModelConfigsQuery,
+    useCreateVideoBillingRuleMutation,
     useTestVideoModelEndpointMutation,
+    useUpdateVideoBillingRuleMutation,
     useUpdateVideoModelConfigMutation,
 } from "../../services";
-import type { SaveVideoModelConfigParams, VideoModelConfig, VideoModelEndpoint } from "../../services/types/generation";
+import type {
+    SaveVideoBillingRuleParams,
+    SaveVideoModelConfigParams,
+    SaveVideoModelEndpointParams,
+    VideoBillingRule,
+    VideoModelConfig,
+    VideoModelEndpoint,
+} from "../../services/types/generation";
 
 const abilityLabels: Record<string, string> = {
     text_to_video: "文生视频",
@@ -38,7 +48,10 @@ const mediaLabels: Record<string, string> = {
 export default function ConsoleVideoModelsPage() {
     useDocumentHead({ title: "视频模型配置" });
     const { data, isLoading, refetch } = useConsoleVideoModelConfigsQuery({ page: 1, pageSize: 100 });
+    const { data: billingData, refetch: refetchBilling } = useConsoleVideoBillingRulesQuery({ page: 1, pageSize: 200 });
     const updateMutation = useUpdateVideoModelConfigMutation();
+    const createBillingMutation = useCreateVideoBillingRuleMutation();
+    const updateBillingMutation = useUpdateVideoBillingRuleMutation();
     const testEndpointMutation = useTestVideoModelEndpointMutation({
         onSuccess: (result) => toast.success(result.message || "接入点配置可用"),
         onError: (error) => toast.error(error.message || "测试失败"),
@@ -49,6 +62,10 @@ export default function ConsoleVideoModelsPage() {
         () => items.find((item) => item.id === selectedId) ?? items[0],
         [items, selectedId],
     );
+    const selectedBillingRule = useMemo(
+        () => (billingData?.items ?? []).find((item) => item.modelConfigId === selected?.id),
+        [billingData?.items, selected?.id],
+    );
 
     useEffect(() => {
         if (!selectedId && items[0]?.id) {
@@ -56,11 +73,20 @@ export default function ConsoleVideoModelsPage() {
         }
     }, [items, selectedId]);
 
-    const handleSave = async (id: string, form: SaveVideoModelConfigParams) => {
+    const handleSave = async (id: string, form: SaveVideoModelConfigParams, billing?: SaveVideoBillingRuleParams) => {
         try {
             await updateMutation.mutateAsync({ id, data: form });
+            if (billing) {
+                const payload = { ...billing, modelConfigId: id };
+                if (selectedBillingRule?.id) {
+                    await updateBillingMutation.mutateAsync({ id: selectedBillingRule.id, data: payload });
+                } else {
+                    await createBillingMutation.mutateAsync(payload);
+                }
+            }
             toast.success("模型配置已更新");
             refetch();
+            refetchBilling();
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "保存失败");
         }
@@ -71,7 +97,7 @@ export default function ConsoleVideoModelsPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight">模型配置</h1>
-                    <p className="text-muted-foreground text-sm">模型目录固定，给每个模型配置一组或多组 Base URL / API Key 接入点。</p>
+                    <p className="text-muted-foreground text-sm">模型目录固定；每个模型绑定一组或多组主站密钥，Base URL 优先从主站密钥读取。</p>
                 </div>
             </div>
 
@@ -84,7 +110,7 @@ export default function ConsoleVideoModelsPage() {
                     <CardContent className="space-y-3">
                         {isLoading ? <div className="text-muted-foreground text-sm">加载中...</div> : null}
                         {items.map((item) => {
-                            const ready = (item.endpoints ?? []).some((endpoint) => endpoint.enabled && endpoint.apiKeyMasked);
+                            const ready = (item.endpoints ?? []).some((endpoint) => endpoint.enabled && endpoint.secretId);
                             return (
                                 <button
                                     key={item.id}
@@ -125,10 +151,11 @@ export default function ConsoleVideoModelsPage() {
 
                 <ModelOperationsEditor
                     value={selected}
+                    billingRule={selectedBillingRule}
                     saving={updateMutation.isPending}
                     testing={testEndpointMutation.isPending}
                     onSave={handleSave}
-                    onTestEndpoint={(id, endpoint) => testEndpointMutation.mutateAsync({ id, data: endpoint })}
+                    onTestEndpoint={(id, endpoint) => testEndpointMutation.mutateAsync({ id, data: serializeEndpoint(endpoint, 0) })}
                 />
             </div>
         </div>
@@ -137,15 +164,17 @@ export default function ConsoleVideoModelsPage() {
 
 function ModelOperationsEditor({
     value,
+    billingRule,
     saving,
     testing,
     onSave,
     onTestEndpoint,
 }: {
     value?: VideoModelConfig;
+    billingRule?: VideoBillingRule;
     saving: boolean;
     testing: boolean;
-    onSave: (id: string, data: SaveVideoModelConfigParams) => void;
+    onSave: (id: string, data: SaveVideoModelConfigParams, billing?: SaveVideoBillingRuleParams) => void;
     onTestEndpoint: (id: string, data: VideoModelEndpoint) => Promise<unknown>;
 }) {
     const [displayName, setDisplayName] = useState("");
@@ -158,6 +187,12 @@ function ModelOperationsEditor({
     const [ratio, setRatio] = useState("");
     const [watermark, setWatermark] = useState(true);
     const [endpoints, setEndpoints] = useState<VideoModelEndpoint[]>([]);
+    const [baseCost, setBaseCost] = useState("0");
+    const [perSecondCost, setPerSecondCost] = useState("2");
+    const [minimumCost, setMinimumCost] = useState("1");
+    const [resolutionMultipliersText, setResolutionMultipliersText] = useState("720P=1\n1080P=2");
+    const [refundOnFailure, setRefundOnFailure] = useState(true);
+    const [billingEnabled, setBillingEnabled] = useState(true);
 
     useEffect(() => {
         setDisplayName(value?.displayName ?? "");
@@ -172,9 +207,14 @@ function ModelOperationsEditor({
         setEndpoints((value?.endpoints?.length ? value.endpoints : [makeEndpoint()]).map((endpoint, index) => ({
             ...endpoint,
             id: endpoint.id || `endpoint-${index + 1}`,
-            apiKey: "",
         })));
-    }, [value]);
+        setBaseCost(String(billingRule?.baseCost ?? 0));
+        setPerSecondCost(String(billingRule?.perSecondCost ?? 2));
+        setMinimumCost(String(billingRule?.minimumCost ?? 1));
+        setResolutionMultipliersText(formatMultiplierLines(billingRule?.resolutionMultipliers ?? { "720P": 1, "1080P": 2 }));
+        setRefundOnFailure(billingRule?.refundOnFailure ?? true);
+        setBillingEnabled(billingRule?.enabled ?? true);
+    }, [value, billingRule]);
 
     if (!value) {
         return (
@@ -205,19 +245,15 @@ function ModelOperationsEditor({
             ratio: ratio || undefined,
             watermark,
         },
-        endpoints: endpoints.map((endpoint, index) => ({
-            ...endpoint,
-            id: endpoint.id || `endpoint-${index + 1}`,
-            name: endpoint.name || `接入点 ${index + 1}`,
-            baseUrl: endpoint.baseUrl,
-            apiKey: endpoint.apiKey?.trim() || undefined,
-            enabled: endpoint.enabled,
-            priority: Number(endpoint.priority ?? 100 - index),
-            requestTimeoutMs: Number(endpoint.requestTimeoutMs ?? 120000),
-            testTimeoutMs: Number(endpoint.testTimeoutMs ?? 15000),
-            maxRetries: Number(endpoint.maxRetries ?? 2),
-            retryDelayMs: Number(endpoint.retryDelayMs ?? 1000),
-        })),
+        endpoints: endpoints.map((endpoint, index) => serializeEndpoint(endpoint, index)),
+    });
+    const billingPayload = (): SaveVideoBillingRuleParams => ({
+        baseCost: Number(baseCost || 0),
+        perSecondCost: Number(perSecondCost || 2),
+        minimumCost: Number(minimumCost || 1),
+        resolutionMultipliers: parseMultiplierLines(resolutionMultipliersText),
+        refundOnFailure,
+        enabled: billingEnabled,
     });
 
     return (
@@ -302,6 +338,31 @@ function ModelOperationsEditor({
                     ))}
                 </div>
 
+                <div className="space-y-3 rounded-md border p-3">
+                    <div>
+                        <Label>计费设置</Label>
+                        <p className="text-muted-foreground mt-1 text-xs">按当前视频模型覆盖全局计费规则。</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                        <Field label="基础费用" type="number" value={baseCost} onChange={setBaseCost} />
+                        <Field label="每秒费用" type="number" value={perSecondCost} onChange={setPerSecondCost} />
+                        <Field label="最低费用" type="number" value={minimumCost} onChange={setMinimumCost} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>分辨率倍率</Label>
+                        <textarea
+                            className="border-input bg-background min-h-20 w-full rounded-md border px-3 py-2 font-mono text-xs shadow-sm"
+                            value={resolutionMultipliersText}
+                            onChange={(event) => setResolutionMultipliersText(event.target.value)}
+                            placeholder={"720P=1\n1080P=2"}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <SwitchField label="失败退款" checked={refundOnFailure} onCheckedChange={setRefundOnFailure} />
+                        <SwitchField label="启用计费规则" checked={billingEnabled} onCheckedChange={setBillingEnabled} />
+                    </div>
+                </div>
+
                 <Button
                     className="w-full"
                     disabled={saving}
@@ -310,7 +371,7 @@ function ModelOperationsEditor({
                             toast.error("展示名称不能为空");
                             return;
                         }
-                        onSave(value.id, savePayload());
+                        onSave(value.id, savePayload(), billingPayload());
                     }}
                 >
                     <Save className="size-4" />
@@ -343,7 +404,7 @@ function EndpointEditor({
                 <div className="flex items-center gap-2">
                     <KeyRound className="text-muted-foreground size-4" />
                     <span className="text-sm font-medium">{value.name || "接入点"}</span>
-                    {value.apiKeyMasked ? <Badge variant="outline">{value.apiKeyMasked}</Badge> : null}
+                    {value.secretId ? <Badge variant="outline">主站密钥</Badge> : null}
                 </div>
                 <div className="flex items-center gap-2">
                     <Switch checked={value.enabled} onCheckedChange={(checked) => patch({ enabled: checked })} />
@@ -356,15 +417,16 @@ function EndpointEditor({
                 <Field label="名称" value={value.name} onChange={(next) => patch({ name: next })} />
                 <Field label="优先级" type="number" value={String(value.priority ?? 100)} onChange={(next) => patch({ priority: Number(next) })} />
             </div>
-            <Field label="Base URL" value={value.baseUrl} onChange={(next) => patch({ baseUrl: next })} />
-            <Field label="API Key" type="password" value={value.apiKey ?? ""} placeholder={value.apiKeyMasked ? "留空保留当前密钥" : "请输入 API Key"} onChange={(next) => patch({ apiKey: next })} />
+            <Field label="主站密钥 ID" value={value.secretId ?? ""} placeholder="在主站密钥管理中复制 Secret ID" onChange={(next) => patch({ secretId: next })} />
+            <Field label="密钥名称备注" value={value.secretName ?? ""} placeholder="可选，仅用于页面识别" onChange={(next) => patch({ secretName: next })} />
+            <Field label="Base URL 覆盖" value={value.baseUrlOverride ?? ""} placeholder="可选；留空读取主站密钥中的 baseURL/baseUrl/base_url" onChange={(next) => patch({ baseUrlOverride: next })} />
             <div className="grid gap-3 md:grid-cols-4">
                 <Field label="请求超时" type="number" value={String(value.requestTimeoutMs ?? 120000)} onChange={(next) => patch({ requestTimeoutMs: Number(next) })} />
                 <Field label="测试超时" type="number" value={String(value.testTimeoutMs ?? 15000)} onChange={(next) => patch({ testTimeoutMs: Number(next) })} />
                 <Field label="重试次数" type="number" value={String(value.maxRetries ?? 2)} onChange={(next) => patch({ maxRetries: Number(next) })} />
                 <Field label="重试延迟" type="number" value={String(value.retryDelayMs ?? 1000)} onChange={(next) => patch({ retryDelayMs: Number(next) })} />
             </div>
-            <Button type="button" variant="outline" size="sm" disabled={testing} onClick={onTest}>
+            <Button type="button" variant="outline" size="sm" disabled={testing || !value.secretId} onClick={onTest}>
                 <Zap className="size-4" />
                 测试接入点
             </Button>
@@ -450,17 +512,51 @@ function getDurationOptions(value: VideoModelConfig) {
     return Array.from({ length: Math.max(max - min + 1, 1) }, (_, index) => min + index);
 }
 
+function formatMultiplierLines(value: Record<string, number>) {
+    return Object.entries(value)
+        .map(([key, item]) => `${key}=${item}`)
+        .join("\n");
+}
+
+function parseMultiplierLines(value: string) {
+    return Object.fromEntries(
+        value
+            .split(/\r?\n|,/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line) => {
+                const [key, rawValue] = line.split(/[=:]/).map((item) => item.trim());
+                return [key, Number(rawValue || 1)];
+            })
+            .filter(([key, item]) => Boolean(key) && Number.isFinite(item as number)),
+    );
+}
+
 function makeEndpoint(index = 0): VideoModelEndpoint {
     return {
         id: `endpoint-${index + 1}`,
         name: index === 0 ? "主接口" : `备用接口 ${index}`,
-        baseUrl: "https://api.echoflow.cn",
-        apiKey: "",
         enabled: index === 0,
         priority: 100 - index,
         requestTimeoutMs: 120000,
         testTimeoutMs: 15000,
         maxRetries: 2,
         retryDelayMs: 1000,
+    };
+}
+
+function serializeEndpoint(endpoint: VideoModelEndpoint, index: number): SaveVideoModelEndpointParams {
+    return {
+        id: endpoint.id || `endpoint-${index + 1}`,
+        name: endpoint.name || `接入点 ${index + 1}`,
+        secretId: endpoint.secretId?.trim() || undefined,
+        secretName: endpoint.secretName?.trim() || undefined,
+        baseUrlOverride: endpoint.baseUrlOverride?.trim() || undefined,
+        enabled: endpoint.enabled,
+        priority: Number(endpoint.priority ?? 100 - index),
+        requestTimeoutMs: Number(endpoint.requestTimeoutMs ?? 120000),
+        testTimeoutMs: Number(endpoint.testTimeoutMs ?? 15000),
+        maxRetries: Number(endpoint.maxRetries ?? 2),
+        retryDelayMs: Number(endpoint.retryDelayMs ?? 1000),
     };
 }

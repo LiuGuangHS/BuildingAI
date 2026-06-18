@@ -1,4 +1,5 @@
 import { CacheModule } from "@buildingai/cache";
+import { SecretModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import { AiPublicModule, ExtensionBillingModule } from "@buildingai/extension-sdk";
 import { Module } from "@nestjs/common";
@@ -21,7 +22,7 @@ import {
 } from "./services/generation.service";
 
 @Module({
-    imports: [TypeOrmModule.forFeature(generationModuleEntities), AiPublicModule, ExtensionBillingModule, CacheModule],
+    imports: [TypeOrmModule.forFeature(generationModuleEntities), AiPublicModule, ExtensionBillingModule, CacheModule, SecretModule],
     controllers: [
         GenerationController,
         ProviderConfigController,

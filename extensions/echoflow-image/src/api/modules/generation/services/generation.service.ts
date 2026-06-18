@@ -1,8 +1,9 @@
 import { BaseService } from "@buildingai/base";
+import { generateText } from "@buildingai/ai-sdk";
 import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants/shared/account-log.constants";
 import { FileUploadService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog, type AiModel } from "@buildingai/db/entities";
+import { AccountLog } from "@buildingai/db/entities";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThan, Like, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -26,32 +27,18 @@ import {
 } from "../../../db/entities/image-generation.entity";
 import { ImageBillingRule } from "../../../db/entities/image-billing-rule.entity";
 import {
-    ImageApiMode,
     ImageModelConfig,
-    ImageRequestPolicy,
-    type ImageModelAllowedParams,
     type ImageModelCapabilities,
     type ImageModelDefaultParams,
 } from "../../../db/entities/image-model-config.entity";
 import { ImagePolicyConfig } from "../../../db/entities/image-policy-config.entity";
 import { ImagePromptTemplate } from "../../../db/entities/image-prompt-template.entity";
 import { BillingRuleService, normalizePowerAmount } from "../../billing/services/billing-rule.service";
-import { ModelConfigService } from "../../config/services/model-config.service";
+import { ModelConfigService, type ResolvedImageModelConfig } from "../../config/services/model-config.service";
 import { PolicyService } from "../../policy/services/policy.service";
 import { CreateGenerationDto, PromptEnhanceDto, QueryGenerationDto } from "../dto";
 import { IMAGE_GENERATION_JOB, IMAGE_GENERATION_QUEUE } from "./generation-queue.constants";
 import { OpenAIImageClient } from "./openai-image-client";
-
-type EffectiveImageModelConfig = {
-    id?: string;
-    aiModelId: string;
-    displayName: string;
-    apiMode: ImageApiMode;
-    requestPolicy: ImageRequestPolicy;
-    capabilities: ImageModelCapabilities;
-    defaultParams: ImageModelDefaultParams;
-    allowedParams: ImageModelAllowedParams;
-};
 
 @Injectable()
 export class GenerationService extends BaseService<ImageGeneration> implements OnModuleInit {
@@ -107,8 +94,8 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             }
         }
 
-        // --- Validate main-system image model and optional plugin overrides ---
-        const { modelConfig, effectiveConfig, modelInfo } = await this.resolveImageModelSelection(dto.modelId);
+        const effectiveConfig = await this.modelConfigService.findEnabledByModel(dto.modelId);
+        const runtime = await this.modelConfigService.resolveRuntimeEndpoint(effectiveConfig);
         const normalizedRequest = this.normalizeGenerationRequest(dto, effectiveConfig);
         const normalizedDto = {
             ...dto,
@@ -126,8 +113,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         };
         this.validateAllowedParams(normalizedDto, effectiveConfig);
         const usage = await this.getUserPolicyUsage(userId);
-        const modelConfigId = modelConfig?.id;
+        const modelConfigId = effectiveConfig.id;
         const policy = await this.policyService.validateGeneration(modelConfigId, normalizedDto, usage.activeCount, usage.todayCount);
+        void policy;
 
         const billingAmount = await this.billingRuleService.calculateAmount({
             modelConfigId,
@@ -136,14 +124,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             n: normalizedRequest.n,
             quality: normalizedRequest.quality,
         });
-        const providerConfig = this.flattenProviderConfig(
-            await this.aiModelService.getProviderConfig(modelInfo.id),
-        );
-
-        const provider = await this.aiModelService.getProviderAdapter(modelInfo.id, providerConfig);
-        if (!provider.supports("image")) {
-            throw HttpErrorFactory.badRequest("所选模型不支持图片生成，请选择图片模型");
-        }
 
         // --- Pre-check balance ---
         const hasPower = await this.billingService.hasSufficientPower(userId, billingAmount);
@@ -156,12 +136,12 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         // If a record with the same requestKey already exists, the save will fail
         // with a unique constraint violation. We catch that and return the existing record.
         // --- Stage 1: Create record with PENDING billing ---
-        const baseURLSummary = this.sanitizeBaseURL(providerConfig.baseURL);
+        const baseURLSummary = this.sanitizeBaseURL(runtime.baseUrl);
 
         const record = this.generationRepository.create({
             userId,
             requestKey: dto.requestKey,
-            modelConfigId: modelConfig?.id,
+            modelConfigId,
             mode: normalizedRequest.mode,
             status: ImageGenerationStatus.PENDING,
             billingStatus: ImageGenerationBillingStatus.PENDING,
@@ -169,17 +149,17 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             negativePrompt: dto.negativePrompt ? this.sanitizeText(dto.negativePrompt, 2000) : undefined,
             referenceImageUrl: normalizedRequest.referenceImageUrl,
             referenceImageFileId: normalizedRequest.primarySourceImage?.fileId,
-            modelId: modelInfo.id,
-            modelName: effectiveConfig.displayName || modelInfo.name,
-            provider: modelInfo.provider?.provider,
+            modelId: effectiveConfig.model,
+            modelName: effectiveConfig.displayName,
+            provider: effectiveConfig.provider,
             baseURL: baseURLSummary,
             size: normalizedRequest.size,
             n: normalizedRequest.n,
             quality: normalizedRequest.quality,
             style: normalizedRequest.style,
             responseFormat: normalizedRequest.responseFormat,
-            apiMode: effectiveConfig.apiMode,
-            requestPolicy: effectiveConfig.requestPolicy,
+            apiMode: effectiveConfig.requestContract,
+            requestPolicy: effectiveConfig.requestContract,
             sourceImages: normalizedRequest.sourceImages,
             maskImage: normalizedRequest.hasMaskImage
                 ? { url: normalizedRequest.maskImageUrl, fileId: dto.maskImageFileId }
@@ -284,18 +264,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             return this.findById(id);
         }
 
-        const modelConfig = saved.modelConfigId
-            ? await this.modelConfigService.findEnabledById(saved.modelConfigId)
-            : await this.modelConfigService.findEnabledConfigByModelId(saved.modelId);
-        const modelInfo = await this.aiModelService.getModelInfo(saved.modelId);
-        const providerConfig = this.flattenProviderConfig(
-            await this.aiModelService.getProviderConfig(saved.modelId),
-        );
-        const provider = await this.aiModelService.getProviderAdapter(saved.modelId, providerConfig);
-        if (!provider.supports("image")) {
-            throw HttpErrorFactory.badRequest("所选模型不支持图片生成，请选择图片模型");
-        }
-        const modelConfigId = modelConfig?.id ?? saved.modelConfigId;
+        const modelConfig = await this.modelConfigService.findEnabledByModel(saved.modelId);
+        const runtime = await this.modelConfigService.resolveRuntimeEndpoint(modelConfig);
+        const modelConfigId = modelConfig.id ?? saved.modelConfigId;
         const policy = await this.policyService.resolvePolicy(modelConfigId);
         const billingRule = await this.billingRuleService.resolveRule(modelConfigId);
 
@@ -306,8 +277,8 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         // --- Stage 2: Deduct power ---
         try {
             saved = await this.deductGenerationBilling(
-            saved,
-            `Echoflow Image: ${modelConfig?.displayName || modelInfo.name || modelInfo.model}`,
+                saved,
+                `Echoflow Image: ${modelConfig.displayName || modelConfig.model}`,
             );
         } catch (deductError) {
             saved.status = ImageGenerationStatus.FAILED;
@@ -323,7 +294,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         try {
             saved.progress = 30;
             await this.generationRepository.save(saved);
-            const result = await this.generateWithProvider(saved, modelInfo, providerConfig, policy.maxReferenceImageSizeMb);
+            const result = await this.generateWithProvider(saved, modelConfig, runtime, policy.maxReferenceImageSizeMb);
             const storedResult = await this.storeResultImages(saved.id, result.images);
             saved.resultImages = storedResult.images;
             saved.storageFiles = storedResult.storageFiles;
@@ -389,53 +360,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
                 void this.markGenerationCrashed(id, error);
             });
         }, 0);
-    }
-
-    private async resolveImageModelSelection(id: string) {
-        const modelConfig = await this.modelConfigService.findByIdOrFail(id).catch(() => undefined);
-        if (modelConfig) {
-            const modelInfo = await this.aiModelService.getModelInfo(modelConfig.aiModelId);
-            return {
-                modelConfig,
-                modelInfo,
-                effectiveConfig: this.toEffectiveModelConfig(modelConfig, modelInfo),
-            };
-        }
-
-        const modelInfo = await this.modelConfigService.findEnabledImageModelById(id);
-        const override = await this.modelConfigService.findEnabledConfigByModelId(modelInfo.id);
-        return {
-            modelConfig: override,
-            modelInfo,
-            effectiveConfig: override
-                ? this.toEffectiveModelConfig(override, modelInfo)
-                : this.toEffectiveMainSystemModelConfig(modelInfo),
-        };
-    }
-
-    private toEffectiveModelConfig(config: ImageModelConfig, modelInfo: AiModel): EffectiveImageModelConfig {
-        return {
-            id: config.id,
-            aiModelId: config.aiModelId,
-            displayName: config.displayName || modelInfo.name,
-            apiMode: config.apiMode,
-            requestPolicy: config.requestPolicy,
-            capabilities: this.normalizeCapabilities(config.capabilities),
-            defaultParams: this.normalizeDefaultParams(config.defaultParams, config.capabilities),
-            allowedParams: this.normalizeAllowedParams(config.allowedParams, config.capabilities),
-        };
-    }
-
-    private toEffectiveMainSystemModelConfig(modelInfo: AiModel): EffectiveImageModelConfig {
-        return {
-            aiModelId: modelInfo.id,
-            displayName: modelInfo.name,
-            apiMode: ImageApiMode.IMAGES,
-            requestPolicy: ImageRequestPolicy.OPENAI,
-            capabilities: this.normalizeCapabilities(),
-            defaultParams: this.normalizeDefaultParams(),
-            allowedParams: this.normalizeAllowedParams(),
-        };
     }
 
     private normalizeCapabilities(capabilities?: ImageModelCapabilities): ImageModelCapabilities {
@@ -600,22 +524,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     }
 
     private async retryFromSource(source: ImageGeneration, userId: string) {
-        // Validate the source model still exists and supports image generation
-        try {
-            const modelInfo = await this.aiModelService.getModelInfo(source.modelId);
-            const providerConfig = this.flattenProviderConfig(
-                await this.aiModelService.getProviderConfig(source.modelId),
-            );
-            const provider = await this.aiModelService.getProviderAdapter(source.modelId, providerConfig);
-            if (!provider.supports("image")) {
-                throw HttpErrorFactory.badRequest("原模型已不再支持图片生成，请选择其他模型");
-            }
-        } catch (error) {
-            if (error instanceof Error && error.message.includes("not found")) {
-                throw HttpErrorFactory.badRequest("原模型已被删除，请选择其他模型后重新生成");
-            }
-            throw error;
-        }
+        await this.modelConfigService.findEnabledByModel(source.modelId);
 
         return this.createAndGenerate(
             {
@@ -657,21 +566,35 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     async enhancePrompt(dto: PromptEnhanceDto) {
         if (dto.modelId) {
             try {
-                const { modelInfo } = await this.resolveImageModelSelection(dto.modelId);
+                const modelInfo = await this.aiModelService.getModelInfo(dto.modelId);
                 const providerConfig = this.flattenProviderConfig(
                     await this.aiModelService.getProviderConfig(modelInfo.id),
                 );
-                const client = new OpenAIImageClient({
-                    apiKey: providerConfig.apiKey,
-                    baseURL: providerConfig.baseURL,
-                });
-                const prompt = await client.enhancePrompt({
-                    model: modelInfo.model,
-                    prompt: this.sanitizeText(dto.prompt, 4000),
-                    style: dto.style,
+                if (!providerConfig.apiKey || !providerConfig.baseURL) {
+                    throw new Error("缺少主站 LLM 接入配置");
+                }
+                const provider = await this.aiModelService.getProviderAdapter(modelInfo.id, providerConfig);
+                if (!provider.supports("language")) {
+                    throw new Error("所选主站模型不支持文本生成");
+                }
+                const result = await generateText({
+                    model: provider(modelInfo.model).model,
+                    system: [
+                        "You are a professional AI image prompt director.",
+                        "Rewrite the user's idea into a concise, production-ready image generation prompt.",
+                        "Return only the optimized prompt, no markdown, no JSON, no explanation.",
+                        "Prefer clear English visual language even when the user input is Chinese.",
+                        "Include subject, scene, composition, lighting, color, mood, camera angle, and material detail.",
+                    ].join("\n"),
+                    prompt: [
+                        `Original prompt: ${this.sanitizeText(dto.prompt, 4000)}`,
+                        dto.style ? `Style: ${dto.style}` : "",
+                        "Optimized image prompt:",
+                    ].filter(Boolean).join("\n"),
+                    temperature: 0.7,
                 });
                 return {
-                    prompt,
+                    prompt: this.normalizeOptimizedPrompt(result.text, dto.prompt),
                     source: "ai",
                 };
             } catch (error) {
@@ -812,23 +735,23 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
     private async generateWithProvider(
         record: ImageGeneration,
-        modelInfo: AiModel,
-        providerConfig: Record<string, string>,
+        modelConfig: ResolvedImageModelConfig,
+        runtime: { apiKey: string; baseUrl: string },
         maxReferenceImageSizeMb: number,
     ) {
         const client = new OpenAIImageClient({
-            apiKey: providerConfig.apiKey,
-            baseURL: providerConfig.baseURL,
+            apiKey: runtime.apiKey,
+            baseURL: runtime.baseUrl,
         });
         const referenceImages = await this.resolveReferenceImages(record, maxReferenceImageSizeMb);
         const maskImage = await this.resolveStoredImage(record.maskImage, maxReferenceImageSizeMb, "遮罩图", record.userId);
 
         this.logger.log(
-            `Generating image: model=${modelInfo.model} size=${record.size} n=${record.n} baseURL=${this.sanitizeBaseURL(providerConfig.baseURL)}`,
+            `Generating image: model=${modelConfig.model} size=${record.size} n=${record.n} baseURL=${this.sanitizeBaseURL(runtime.baseUrl)}`,
         );
 
         return client.generate({
-            model: modelInfo.model,
+            model: modelConfig.externalModelId,
             prompt: this.buildProviderPrompt(record),
             n: record.n,
             size: record.size,
@@ -836,16 +759,8 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             style: record.style,
             responseFormat: record.responseFormat,
             referenceImages,
-            maskImage,
             maxReferenceImageBytes: maxReferenceImageSizeMb * 1024 * 1024,
-            apiMode: record.apiMode === "responses" ? "responses" : "images",
-            seed: record.seed,
-            outputFormat: record.outputFormat,
-            background: record.background,
-            outputCompression: record.outputCompression,
-            inputFidelity: record.inputFidelity,
-            moderation: record.moderation,
-            requestPolicy: record.requestPolicy,
+            requestContract: modelConfig.requestContract,
         });
     }
 
@@ -858,6 +773,10 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         const value = this.sanitizeText(prompt.trim(), 3800);
         const styleHint = style === "natural" ? "自然色彩，真实光影" : style === "vivid" ? "鲜明色彩，强视觉冲击" : "风格统一";
         return `${value}，${styleHint}，主体明确，构图完整，层次丰富，光影细腻，高细节，画面干净，背景协调`;
+    }
+
+    private normalizeOptimizedPrompt(value: string, fallback: string): string {
+        return this.sanitizeText(value.trim().replace(/^["'`]+|["'`]+$/g, ""), 4000) || this.buildLocalEnhancedPrompt(fallback);
     }
 
     private async resolveReferenceImages(record: ImageGeneration, maxReferenceImageSizeMb: number) {
@@ -1000,19 +919,19 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         if (dto.inputFidelity && !capabilities.inputFidelity) {
             throw HttpErrorFactory.badRequest("该模型未启用输入保真度参数");
         }
-        if (modelConfig.apiMode === "responses" && (dto.maskImageUrl || dto.maskImageFileId)) {
+        if (modelConfig.requestContract === "responses" && (dto.maskImageUrl || dto.maskImageFileId)) {
             throw HttpErrorFactory.badRequest("Responses API 暂不支持局部重绘，请改用 Images API 模式");
         }
-        if (modelConfig.apiMode === "responses" && (dto.n ?? 1) > 1) {
+        if (modelConfig.requestContract === "responses" && (dto.n ?? 1) > 1) {
             throw HttpErrorFactory.badRequest("Responses API 暂不支持单次生成多张图片");
         }
-        if (modelConfig.apiMode === "responses" && dto.seed) {
+        if (modelConfig.requestContract === "responses" && dto.seed) {
             throw HttpErrorFactory.badRequest("Responses API 暂不支持 seed 参数");
         }
-        if (modelConfig.apiMode === "responses" && dto.inputFidelity) {
+        if (modelConfig.requestContract === "responses" && dto.inputFidelity) {
             throw HttpErrorFactory.badRequest("Responses API 暂不支持输入保真度参数");
         }
-        if (modelConfig.apiMode === "responses" && dto.outputCompression !== undefined) {
+        if (modelConfig.requestContract === "responses" && dto.outputCompression !== undefined) {
             throw HttpErrorFactory.badRequest("Responses API 暂不支持输出压缩参数");
         }
         if (size && allowed.sizes?.length && !allowed.sizes.includes(size)) {

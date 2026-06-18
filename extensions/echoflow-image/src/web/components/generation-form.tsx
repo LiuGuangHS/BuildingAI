@@ -252,17 +252,17 @@ export function GenerationForm({
     const hasContent = !!(prompt || negativePrompt || hasReferenceImage || hasMaskImage);
 
     return (
-        <Card className="rounded-md shadow-sm">
-            <CardHeader className="pb-3">
+        <Card className="gap-0 overflow-hidden rounded-md py-0 shadow-sm">
+            <CardHeader className="border-b bg-card/70 px-4 py-4 md:px-5">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                        <CardTitle className="flex items-center gap-2.5 text-xl">
+                        <CardTitle className="flex items-center gap-2.5 text-lg">
                             <div className="bg-primary/10 flex size-9 items-center justify-center rounded-md">
                                 <WandSparkles className="text-primary size-5" />
                             </div>
                             创作台
                         </CardTitle>
-                        <CardDescription className="mt-1">OpenAI-compatible Images API</CardDescription>
+                        <CardDescription className="mt-1">先描述画面，再确认模型与消耗</CardDescription>
                     </div>
                     <div className="flex shrink-0 gap-1.5">
                         {hasContent && (
@@ -282,7 +282,7 @@ export function GenerationForm({
                 </div>
             </CardHeader>
 
-            <CardContent className="space-y-5">
+            <CardContent className="p-4 md:p-5">
                 <form onSubmit={handleSubmit}>
                     {/* ── Prompt area ── */}
                     <div className="space-y-2">
@@ -296,7 +296,7 @@ export function GenerationForm({
                             value={prompt}
                             onChange={(event) => setPrompt(event.target.value)}
                             placeholder="描述你想生成的画面，例如：赛博朋克风格的未来城市，雨夜，霓虹灯，高细节..."
-                            className="min-h-36 resize-none border-primary/20 text-sm leading-relaxed transition-all focus-within:border-primary/60 focus-within:shadow-sm placeholder:text-muted-foreground/60"
+                            className="min-h-32 resize-y border-primary/20 text-sm leading-relaxed transition-all focus-within:border-primary/60 focus-within:shadow-sm placeholder:text-muted-foreground/60"
                             disabled={loading}
                             required
                         />
@@ -317,7 +317,7 @@ export function GenerationForm({
                         >
                             润色当前提示词
                         </button>
-                        {[...templates.map((template) => ({ label: template.title, prompt: template.prompt })), ...promptTemplates].slice(0, 8).map((template) => (
+                        {[...templates.map((template) => ({ label: template.title, prompt: template.prompt })), ...promptTemplates].slice(0, 6).map((template) => (
                             <button
                                 key={template.label}
                                 type="button"
@@ -335,9 +335,14 @@ export function GenerationForm({
                     </div>
 
                     {/* ── Model + Reference row ── */}
-                    <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <div className="mt-4 rounded-md border bg-muted/15 p-3">
                         <div className="space-y-2">
-                            <Label className="text-sm font-medium">图片模型</Label>
+                            <div className="flex flex-wrap items-end justify-between gap-2">
+                                <Label className="text-sm font-medium">图片模型</Label>
+                                <span className="text-xs text-muted-foreground">
+                                    {size} · {quality === "hd" ? "HD" : "标准"} · {imageCount} 张
+                                </span>
+                            </div>
                             <Select value={modelId} onValueChange={setModelId} disabled={loading || modelsLoading} required>
                                 <SelectTrigger
                                     className={cn(
@@ -369,12 +374,13 @@ export function GenerationForm({
                             {selectedModel && (
                                 <p className="text-muted-foreground truncate text-xs">
                                     {selectedModel.providerName || selectedModel.provider} · {selectedModel.model}
+                                    {canUseImageToImage ? " · 支持参考图" : " · 文生图"}
                                 </p>
                             )}
                         </div>
 
                         {canUseImageToImage && (
-                            <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
                                 <ReferenceImageUpload
                                     value={referenceImageUrl}
                                     disabled={loading || !selectedModel}
@@ -463,7 +469,7 @@ export function GenerationForm({
                     )}
 
                     {/* ── Collapsible advanced settings ── */}
-                    <div className="mt-3 rounded-xl border border-border/60">
+                    <div className="mt-3 rounded-md border border-border/60">
                         <button
                             type="button"
                             disabled={loading}
@@ -595,7 +601,7 @@ export function GenerationForm({
                     </div>
 
                     {/* ── Submit row ── */}
-                    <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 flex flex-col gap-3 border-t bg-card/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur supports-[backdrop-filter]:bg-card/85 sm:flex-row sm:items-center sm:justify-between md:-mx-5 md:-mb-5 md:px-5">
                         <div className="flex items-center gap-2">
                             <div className="bg-muted/40 flex items-center gap-1.5 rounded-md border px-3 py-1.5">
                                 <Zap className="text-amber-500 size-3.5" />
@@ -612,7 +618,7 @@ export function GenerationForm({
                             className={cn(
                                 "group relative overflow-hidden shadow-sm transition-all",
                                 "active:scale-[0.98] disabled:opacity-50",
-                                "sm:min-w-44",
+                                "w-full sm:min-w-44 sm:w-auto",
                             )}
                         >
                             <Sparkles className="size-4" />

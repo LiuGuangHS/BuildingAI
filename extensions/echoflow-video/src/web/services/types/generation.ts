@@ -115,9 +115,9 @@ export interface VideoModelDefaultParams {
 export interface VideoModelEndpoint {
     id?: string;
     name: string;
-    baseUrl: string;
-    apiKey?: string;
-    apiKeyMasked?: string;
+    secretId?: string;
+    secretName?: string;
+    baseUrlOverride?: string;
     enabled: boolean;
     priority: number;
     requestTimeoutMs?: number;
@@ -125,6 +125,8 @@ export interface VideoModelEndpoint {
     maxRetries?: number;
     retryDelayMs?: number;
 }
+
+export type SaveVideoModelEndpointParams = VideoModelEndpoint;
 
 export interface VideoModelOption {
     id: string;
@@ -164,7 +166,7 @@ export interface SaveVideoModelConfigParams {
     visibleToUser?: boolean;
     capabilities?: VideoModelCapabilities;
     defaultParams?: VideoModelDefaultParams;
-    endpoints?: VideoModelEndpoint[];
+    endpoints?: SaveVideoModelEndpointParams[];
     sortOrder?: number;
 }
 

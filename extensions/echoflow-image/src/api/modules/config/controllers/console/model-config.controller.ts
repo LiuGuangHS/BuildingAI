@@ -3,7 +3,7 @@ import { ExtensionConsoleController } from "@buildingai/core/decorators";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
 
-import { CreateModelConfigDto, QueryAvailableAiModelDto, QueryModelConfigDto, UpdateModelConfigDto } from "../../dto";
+import { CreateModelConfigDto, ImageModelEndpointDto, QueryModelConfigDto, UpdateModelConfigDto } from "../../dto";
 import { ModelConfigService } from "../../services/model-config.service";
 
 @ExtensionConsoleController("model-configs", "Echoflow Image Model Config")
@@ -15,11 +15,6 @@ export class ModelConfigController extends BaseController {
     @Get()
     async findAll(@Query() query: QueryModelConfigDto) {
         return this.modelConfigService.list(query);
-    }
-
-    @Get("available-ai-models")
-    async listAvailableAiModels(@Query() query: QueryAvailableAiModelDto) {
-        return this.modelConfigService.listAvailableAiModels(query);
     }
 
     @Post()
@@ -42,8 +37,8 @@ export class ModelConfigController extends BaseController {
         return this.modelConfigService.deleteConfig(id);
     }
 
-    @Post(":id/test")
-    async test(@Param("id", UUIDValidationPipe) id: string) {
-        return this.modelConfigService.testConfig(id);
+    @Post(":id/test-endpoint")
+    async testEndpoint(@Param("id", UUIDValidationPipe) id: string, @Body() dto: ImageModelEndpointDto) {
+        return this.modelConfigService.testEndpoint(id, dto);
     }
 }

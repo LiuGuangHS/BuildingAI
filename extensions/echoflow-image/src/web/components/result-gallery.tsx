@@ -41,10 +41,10 @@ export function ResultGallery({ generation, images, isLoading }: ResultGalleryPr
 
     return (
         <Card className={cn(
-            "min-h-[480px] transition-all duration-300",
+            "gap-0 overflow-hidden rounded-md py-0 transition-all duration-300",
             resolvedImages.length > 0 && "border-primary/10 bg-gradient-to-br from-background via-background to-primary/[0.03] shadow-md",
         )}>
-            <CardHeader className="pb-3">
+            <CardHeader className="border-b bg-card/70 px-4 py-4 md:px-5">
                 <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
                         <CardTitle className="flex items-center gap-2 text-lg">
@@ -93,11 +93,11 @@ export function ResultGallery({ generation, images, isLoading }: ResultGalleryPr
                     </div>
                 </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 md:p-5">
                 {isLoading ? (
                     <ResultSkeleton />
                 ) : generation?.status === ImageGenerationStatus.FAILED ? (
-                    <div className="flex min-h-[340px] flex-col items-center justify-center rounded-2xl border border-dashed border-destructive/30 bg-destructive/[0.03] px-4 text-center">
+                    <div className="flex min-h-[420px] flex-col items-center justify-center rounded-md border border-dashed border-destructive/30 bg-destructive/[0.03] px-4 text-center">
                         <div className="mb-4 rounded-full bg-destructive/10 p-3">
                             <ImageIcon className="size-8 text-destructive" />
                         </div>
@@ -107,19 +107,33 @@ export function ResultGallery({ generation, images, isLoading }: ResultGalleryPr
                         </p>
                     </div>
                 ) : resolvedImages.length === 0 ? (
-                    <div className="flex min-h-[340px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-muted/10 px-4 text-center">
-                        <div className="mb-4 rounded-full bg-muted/50 p-4">
-                            <Sparkles className="size-8 text-muted-foreground/60" />
+                    <div className="relative flex min-h-[420px] overflow-hidden rounded-md border border-dashed border-border/70 bg-muted/10 px-4 text-center">
+                        <div className="pointer-events-none absolute inset-0 grid grid-cols-3 gap-3 p-4 opacity-60">
+                            {Array.from({ length: 6 }).map((_, index) => (
+                                <div
+                                    key={index}
+                                    className={cn(
+                                        "rounded-md border bg-background/70",
+                                        index === 0 && "row-span-2",
+                                        index === 3 && "col-span-2",
+                                    )}
+                                />
+                            ))}
                         </div>
-                        <p className="font-medium text-muted-foreground">等待创作</p>
-                        <p className="mt-1.5 max-w-xs text-sm text-muted-foreground/70">
-                            输入提示词，选择模型，点击生成按钮，你的作品就会在这里呈现
-                        </p>
+                        <div className="relative m-auto flex max-w-xs flex-col items-center">
+                            <div className="mb-4 rounded-full bg-background/90 p-4 shadow-sm">
+                                <Sparkles className="size-8 text-muted-foreground/60" />
+                            </div>
+                            <p className="font-medium text-muted-foreground">等待创作</p>
+                            <p className="mt-1.5 text-sm text-muted-foreground/70">
+                                输入提示词并点击生成后，作品会在这里预览
+                            </p>
+                        </div>
                     </div>
                 ) : (
                     <div className={cn(
                         "grid gap-3",
-                        resolvedImages.length === 1 ? "grid-cols-1" : "grid-cols-1 @md:grid-cols-2",
+                        resolvedImages.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2",
                     )}>
                         {resolvedImages.map((image, index) => {
                             const src = resolveImageSrc(image);

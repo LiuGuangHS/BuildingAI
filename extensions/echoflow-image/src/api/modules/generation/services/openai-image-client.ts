@@ -4,7 +4,8 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 
-import { ImageResponseFormat, type GeneratedImageRecord } from "../../../db/entities/image-generation.entity";
+import { type GeneratedImageRecord } from "../../../db/entities/image-generation.entity";
+import type { ImageRequestContract } from "../../../db/entities/image-model-config.entity";
 
 export interface OpenAIImageClientConfig {
     apiKey?: string;
@@ -14,24 +15,14 @@ export interface OpenAIImageClientConfig {
 export interface GenerateOpenAIImageOptions {
     model: string;
     prompt: string;
-    n: number;
-    size: string;
+    size?: string;
     quality?: string;
-    style?: string;
-    responseFormat: ImageResponseFormat;
-    referenceImageUrl?: string;
-    referenceImage?: ReferenceImageInput;
-    referenceImages?: ReferenceImageInput[];
-    maskImage?: ReferenceImageInput;
-    maxReferenceImageBytes?: number;
-    apiMode?: "images" | "responses";
-    seed?: string;
     outputFormat?: string;
     background?: string;
-    outputCompression?: number;
-    inputFidelity?: string;
     moderation?: string;
-    requestPolicy?: string;
+    referenceImages?: ReferenceImageInput[];
+    maxReferenceImageBytes?: number;
+    requestContract?: ImageRequestContract;
 }
 
 export interface ReferenceImageInput {
@@ -41,17 +32,6 @@ export interface ReferenceImageInput {
     mimeType?: string;
     size?: number;
     source?: string;
-}
-
-interface OpenAIImageResponseItem {
-    url?: string;
-    b64_json?: string;
-    revised_prompt?: string;
-}
-
-interface OpenAIImageResponse {
-    created?: number;
-    data?: OpenAIImageResponseItem[];
 }
 
 interface OpenAIResponsesResponse {
@@ -66,7 +46,6 @@ const MAX_RETRIES = 2;
 const MAX_REFERENCE_IMAGE_BYTES = 50 * 1024 * 1024;
 const MAX_REFERENCE_REDIRECTS = 3;
 
-/** Error thrown for transient failures that should be retried. */
 class RetryableError extends Error {
     constructor(message: string) {
         super(message);
@@ -82,196 +61,29 @@ export class OpenAIImageClient {
         if (!config.apiKey) {
             throw HttpErrorFactory.badRequest("图片模型未配置 API Key");
         }
-
         this.apiKey = config.apiKey;
         this.baseURL = normalizeBaseURL(config.baseURL || "https://api.openai.com/v1");
     }
 
+    async testConnection(model: string, requestContract: ImageRequestContract = "responses") {
+        await this.generate({
+            model,
+            prompt: "A simple gray square on a white background",
+            size: "1024x1024",
+            quality: "standard",
+            outputFormat: "png",
+            requestContract,
+        });
+    }
+
     async generate(options: GenerateOpenAIImageOptions) {
-        if (options.apiMode === "responses") {
-            return this.generateWithResponses(options);
+        if (options.requestContract === "images" || options.requestContract === "openai-compatible-images") {
+            return this.generateImages(options);
         }
-
-        if (options.referenceImageUrl || options.referenceImage || options.referenceImages?.length) {
-            return this.edit(options);
+        if (options.requestContract === "provider-native") {
+            throw HttpErrorFactory.badRequest("该图像模型的原生协议尚未接入");
         }
-
-        const body = removeUndefined({
-            model: options.model,
-            prompt: options.prompt,
-            n: options.n,
-            size: options.size,
-            quality: options.quality,
-            style: options.style,
-            response_format: options.responseFormat,
-            seed: options.requestPolicy === "compat" ? options.seed : undefined,
-            output_format: options.outputFormat,
-            background: options.background,
-            output_compression: options.outputCompression,
-            input_fidelity: options.inputFidelity,
-            moderation: options.moderation,
-        });
-
-        let lastError: Error | undefined;
-
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                return await this.executeRequest(body, attempt);
-            } catch (error) {
-                lastError = error instanceof Error ? error : new Error(String(error));
-
-                if (!(lastError instanceof RetryableError)) {
-                    throw lastError;
-                }
-
-                if (attempt < MAX_RETRIES) {
-                    const delay = Math.pow(2, attempt * 2) * 1000;
-                    await sleep(delay);
-                }
-            }
-        }
-
-        throw lastError ?? new Error("图像生成请求失败");
-    }
-
-    async enhancePrompt(input: { model: string; prompt: string; style?: string }) {
-        const body = {
-            model: input.model,
-            temperature: 0.4,
-            messages: [
-                {
-                    role: "system",
-                    content: "You rewrite image prompts. Return one concise Chinese image prompt only. Preserve the user's intent. Add composition, lighting, detail, and style cues. Do not add policy-unsafe content.",
-                },
-                {
-                    role: "user",
-                    content: `原始提示词：${input.prompt}\n偏好风格：${input.style || "auto"}`,
-                },
-            ],
-        };
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30_000);
-        try {
-            const response = await fetch(`${this.baseURL}/chat/completions`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: this.apiKey.includes("Bearer ") ? this.apiKey : `Bearer ${this.apiKey}`,
-                },
-                body: JSON.stringify(body),
-                signal: controller.signal,
-            });
-            const responseText = await response.text();
-            if (!response.ok) {
-                throw classifyHttpError(response.status, 0, responseText);
-            }
-            const parsed = safeJsonParse<{ choices?: Array<{ message?: { content?: string } }> }>(responseText);
-            const text = parsed?.choices?.[0]?.message?.content?.trim();
-            if (!text) {
-                throw HttpErrorFactory.badRequest("Prompt 改写响应为空");
-            }
-            return text.slice(0, 4000);
-        } finally {
-            clearTimeout(timeoutId);
-        }
-    }
-
-    private async edit(options: GenerateOpenAIImageOptions) {
-        if (!options.referenceImageUrl && !options.referenceImage && !options.referenceImages?.length) {
-            throw HttpErrorFactory.badRequest("图生图需要提供参考图");
-        }
-
-        const references = await this.resolveReferenceImages(options);
-        const [reference] = references;
-        const mask = options.maskImage ? await this.resolveAuxiliaryImage(options.maskImage, options.maxReferenceImageBytes) : undefined;
-        const formData = new FormData();
-        formData.append("model", options.model);
-        formData.append("prompt", options.prompt);
-        references.forEach((item, index) => {
-            formData.append(references.length > 1 && options.requestPolicy !== "compat" ? "image[]" : "image", item.blob, item.filename || `reference-${index + 1}.png`);
-        });
-        if (mask) {
-            formData.append("mask", mask.blob, mask.filename);
-        }
-        appendFormValue(formData, "n", options.n);
-        appendFormValue(formData, "size", options.size);
-        appendFormValue(formData, "quality", options.quality);
-        appendFormValue(formData, "output_format", options.outputFormat);
-        appendFormValue(formData, "background", options.background);
-        appendFormValue(formData, "output_compression", options.outputCompression);
-        appendFormValue(formData, "input_fidelity", options.inputFidelity);
-        appendFormValue(formData, "moderation", options.moderation);
-
-        if (options.requestPolicy === "compat" || isDalleModel(options.model)) {
-            appendFormValue(formData, "response_format", options.responseFormat);
-        }
-
-        const rawRequest = removeUndefined({
-            model: options.model,
-            prompt: options.prompt,
-            image: {
-                filename: reference.filename,
-                mimeType: reference.mimeType,
-                size: reference.size,
-                source: reference.source,
-            },
-            images: references.length > 1
-                ? references.map((item) => ({
-                    filename: item.filename,
-                    mimeType: item.mimeType,
-                    size: item.size,
-                    source: item.source,
-                }))
-                : undefined,
-            mask: mask
-                ? {
-                    filename: mask.filename,
-                    mimeType: mask.mimeType,
-                    size: mask.size,
-                    source: mask.source,
-                }
-                : undefined,
-            n: options.n,
-            size: options.size,
-            quality: options.quality,
-            output_format: options.outputFormat,
-            background: options.background,
-            output_compression: options.outputCompression,
-            input_fidelity: options.inputFidelity,
-            moderation: options.moderation,
-            response_format: options.requestPolicy === "compat" || isDalleModel(options.model) ? options.responseFormat : undefined,
-        });
-
-        let lastError: Error | undefined;
-
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                return await this.executeRequest({
-                    endpoint: "/images/edits",
-                    body: formData,
-                    attempt,
-                    rawRequest,
-                });
-            } catch (error) {
-                lastError = error instanceof Error ? error : new Error(String(error));
-
-                if (!(lastError instanceof RetryableError)) {
-                    throw lastError;
-                }
-
-                if (attempt < MAX_RETRIES) {
-                    const delay = Math.pow(2, attempt * 2) * 1000;
-                    await sleep(delay);
-                }
-            }
-        }
-
-        throw lastError ?? new Error("图像编辑请求失败");
-    }
-
-    private async generateWithResponses(options: GenerateOpenAIImageOptions) {
-        const references = await this.resolveReferenceImages(options);
+        const references = await this.resolveReferenceImages(options.referenceImages ?? [], options.maxReferenceImageBytes);
         const inputContent: Array<Record<string, unknown>> = [
             { type: "input_text", text: options.prompt },
         ];
@@ -304,85 +116,51 @@ export class OpenAIImageClient {
         });
 
         let lastError: Error | undefined;
-
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
                 return await this.executeResponsesRequest(body, attempt);
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
-
                 if (!(lastError instanceof RetryableError)) {
                     throw lastError;
                 }
-
                 if (attempt < MAX_RETRIES) {
-                    const delay = Math.pow(2, attempt * 2) * 1000;
-                    await sleep(delay);
+                    await sleep(Math.pow(2, attempt * 2) * 1000);
                 }
             }
         }
-
         throw lastError ?? new Error("图像生成请求失败");
     }
 
-    private async executeRequest(
-        input:
-            | { body: Record<string, unknown>; attempt: number; endpoint?: string; rawRequest?: Record<string, unknown> }
-            | { body: FormData; attempt: number; endpoint: string; rawRequest: Record<string, unknown> },
-    ) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
-
-        try {
-            const isFormData = input.body instanceof FormData;
-            const response = await fetch(`${this.baseURL}${input.endpoint ?? "/images/generations"}`, {
-                method: "POST",
-                headers: {
-                    ...(isFormData ? {} : { "Content-Type": "application/json" }),
-                    Authorization: this.apiKey.includes("Bearer ") ? this.apiKey : `Bearer ${this.apiKey}`,
-                },
-                body: isFormData ? input.body : JSON.stringify(input.body),
-                signal: controller.signal,
-            });
-
-            const responseText = await response.text();
-
-            if (!response.ok) {
-                throw classifyHttpError(response.status, input.attempt, responseText);
-            }
-
-            const parsed = safeJsonParse<OpenAIImageResponse>(responseText);
-
-            if (!parsed?.data || !Array.isArray(parsed.data) || parsed.data.length === 0) {
-                throw HttpErrorFactory.badRequest("图像生成响应中没有图片数据");
-            }
-
-            const images: GeneratedImageRecord[] = parsed.data.map((item) => ({
-                url: item.url,
-                b64Json: item.b64_json,
-                mimeType: item.b64_json ? "image/png" : undefined,
-                revisedPrompt: item.revised_prompt,
-            }));
-
-            return {
-                images,
-                rawResponse: {
-                    created: parsed.created,
-                    imageCount: images.length,
-                    responseFormat: isFormData ? undefined : input.body.response_format,
-                },
-                rawRequest: input.rawRequest ?? input.body,
-                baseURL: this.baseURL,
-            };
-        } catch (error) {
-            // AbortError from timeout → retryable
-            if (error instanceof DOMException && error.name === "AbortError") {
-                throw new RetryableError("图像生成请求超时");
-            }
-            throw error;
-        } finally {
-            clearTimeout(timeoutId);
+    private async generateImages(options: GenerateOpenAIImageOptions) {
+        if (options.referenceImages?.length) {
+            throw HttpErrorFactory.badRequest("Images API 参考图编辑尚未接入，请使用 Responses 模型");
         }
+        const body = removeUndefined({
+            model: options.model,
+            prompt: options.prompt,
+            n: 1,
+            size: options.size,
+            quality: options.quality,
+            response_format: "b64_json",
+            style: options.style,
+        });
+
+        let lastError: Error | undefined;
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                return await this.executeImagesRequest(body, attempt);
+            } catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                if (!(lastError instanceof RetryableError)) {
+                    throw lastError;
+                }
+                if (attempt < MAX_RETRIES) {
+                    await sleep(Math.pow(2, attempt * 2) * 1000);
+                }
+            }
+        }
+        throw lastError ?? new Error("图像生成请求失败");
     }
 
     private async executeResponsesRequest(body: Record<string, unknown>, attempt: number) {
@@ -432,35 +210,61 @@ export class OpenAIImageClient {
         }
     }
 
-    private async resolveReferenceImages(options: GenerateOpenAIImageOptions) {
-        const images = [
-            ...(options.referenceImages ?? []),
-            ...(options.referenceImage ? [options.referenceImage] : []),
-            ...(options.referenceImageUrl ? [{ url: options.referenceImageUrl, source: options.referenceImageUrl }] : []),
-        ];
+    private async executeImagesRequest(body: Record<string, unknown>, attempt: number) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
-        const uniqueImages = dedupeReferenceImages(images);
-        if (!uniqueImages.length) {
-            if (options.referenceImageUrl || options.referenceImage || options.referenceImages?.length) {
-                throw HttpErrorFactory.badRequest("图生图需要提供参考图");
+        try {
+            const response = await fetch(`${this.baseURL}/images/generations`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: this.apiKey.includes("Bearer ") ? this.apiKey : `Bearer ${this.apiKey}`,
+                },
+                body: JSON.stringify(body),
+                signal: controller.signal,
+            });
+
+            const responseText = await response.text();
+            if (!response.ok) {
+                throw classifyHttpError(response.status, attempt, responseText);
             }
-            return [];
-        }
 
-        return Promise.all(uniqueImages.map((image) => this.resolveAuxiliaryImage(image, options.maxReferenceImageBytes)));
+            const parsed = safeJsonParse<{ data?: Array<Record<string, unknown>> }>(responseText);
+            const images = (parsed?.data ?? [])
+                .map((item) => ({
+                    url: typeof item.url === "string" ? item.url : undefined,
+                    b64Json: typeof item.b64_json === "string" ? item.b64_json : undefined,
+                    revisedPrompt: typeof item.revised_prompt === "string" ? item.revised_prompt : undefined,
+                    mimeType: typeof item.b64_json === "string" ? "image/png" : undefined,
+                }))
+                .filter((item) => item.url || item.b64Json);
+            if (!images.length) {
+                throw HttpErrorFactory.badRequest("Images API 响应中没有图片数据");
+            }
+
+            return {
+                images,
+                rawResponse: {
+                    imageCount: images.length,
+                    apiMode: "images",
+                },
+                rawRequest: body,
+                baseURL: this.baseURL,
+            };
+        } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError") {
+                throw new RetryableError("图像生成请求超时");
+            }
+            throw error;
+        } finally {
+            clearTimeout(timeoutId);
+        }
     }
 
-    private async resolveReferenceImage(options: GenerateOpenAIImageOptions) {
-        if (options.referenceImage?.blob) {
-            return this.resolveProvidedImage(options.referenceImage);
-        }
-
-        const url = options.referenceImage?.url || options.referenceImageUrl;
-        if (!url) {
-            throw HttpErrorFactory.badRequest("图生图需要提供参考图");
-        }
-
-        return this.downloadReferenceImage(url, options.maxReferenceImageBytes);
+    private async resolveReferenceImages(images: ReferenceImageInput[], maxBytes = MAX_REFERENCE_IMAGE_BYTES) {
+        const uniqueImages = dedupeReferenceImages(images);
+        return Promise.all(uniqueImages.map((image) => this.resolveAuxiliaryImage(image, maxBytes)));
     }
 
     private resolveProvidedImage(image: ReferenceImageInput) {
@@ -477,7 +281,7 @@ export class OpenAIImageClient {
         };
     }
 
-    private async resolveAuxiliaryImage(image: ReferenceImageInput, maxBytes?: number) {
+    private async resolveAuxiliaryImage(image: ReferenceImageInput, maxBytes: number) {
         if (image.blob) return this.resolveProvidedImage(image);
         if (image.url) return this.downloadReferenceImage(image.url, maxBytes);
         throw HttpErrorFactory.badRequest("图像文件不存在或无法读取");
@@ -489,7 +293,7 @@ export class OpenAIImageClient {
         return `data:${reference.mimeType};base64,${base64}`;
     }
 
-    private async downloadReferenceImage(url: string, maxBytes = MAX_REFERENCE_IMAGE_BYTES) {
+    private async downloadReferenceImage(url: string, maxBytes: number) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
 
@@ -499,11 +303,9 @@ export class OpenAIImageClient {
 
             for (let redirectCount = 0; redirectCount <= MAX_REFERENCE_REDIRECTS; redirectCount++) {
                 response = await downloadPublicHttpUrl(currentUrl, maxBytes, controller.signal);
-
                 if (![301, 302, 303, 307, 308].includes(response.status)) {
                     break;
                 }
-
                 const location = response.headers.location;
                 if (!location) {
                     throw HttpErrorFactory.badRequest("参考图重定向地址无效");
@@ -515,7 +317,6 @@ export class OpenAIImageClient {
             if (!response) {
                 throw HttpErrorFactory.badRequest("参考图重定向次数过多");
             }
-
             if (!response.ok) {
                 throw HttpErrorFactory.badRequest(`参考图下载失败，状态码 ${response.status}`);
             }
@@ -553,6 +354,7 @@ interface PublicHttpUrl {
 interface DownloadedImageResponse {
     url: URL;
     status: number;
+    ok: boolean;
     headers: Record<string, string>;
     buffer: Buffer;
 }
@@ -623,6 +425,7 @@ async function downloadPublicHttpUrl(raw: string, maxBytes: number, signal: Abor
                     resolve({
                         url: safe.url,
                         status: res.statusCode ?? 0,
+                        ok: Boolean(res.statusCode && res.statusCode >= 200 && res.statusCode < 300),
                         headers: normalizeHeaders(res.headers),
                         buffer: Buffer.concat(chunks),
                     });
@@ -676,7 +479,6 @@ function isPrivateOrReservedIpv4(address: string): boolean {
         return true;
     }
     const [a, b] = parts;
-
     return (
         a === 0 ||
         a === 10 ||
@@ -697,12 +499,11 @@ function classifyHttpError(status: number, attempt: number, responseText?: strin
     const prefix = attempt > 0 ? `(重试 ${attempt} 次后) ` : "";
     const detail = extractErrorMessage(responseText);
     const suffix = detail ? `：${detail}` : "";
-
     switch (status) {
         case 400:
             return HttpErrorFactory.badRequest(`${prefix}请求参数有误，请检查模型、尺寸、质量和提示词${suffix}`);
         case 401:
-            return HttpErrorFactory.badRequest(`${prefix}API Key 无效或已过期，请检查模型配置`);
+            return HttpErrorFactory.badRequest(`${prefix}API Key 无效或已过期，请检查模型接入点`);
         case 403:
             return HttpErrorFactory.badRequest(`${prefix}API Key 无权限访问该模型`);
         case 429:
@@ -732,7 +533,7 @@ function normalizeBaseURL(raw: string): string {
         }
         return trimmed;
     } catch {
-        throw HttpErrorFactory.badRequest("图片模型 baseURL 配置无效");
+        throw HttpErrorFactory.badRequest("图片模型 Base URL 配置无效");
     }
 }
 
@@ -740,21 +541,11 @@ function removeUndefined<T extends Record<string, unknown>>(value: T) {
     return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
-function appendFormValue(formData: FormData, key: string, value: unknown) {
-    if (value === undefined || value === null || value === "") return;
-    formData.append(key, String(value));
-}
-
-function isDalleModel(model: string) {
-    return model.toLowerCase().startsWith("dall-e");
-}
-
 function normalizeImageMimeType(raw: string | null | undefined, url: string) {
     const mimeType = raw?.split(";")[0]?.trim().toLowerCase();
     if (mimeType && ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(mimeType)) {
         return mimeType === "image/jpg" ? "image/jpeg" : mimeType;
     }
-
     const lowerUrl = url.toLowerCase();
     if (lowerUrl.includes(".png")) return "image/png";
     if (lowerUrl.includes(".webp")) return "image/webp";
@@ -788,7 +579,6 @@ function extractResponsesImages(response: OpenAIResponsesResponse | undefined): 
     const images: GeneratedImageRecord[] = [];
     const walk = (value: unknown) => {
         if (!value || typeof value !== "object") return;
-
         if (Array.isArray(value)) {
             value.forEach(walk);
             return;
@@ -799,7 +589,6 @@ function extractResponsesImages(response: OpenAIResponsesResponse | undefined): 
         const result = typeof item.result === "string" ? item.result : undefined;
         const b64Json = typeof item.b64_json === "string" ? item.b64_json : undefined;
         const url = typeof item.url === "string" ? item.url : undefined;
-
         if ((type === "image_generation_call" || type.includes("image")) && (result || b64Json || url)) {
             images.push({
                 url,
@@ -811,7 +600,6 @@ function extractResponsesImages(response: OpenAIResponsesResponse | undefined): 
 
         Object.values(item).forEach(walk);
     };
-
     walk(response?.output);
     return images;
 }

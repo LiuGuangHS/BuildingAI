@@ -18,13 +18,14 @@ export class VideoModelEndpointDto {
     name: string;
 
     @IsString()
-    @Length(1, 500)
-    baseUrl: string;
+    @Length(1, 80)
+    @IsOptional()
+    secretId?: string;
 
     @IsString()
-    @Length(1, 4096)
+    @Length(1, 500)
     @IsOptional()
-    apiKey?: string;
+    baseUrlOverride?: string;
 
     @Transform(({ value }) => (value === undefined ? value : value === "true" || value === true))
     @IsBoolean()

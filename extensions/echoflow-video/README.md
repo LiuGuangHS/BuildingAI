@@ -1,6 +1,6 @@
 # AI视频工作台
 
-面向创作者的 BuildingAI AI 视频生成插件。当前按固定 P0 模型目录接入 Seedance、Kling 和 HappyHorse 视频能力；管理员不配置供应商，只为每个固定模型维护一组或多组 `Base URL + API Key` 接入点。
+面向创作者的 BuildingAI AI 视频生成插件。当前按固定 P0 模型目录接入 Seedance、Kling 和 HappyHorse 视频能力；管理员不配置供应商，只为每个固定模型维护一组或多组主站 Secret 接入点。
 
 插件定位是“用户视频创作台 + 管理员视频运营台”：用户端只做生成、历史和结果查看；管理员端负责模型接入点、计费、模板、风控和任务运维。
 
@@ -10,7 +10,7 @@
 - 当前模型体系：固定 P0 模型目录 + 模型级接入点
 - 当前边界：核心通用视频工作台，暂不包含脚本、分镜、TTS、BGM、字幕和多片段合成
 - 已有能力：插件实体、Web/Console 双入口、双 Controller、双 HTTP client、前端上传、插件扣费、任务历史、固定 P0 视频模型目录、模型级多接入点配置、计费规则、模板预设、提示词优化、优化模型选择、按对话 token 计费、素材元数据、基础风控、批量运维、任务备注、状态时间线、失败分类、配置审计列表、健康统计、短视频制作预留入口、Webhook Secret 和异步终态加锁写回
-- 下一目标：使用真实 API Key 完成 Seedance、Kling、HappyHorse P0 模型端到端联调，并验证提示词优化到生成的完整体验
+- 下一目标：使用真实主站 Secret 完成 Seedance、Kling、HappyHorse P0 模型端到端联调，并验证提示词优化到生成的完整体验
 - 2026-06-14 审查结论：用户端/管理端边界已按 Web API、Console API、Web service、Console service 分离；通用工作台功能主干已完成，剩余工作集中在真实联调、生产化队列/缓存/E2E、平台 Secret 绑定和短视频独立页面
 - 2026-06-15 审查结论：当前仍按未上线首版 `0.0.1` 收口，所有表结构、默认配置和初始化逻辑合并进首版 Upgrade；已补齐文件归属校验、计费幂等、模型删除保护、baseURL 校验和提示词优化幂等状态保护，发布前仍需做真实供应商 smoke。
 - 2026-06-16 审查修复：首版 Upgrade 的 PostgreSQL 参数已显式类型转换，避免空库安装时 `could not determine data type of parameter`；提示词优化模型校验改为复用主系统 `AiPublicModule` / `PublicAiModelService`，不再直接注入主系统模型仓库。
@@ -58,7 +58,7 @@ extensions/echoflow-video/
 
 - `GenerationService` 编排任务，按 `model -> endpoint -> submitPath/pollPath` 提交与轮询
 - 固定模型目录在代码中维护模型能力、协议路径、默认参数和外部模型 ID
-- `VideoModelConfig.endpoints` 保存每个模型的一组或多组 `Base URL + API Key`，用户端只展示启用且已有可用接入点的模型
+- `VideoModelConfig.endpoints` 保存每个模型的一组或多组主站 Secret 引用，用户端只展示启用且已有可用接入点的模型
 - 任务记录保存 provider、taskId、modelConfigId、模型快照、计费快照、raw request/response 摘要和失败原因
 - 插件业务密钥不放 `.env`，优先走 Console 配置或平台 Secret
 
@@ -91,8 +91,8 @@ extensions/echoflow-video/
 
 - 固定 P0 视频模型由插件内置目录提供，不在 Console 手工新增或删除模型协议
 - Console 只调整展示名、说明、启用状态、用户可见性、排序、默认参数和接入点
-- 每个模型可配置多组接入点：名称、Base URL、API Key、启用状态、优先级、超时和重试
-- 生成时选择该模型优先级最高且已启用、有 API Key 的接入点
+- 每个模型可配置多组接入点：名称、主站 Secret、可选 Base URL 覆盖、启用状态、优先级、超时和重试
+- 生成时选择该模型优先级最高且已启用、已绑定主站 Secret 的接入点
 - 输入素材要求、能力类型、时长范围、分辨率列表和比例列表来自内置模型定义，避免管理员误填导致提交协议漂移
 
 ### 计费与风控
@@ -118,15 +118,15 @@ extensions/echoflow-video/
 
 `/extension/echoflow-video/console/models`
 
-插件不要求管理员配置供应商，也不从环境变量读取业务 API Key。每个固定模型可以维护多组接入点，适合官方渠道、代理渠道、私有网关或备用网关并存。运行时按模型选择启用、优先级最高且已有 API Key 的接入点。
+插件不要求管理员配置供应商，也不从环境变量读取业务 API Key。每个固定模型可以维护多组接入点，适合官方渠道、代理渠道、私有网关或备用网关并存。运行时按模型选择启用、优先级最高且已绑定主站 Secret 的接入点。
 
 ### 模型接入点字段
 
 | 字段 | 说明 |
 |------|------|
 | 名称 | 管理员识别用，例如官方、备用、代理网关 |
-| Base URL | 兼容视频网关地址；必须是公开可访问的 `http(s)` 地址，禁止本机、内网和带凭据 URL |
-| API Key | 后端加密保存，不回显明文 |
+| 主站 Secret ID | 在主站密钥管理中创建，字段包含 `apiKey/api_key`，可选 `baseURL/baseUrl/base_url` |
+| Base URL 覆盖 | 可选；留空时读取主站 Secret 中的 baseURL 字段 |
 | 优先级 | 数字越小越优先；同一模型可配置多组备用接入点 |
 | 请求超时 | 提交任务和轮询状态的单次请求超时 |
 | 测试超时 | Console 连接测试请求超时 |
@@ -136,7 +136,7 @@ extensions/echoflow-video/
 
 ### 优化与回调配置
 
-`/extension/echoflow-video/console/config` 只保留提示词优化、Webhook Secret 和旧兼容配置：
+`/extension/echoflow-video/console/config` 只保留提示词优化和 Webhook Secret：
 
 | 字段 | 默认值 | 说明 |
 |------|--------|------|
@@ -152,7 +152,7 @@ extensions/echoflow-video/
 
 1. 进入 `/extension/echoflow-video/console/models`
 2. 选择一个固定模型，确认启用、用户可见和默认参数
-3. 为该模型新增至少一个接入点，填写 Base URL、API Key、超时、重试和优先级
+3. 为该模型新增至少一个接入点，选择主站 Secret，按需填写 Base URL 覆盖、超时、重试和优先级
 4. 点击接入点测试，确认鉴权和网关可达
 5. 按需进入 `/extension/echoflow-video/console/config` 配置提示词优化模型池和 Webhook Secret
 6. 在用户端提交测试任务，到 Console 历史页或管理首页检查任务状态、扣费状态和健康统计
@@ -161,8 +161,8 @@ extensions/echoflow-video/
 
 | 现象 | 优先检查 |
 |------|----------|
-| 用户端看不到模型 | 模型是否启用、用户可见，且至少有一个启用并配置 API Key 的接入点 |
-| 接入点测试失败 | API Key 是否有效，Base URL 是否可访问，测试超时是否过短 |
+| 用户端看不到模型 | 模型是否启用、用户可见，且至少有一个启用并绑定主站 Secret 的接入点 |
+| 接入点测试失败 | 主站 Secret 是否包含有效 `apiKey/api_key`，baseURL 是否可访问，测试超时是否过短 |
 | 任务一直处理中 | 上游 taskId 是否存在，批量刷新是否可更新状态，轮询请求是否超时；可在 Console 执行超时扫描 |
 | Webhook 无效 | 回调 URL 是否正确，`x-webhook-secret` 是否与 Console 配置一致 |
 | 提示词优化使用本地规则 | Console 未配置主站 AI 模型 ID，或主站模型/密钥不可用 |

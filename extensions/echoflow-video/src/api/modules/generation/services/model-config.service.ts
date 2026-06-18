@@ -1,12 +1,11 @@
 import { BaseService } from "@buildingai/base";
+import { SecretService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { maskSensitiveValue } from "@buildingai/utils";
 import { Injectable } from "@nestjs/common";
 
-import { encryptApiKey, decryptApiKey, isEncrypted } from "../../../common/crypto/encryption";
 import {
     VideoModelConfig,
     type VideoModelCapabilities,
@@ -24,6 +23,7 @@ import {
     getBuiltInVideoModel,
     type BuiltInVideoModelConfig,
 } from "./video-model-catalog";
+import { defaultHappyHorseClientOptions } from "./happyhorse-client";
 
 export interface ResolvedVideoModelConfig {
     id?: string;
@@ -44,9 +44,12 @@ export interface ResolvedVideoModelConfig {
 
 @Injectable()
 export class ModelConfigService extends BaseService<VideoModelConfig> {
+    private schemaReadyPromise?: Promise<void>;
+
     constructor(
         @InjectRepository(VideoModelConfig)
         private readonly modelConfigRepository: Repository<VideoModelConfig>,
+        private readonly secretService: SecretService,
     ) {
         super(modelConfigRepository);
     }
@@ -133,6 +136,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     }
 
     async findByIdOrFail(id: string) {
+        await this.ensureRuntimeSchema();
         const config = await this.modelConfigRepository.findOne({
             where: { id } as FindOptionsWhere<VideoModelConfig>,
         });
@@ -160,12 +164,9 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         this.assertSupportedModelConfig(config.model);
         const resolved = this.toResolvedConfig(config);
         const [endpoint] = this.normalizeEndpointConfigs([endpointDto], config.endpoints ?? [], true);
-        const apiKey = this.decryptEndpointApiKey(endpoint);
-        if (!apiKey) {
-            throw HttpErrorFactory.badRequest("请先填写接入点 API Key");
-        }
+        const credential = await this.resolveEndpointCredential(endpoint);
         const { VideoGatewayClient } = await import("./video-gateway-client");
-        await new VideoGatewayClient(resolved, endpoint, apiKey).testConnection();
+        await new VideoGatewayClient(resolved, endpoint, credential.apiKey, credential.baseUrl).testConnection();
         return { success: true, message: "接入点配置可用" };
     }
 
@@ -176,18 +177,37 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
 
     pickRuntimeEndpoint(config: ResolvedVideoModelConfig): VideoModelEndpoint {
         const endpoint = (config.endpoints ?? [])
-            .filter((item) => item.enabled && this.decryptEndpointApiKey(item))
+            .filter((item) => item.enabled && item.secretId)
             .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0))[0];
         if (!endpoint) {
-            throw HttpErrorFactory.badRequest(`模型 ${config.displayName} 未配置可用 Base URL / API Key`);
+            throw HttpErrorFactory.badRequest(`模型 ${config.displayName} 未绑定可用主站密钥`);
         }
         return endpoint;
     }
 
-    decryptEndpointApiKey(endpoint: VideoModelEndpoint): string {
-        const value = endpoint.apiKey ?? "";
-        if (!value) return "";
-        return isEncrypted(value) ? decryptApiKey(value) : value;
+    async resolveEndpointCredential(endpoint: VideoModelEndpoint) {
+        if (!endpoint.secretId) {
+            throw HttpErrorFactory.badRequest("请先为接入点选择主站密钥");
+        }
+        const secretConfig = await this.secretService.getConfigKeyValuePairs(endpoint.secretId);
+        const values = this.flattenSecretConfig(secretConfig);
+        const apiKey = this.pickFirst(values, ["apiKey", "api_key", "API_KEY", "key", "token"]);
+        const baseUrl = endpoint.baseUrlOverride ||
+            this.pickFirst(values, ["baseURL", "baseUrl", "base_url", "BASE_URL", "endpoint"]) ||
+            defaultHappyHorseClientOptions.baseUrl;
+        if (!apiKey) {
+            throw HttpErrorFactory.badRequest("主站密钥中未找到 apiKey/api_key 字段");
+        }
+        return {
+            apiKey,
+            baseUrl: this.normalizeBaseUrl(baseUrl),
+        };
+    }
+
+    async resolveRuntimeEndpoint(config: ResolvedVideoModelConfig) {
+        const endpoint = this.pickRuntimeEndpoint(config);
+        const credential = await this.resolveEndpointCredential(endpoint);
+        return { endpoint, ...credential };
     }
 
     toWebOption(config: ResolvedVideoModelConfig | VideoModelConfig) {
@@ -206,6 +226,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     }
 
     private async ensureDefaultModelConfigs(): Promise<VideoModelConfig[]> {
+        await this.ensureRuntimeSchema();
         const existing = await this.modelConfigRepository.find({
             where: {} as FindOptionsWhere<VideoModelConfig>,
         });
@@ -230,6 +251,17 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         );
         const createdItems = Array.isArray(created) ? created : [created];
         return [...supportedExisting, ...createdItems];
+    }
+
+    private async ensureRuntimeSchema(): Promise<void> {
+        if (!this.modelConfigRepository.manager?.query) {
+            return;
+        }
+        this.schemaReadyPromise ??= this.modelConfigRepository.manager.query(`
+            ALTER TABLE "echoflow_video"."video_model_config"
+            ADD COLUMN IF NOT EXISTS "endpoints" jsonb NOT NULL DEFAULT '[]'
+        `);
+        await this.schemaReadyPromise;
     }
 
     private normalizeOperationalConfig(
@@ -326,16 +358,15 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         const normalized = (endpoints ?? []).map((endpoint, index) => {
             const id = endpoint.id?.trim() || `endpoint-${index + 1}`;
             const previous = byId.get(id);
-            const apiKey = endpoint.apiKey?.trim()
-                ? encryptPlainKeys && !isEncrypted(endpoint.apiKey)
-                    ? encryptApiKey(endpoint.apiKey.trim())
-                    : endpoint.apiKey.trim()
-                : previous?.apiKey;
+            void encryptPlainKeys;
             return {
                 id,
                 name: endpoint.name?.trim().slice(0, 80) || `接入点 ${index + 1}`,
-                baseUrl: this.normalizeBaseUrl(endpoint.baseUrl),
-                apiKey,
+                secretId: endpoint.secretId?.trim() || previous?.secretId,
+                secretName: endpoint.secretName?.trim() || previous?.secretName,
+                baseUrlOverride: endpoint.baseUrlOverride
+                    ? this.normalizeBaseUrl(endpoint.baseUrlOverride)
+                    : previous?.baseUrlOverride,
                 enabled: endpoint.enabled ?? true,
                 priority: this.normalizeInteger(endpoint.priority ?? 100 - index, 0, 100000, "接入点优先级"),
                 requestTimeoutMs: this.normalizeInteger(endpoint.requestTimeoutMs ?? 120_000, 3000, 300000, "请求超时"),
@@ -352,18 +383,11 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     }
 
     private maskEndpoints(endpoints: VideoModelEndpoint[]): VideoModelEndpoint[] {
-        return endpoints.map((endpoint) => {
-            const plainKey = this.decryptEndpointApiKey(endpoint);
-            return {
-                ...endpoint,
-                apiKey: undefined,
-                apiKeyMasked: plainKey ? maskSensitiveValue(plainKey) : "",
-            };
-        });
+        return endpoints.map((endpoint) => ({ ...endpoint }));
     }
 
     private hasUsableEndpoint(config: ResolvedVideoModelConfig): boolean {
-        return (config.endpoints ?? []).some((endpoint) => endpoint.enabled && this.decryptEndpointApiKey(endpoint));
+        return (config.endpoints ?? []).some((endpoint) => endpoint.enabled && endpoint.secretId);
     }
 
     private normalizeBaseUrl(value?: string): string {
@@ -412,6 +436,18 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
             throw HttpErrorFactory.badRequest(`${label}必须是 ${min} 到 ${max} 之间的整数`);
         }
         return value;
+    }
+
+    private flattenSecretConfig(config: Record<string, { value: string; required: boolean }>): Record<string, string> {
+        return Object.fromEntries(Object.entries(config).map(([key, item]) => [key, item.value ?? ""]));
+    }
+
+    private pickFirst(values: Record<string, string>, keys: string[]): string {
+        for (const key of keys) {
+            const value = values[key]?.trim();
+            if (value) return value;
+        }
+        return "";
     }
 
     private assertSupportedModelConfig(model: string) {

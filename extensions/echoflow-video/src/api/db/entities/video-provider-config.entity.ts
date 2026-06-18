@@ -19,24 +19,6 @@ export class VideoProviderConfig {
     @Column({ type: "varchar", length: 50, unique: true, default: "happyhorse" })
     provider: string;
 
-    @Column({ type: "text", comment: "Provider API key" })
-    apiKey: string;
-
-    @Column({ type: "varchar", length: 500, default: "https://api.echoflow.cn", comment: "Provider base URL" })
-    baseUrl: string;
-
-    @Column({ type: "integer", default: 120000, comment: "Submit and poll request timeout in milliseconds" })
-    requestTimeoutMs: number;
-
-    @Column({ type: "integer", default: 15000, comment: "Connectivity test timeout in milliseconds" })
-    testTimeoutMs: number;
-
-    @Column({ type: "integer", default: 2, comment: "Maximum retry count for retryable provider requests" })
-    maxRetries: number;
-
-    @Column({ type: "integer", default: 1000, comment: "Base retry delay in milliseconds" })
-    retryDelayMs: number;
-
     @Column({ type: "text", nullable: true, comment: "Encrypted webhook secret for provider callbacks" })
     webhookSecret?: string;
 
