@@ -24,7 +24,7 @@ export enum VideoGenerationBillingStatus {
     FAILED = "failed",
 }
 
-/** 4 HappyHorse models */
+/** Built-in HappyHorse models kept as constants for the EchoFlow video catalog. */
 export enum HappyHorseModel {
     I2V = "happyhorse-1.0-i2v",
     R2V = "happyhorse-1.0-r2v",
@@ -69,8 +69,8 @@ export class VideoGeneration {
     @Column({ type: "uuid", comment: "Creator user ID" })
     userId: string;
 
-    @Column({ type: "varchar", length: 50, comment: "HappyHorse model identifier" })
-    model: HappyHorseModel;
+    @Column({ type: "varchar", length: 100, comment: "Video model identifier" })
+    model: string;
 
     @Column({ type: "uuid", nullable: true, comment: "Video model config ID" })
     modelConfigId?: string;
@@ -90,7 +90,7 @@ export class VideoGeneration {
     @Column({ type: "varchar", length: 100, nullable: true, comment: "Idempotency key from client" })
     requestKey?: string;
 
-    @Column({ type: "varchar", length: 100, nullable: true, comment: "HappyHorse task ID" })
+    @Column({ type: "varchar", length: 100, nullable: true, comment: "Provider task ID" })
     taskId?: string;
 
     @Column({ type: "text", comment: "Video generation prompt" })
@@ -126,10 +126,10 @@ export class VideoGeneration {
     @Column({ type: "text", nullable: true, comment: "Admin note" })
     adminRemark?: string;
 
-    @Column({ type: "jsonb", nullable: true, comment: "Raw request sent to HappyHorse" })
+    @Column({ type: "jsonb", nullable: true, comment: "Raw request sent to provider" })
     rawRequest?: Record<string, unknown>;
 
-    @Column({ type: "jsonb", nullable: true, comment: "Raw response from HappyHorse" })
+    @Column({ type: "jsonb", nullable: true, comment: "Raw response from provider" })
     rawResponse?: Record<string, unknown>;
 
     @Column({ type: "jsonb", nullable: true, comment: "Billing rule snapshot" })

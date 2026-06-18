@@ -12,7 +12,6 @@ import { HistoryList } from "../components/history-list";
 import { VideoResult } from "../components/video-result";
 import {
     useWebCreateVideoMutation,
-    useWebProviderStatusQuery,
     useWebVideoTemplatesQuery,
     useWebVideoListQuery,
     useWebVideoModelOptionsQuery,
@@ -29,7 +28,6 @@ export default function AIVideoIndexPage() {
 
     const { data: models = [], isLoading: modelsLoading } = useWebVideoModelOptionsQuery();
     const { data: templateData } = useWebVideoTemplatesQuery({ page: 1, pageSize: 20 });
-    const { data: providerStatus } = useWebProviderStatusQuery();
     const {
         data: historyData,
         isLoading: historyLoading,
@@ -37,10 +35,8 @@ export default function AIVideoIndexPage() {
 
     const createMutation = useWebCreateVideoMutation();
     const { data: currentGeneration } = useWebVideoStatusQuery(currentId);
-    const disabledReason = providerStatus && !providerStatus.available
-        ? providerStatus.configured
-            ? "管理员已暂时禁用 HappyHorse 视频服务。"
-            : "管理员尚未配置 HappyHorse 视频服务。"
+    const disabledReason = !modelsLoading && models.length === 0
+        ? "管理员尚未为视频模型配置可用接入点。"
         : undefined;
 
     useEffect(() => {
@@ -106,7 +102,7 @@ export default function AIVideoIndexPage() {
         <div className="min-h-screen space-y-6 p-4 md:p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <Badge variant="secondary" className="mb-2 shadow-sm">HappyHorse Video</Badge>
+                    <Badge variant="secondary" className="mb-2 shadow-sm">EchoFlow Video</Badge>
                     <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight md:text-3xl">
                         <Film className="size-6 text-primary" />
                         AI视频工作台
@@ -119,7 +115,7 @@ export default function AIVideoIndexPage() {
                     <Card>
                         <CardContent className="flex items-center gap-2 p-3">
                             <Sparkles className="size-4 text-primary" />
-                            <span className="text-xs text-muted-foreground">4 种模式</span>
+                            <span className="text-xs text-muted-foreground">{models.length || 9} 个模型</span>
                         </CardContent>
                     </Card>
                     <Card>

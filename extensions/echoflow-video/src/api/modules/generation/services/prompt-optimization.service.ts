@@ -1,6 +1,8 @@
 import { generateText } from "@buildingai/ai-sdk";
+import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants/shared/account-log.constants";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import type { FindOptionsWhere } from "@buildingai/db/typeorm";
+import { AccountLog } from "@buildingai/db/entities";
+import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { ExtensionBillingService, PublicAiModelService } from "@buildingai/extension-sdk";
@@ -41,12 +43,14 @@ export class PromptOptimizationService {
         private readonly billingService: ExtensionBillingService,
         @InjectRepository(VideoPromptOptimization)
         private readonly optimizationRepository: Repository<VideoPromptOptimization>,
+        @InjectRepository(AccountLog)
+        private readonly accountLogRepository: Repository<AccountLog>,
     ) {}
 
     async optimize(dto: OptimizePromptDto, userId?: string): Promise<PromptOptimizationResult> {
         const existing = await this.findExistingRequest(userId, dto.requestKey);
         if (existing) {
-            return this.toResult(existing);
+            return this.returnExistingResult(existing);
         }
 
         const config = await this.providerConfigService.getConsoleConfig();
@@ -56,7 +60,7 @@ export class PromptOptimizationService {
 
         const prompt = this.sanitizeText(dto.prompt, 2000);
         const style = dto.style ?? "cinematic";
-        const modelId = this.resolveOptimizerModelId(
+        const modelId = await this.resolveUsableOptimizerModelId(
             dto.modelId,
             config.promptOptimizerModelId,
             config.promptOptimizerAllowedModelIds,
@@ -69,12 +73,22 @@ export class PromptOptimizationService {
                 source: "local",
                 style,
             };
-            await this.persistOptimizationResult(result, userId, dto.requestKey);
+            const freeRecord = await this.createFreeOptimizationRecord(result, userId, dto.requestKey);
+            if (freeRecord?.reused) {
+                return this.returnExistingResult(freeRecord.record);
+            }
+            await this.persistAiOptimizationResult(freeRecord?.record.id, result);
             return result;
         }
 
+        const pending = await this.createPendingAiRecord(prompt, style, modelId, userId, dto.requestKey);
+        if (pending.reused) {
+            return this.returnExistingResult(pending.record);
+        }
+        const { record } = pending;
+
         try {
-            const result = await this.aiOptimize(modelId, prompt, style, dto, userId, config);
+            const result = await this.aiOptimize(record, modelId, prompt, style, dto, userId, config);
             const response: PromptOptimizationResult = {
                 originalPrompt: prompt,
                 optimizedPrompt: result.optimizedPrompt,
@@ -84,11 +98,17 @@ export class PromptOptimizationService {
                 usage: result.usage,
                 consumedPower: result.consumedPower,
             };
-            await this.persistOptimizationResult(response, userId, dto.requestKey, config);
+            await this.persistAiOptimizationResult(record.id, response);
             return response;
         } catch (error) {
+            if (this.isInsufficientPowerError(error)) {
+                const message = error instanceof Error ? error.message : String(error);
+                await this.markOptimizationFailed(record.id, message);
+                throw error;
+            }
             const warning = error instanceof Error ? error.message : "提示词优化模型调用失败";
             this.logger.warn(`Prompt optimization fell back to local mode: ${warning}`);
+            const refunded = await this.refundOptimizationBilling(record.id, userId, `Echoflow Video 提示词优化失败退款: ${modelId}`);
             const result: PromptOptimizationResult = {
                 originalPrompt: prompt,
                 optimizedPrompt: this.localOptimize(prompt, style, dto),
@@ -96,13 +116,15 @@ export class PromptOptimizationService {
                 style,
                 modelId,
                 warning: "AI 优化模型暂不可用，已使用本地规则优化",
+                consumedPower: 0,
             };
-            await this.persistOptimizationResult(result, userId, dto.requestKey);
+            await this.persistAiOptimizationResult(record.id, result, refunded ? VideoPromptOptimizationBillingStatus.REFUNDED : VideoPromptOptimizationBillingStatus.FREE);
             return result;
         }
     }
 
     private async aiOptimize(
+        record: VideoPromptOptimization,
         modelId: string,
         prompt: string,
         style: PromptOptimizationStyle,
@@ -128,13 +150,12 @@ export class PromptOptimizationService {
             config.promptOptimizerEstimatedTokens ?? 500,
             billingRule,
         );
-        if (
-            config.promptOptimizerBillingEnabled !== false &&
-            userId &&
-            estimatedPower > 0 &&
-            !(await this.billingService.hasSufficientPower(userId, estimatedPower))
-        ) {
-            throw HttpErrorFactory.badRequest("积分不足，请充值后重试");
+        const billingEnabled = config.promptOptimizerBillingEnabled !== false && Boolean(userId) && estimatedPower > 0;
+        if (billingEnabled) {
+            if (!(await this.billingService.hasSufficientPower(userId!, estimatedPower))) {
+                throw HttpErrorFactory.badRequest("积分不足，请充值后重试");
+            }
+            await this.deductOptimizationBilling(record.id, userId!, estimatedPower, modelId);
         }
 
         const system = [
@@ -162,14 +183,6 @@ export class PromptOptimizationService {
         });
 
         const usage = await this.resolveUsage(result, `${system}\n${userPrompt}`, result.text);
-        const consumedPower =
-            config.promptOptimizerBillingEnabled === false || !userId
-                ? 0
-                : this.calculateConsumedPower(
-                    usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-                    billingRule,
-                );
-
         return {
             optimizedPrompt: this.normalizeOptimizedPrompt(result.text, prompt),
             usage: {
@@ -177,7 +190,7 @@ export class PromptOptimizationService {
                 outputTokens: usage.outputTokens,
                 totalTokens: usage.totalTokens,
             },
-            consumedPower,
+            consumedPower: billingEnabled ? estimatedPower : 0,
         };
     }
 
@@ -191,6 +204,7 @@ export class PromptOptimizationService {
             modelIds.map(async (id) => {
                 try {
                     const model = await this.aiModelService.getModelInfo(id);
+                    this.assertModelUsable(model, id === config.promptOptimizerModelId ? "默认提示词优化模型" : "提示词优化模型");
                     return {
                         id: model.id,
                         name: model.name,
@@ -205,11 +219,16 @@ export class PromptOptimizationService {
             }),
         );
 
+        const usableModels = models.filter((model): model is NonNullable<typeof model> => Boolean(model));
+        const defaultModelId = usableModels.some((model) => model.id === config.promptOptimizerModelId)
+            ? config.promptOptimizerModelId
+            : usableModels[0]?.id;
+
         return {
             enabled: config.promptOptimizerEnabled !== false,
-            defaultModelId: config.promptOptimizerModelId || undefined,
+            defaultModelId,
             billingEnabled: config.promptOptimizerBillingEnabled !== false,
-            models: models.filter(Boolean),
+            models: usableModels,
         };
     }
 
@@ -271,20 +290,31 @@ export class PromptOptimizationService {
         return cleaned || fallback;
     }
 
-    private resolveOptimizerModelId(
+    private async resolveUsableOptimizerModelId(
         requestedModelId: string | undefined,
         defaultModelId: string | undefined,
         allowedModelIds: string[] | undefined,
-    ): string | undefined {
+    ): Promise<string | undefined> {
         const allowed = this.resolveAllowedModelIds(defaultModelId, allowedModelIds);
         const requested = requestedModelId?.trim();
         if (requested) {
             if (!allowed.includes(requested)) {
                 throw HttpErrorFactory.badRequest("所选提示词优化模型未在管理后台开放");
             }
+            await this.assertOptimizerModelUsable(requested, "提示词优化模型");
             return requested;
         }
-        return defaultModelId?.trim() || allowed[0];
+
+        for (const modelId of allowed) {
+            try {
+                await this.assertOptimizerModelUsable(modelId, modelId === defaultModelId?.trim() ? "默认提示词优化模型" : "提示词优化模型");
+                return modelId;
+            } catch (error) {
+                this.logger.warn(`Prompt optimizer model ${modelId} is not usable, trying next model: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+
+        return undefined;
     }
 
     private resolveAllowedModelIds(
@@ -365,6 +395,20 @@ export class PromptOptimizationService {
         };
     }
 
+    private async assertOptimizerModelUsable(modelId: string, label: string) {
+        const model = await this.aiModelService.getModelInfo(modelId);
+        this.assertModelUsable(model, label);
+    }
+
+    private assertModelUsable(model: { modelType?: string; isActive?: boolean; provider?: { isActive?: boolean } }, label: string) {
+        if (model.isActive === false || model.provider?.isActive === false) {
+            throw HttpErrorFactory.badRequest(`${label}未启用或供应商未启用`);
+        }
+        if (model.modelType !== "llm") {
+            throw HttpErrorFactory.badRequest(`${label}必须选择 LLM 文本模型`);
+        }
+    }
+
     private sanitizeText(text: string, maxLength: number): string {
         return text.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().slice(0, maxLength);
     }
@@ -389,54 +433,212 @@ export class PromptOptimizationService {
         };
     }
 
-    private async persistOptimizationResult(
+    private returnExistingResult(record: VideoPromptOptimization): PromptOptimizationResult {
+        if (record.billingStatus === VideoPromptOptimizationBillingStatus.PENDING) {
+            throw HttpErrorFactory.badRequest("提示词优化仍在处理中，请稍后重试");
+        }
+        if (record.billingStatus === VideoPromptOptimizationBillingStatus.FAILED) {
+            throw HttpErrorFactory.badRequest(record.warning || "提示词优化失败，请重新提交");
+        }
+        return this.toResult(record);
+    }
+
+    private async createPendingAiRecord(
+        prompt: string,
+        style: PromptOptimizationStyle,
+        modelId: string,
+        userId?: string,
+        requestKey?: string,
+    ) {
+        if (!userId) {
+            return {
+                record: this.optimizationRepository.create({
+                    userId: "",
+                    requestKey,
+                    originalPrompt: prompt,
+                    optimizedPrompt: prompt,
+                    source: "ai",
+                    style,
+                    modelId,
+                    consumedPower: 0,
+                    billingStatus: VideoPromptOptimizationBillingStatus.FREE,
+                }),
+                reused: false,
+            };
+        }
+
+        try {
+            const record = await this.optimizationRepository.save(
+                this.optimizationRepository.create({
+                    userId,
+                    requestKey,
+                    originalPrompt: prompt,
+                    optimizedPrompt: prompt,
+                    source: "ai",
+                    style,
+                    modelId,
+                    consumedPower: 0,
+                    billingStatus: VideoPromptOptimizationBillingStatus.PENDING,
+                }),
+            );
+            return { record, reused: false };
+        } catch (error) {
+            if (requestKey && this.isUniqueConstraintError(error)) {
+                const existing = await this.findExistingRequest(userId, requestKey);
+                if (existing) return { record: existing, reused: true };
+            }
+            throw error;
+        }
+    }
+
+    private async createFreeOptimizationRecord(
         result: PromptOptimizationResult,
         userId?: string,
         requestKey?: string,
-        config?: Awaited<ReturnType<ProviderConfigService["getConsoleConfig"]>>,
     ) {
-        if (!userId) return;
+        if (!userId) return undefined;
 
-        const record = this.optimizationRepository.create({
-            userId,
-            requestKey,
-            originalPrompt: result.originalPrompt,
-            optimizedPrompt: result.optimizedPrompt,
-            source: result.source,
-            style: result.style,
-            modelId: result.modelId,
-            usage: result.usage,
-            consumedPower: result.consumedPower ?? 0,
-            billingStatus:
-                result.consumedPower && result.consumedPower > 0
-                    ? VideoPromptOptimizationBillingStatus.FAILED
-                    : VideoPromptOptimizationBillingStatus.FREE,
-            warning: result.warning,
-        });
-
-        if (!result.consumedPower || result.consumedPower <= 0 || config?.promptOptimizerBillingEnabled === false) {
-            await this.optimizationRepository.save({
-                ...record,
-                consumedPower: 0,
-                billingStatus: VideoPromptOptimizationBillingStatus.FREE,
-            });
-            result.consumedPower = 0;
-            return;
+        try {
+            const record = await this.optimizationRepository.save(
+                this.optimizationRepository.create({
+                    userId,
+                    requestKey,
+                    originalPrompt: result.originalPrompt,
+                    optimizedPrompt: result.optimizedPrompt,
+                    source: result.source,
+                    style: result.style,
+                    modelId: result.modelId,
+                    usage: result.usage,
+                    consumedPower: 0,
+                    billingStatus: VideoPromptOptimizationBillingStatus.FREE,
+                    warning: result.warning,
+                }),
+            );
+            return { record, reused: false };
+        } catch (error) {
+            if (requestKey && this.isUniqueConstraintError(error)) {
+                const existing = await this.findExistingRequest(userId, requestKey);
+                if (existing) return { record: existing, reused: true };
+            }
+            throw error;
         }
+    }
 
-        const saved = await this.optimizationRepository.manager.transaction(async (manager) => {
-            const persisted = await manager.save(VideoPromptOptimization, record);
+    private async persistAiOptimizationResult(
+        recordId: string | undefined,
+        result: PromptOptimizationResult,
+        fallbackBillingStatus?: VideoPromptOptimizationBillingStatus,
+    ) {
+        if (!recordId) return;
+        const existing = await this.optimizationRepository.findOne({
+            where: { id: recordId } as FindOptionsWhere<VideoPromptOptimization>,
+        });
+        if (!existing) return;
+
+        existing.optimizedPrompt = result.optimizedPrompt;
+        existing.source = result.source;
+        existing.modelId = result.modelId;
+        existing.usage = result.usage;
+        existing.warning = result.warning;
+        if (result.source === "ai") {
+            existing.consumedPower = result.consumedPower ?? existing.consumedPower ?? 0;
+            existing.billingStatus = existing.consumedPower > 0
+                ? VideoPromptOptimizationBillingStatus.DEDUCTED
+                : VideoPromptOptimizationBillingStatus.FREE;
+        } else {
+            existing.consumedPower = 0;
+            existing.billingStatus = fallbackBillingStatus ?? VideoPromptOptimizationBillingStatus.FREE;
+        }
+        await this.optimizationRepository.save(existing);
+    }
+
+    private async deductOptimizationBilling(recordId: string, userId: string, amount: number, modelId: string) {
+        await this.optimizationRepository.manager.transaction(async (manager) => {
+            const locked = await manager.findOne(VideoPromptOptimization, {
+                where: { id: recordId } as FindOptionsWhere<VideoPromptOptimization>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!locked) {
+                throw HttpErrorFactory.notFound("提示词优化记录不存在");
+            }
+            if (locked.billingStatus === VideoPromptOptimizationBillingStatus.DEDUCTED || await this.hasBillingLog(recordId, ACTION.DEC, manager)) {
+                locked.billingStatus = VideoPromptOptimizationBillingStatus.DEDUCTED;
+                locked.consumedPower = locked.consumedPower || amount;
+                await manager.save(VideoPromptOptimization, locked);
+                return;
+            }
+
             await this.billingService.deductUserPower({
                 userId,
-                amount: result.consumedPower ?? 0,
-                remark: `Echoflow Video 提示词优化: ${result.modelId}`,
-                associationNo: persisted.id,
+                amount,
+                remark: `Echoflow Video 提示词优化: ${modelId}`,
+                associationNo: recordId,
                 associationUserId: userId,
             }, manager);
-            persisted.billingStatus = VideoPromptOptimizationBillingStatus.DEDUCTED;
-            return manager.save(VideoPromptOptimization, persisted);
+            locked.billingStatus = VideoPromptOptimizationBillingStatus.DEDUCTED;
+            locked.consumedPower = amount;
+            await manager.save(VideoPromptOptimization, locked);
         });
+    }
 
-        result.consumedPower = saved.consumedPower;
+    private async refundOptimizationBilling(recordId: string | undefined, userId: string | undefined, remark: string) {
+        if (!recordId || !userId) return false;
+        return this.optimizationRepository.manager.transaction(async (manager) => {
+            const locked = await manager.findOne(VideoPromptOptimization, {
+                where: { id: recordId } as FindOptionsWhere<VideoPromptOptimization>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!locked || !locked.consumedPower || locked.consumedPower <= 0) {
+                return false;
+            }
+            const wasDeducted = locked.billingStatus === VideoPromptOptimizationBillingStatus.DEDUCTED || await this.hasBillingLog(recordId, ACTION.DEC, manager);
+            const alreadyRefunded = locked.billingStatus === VideoPromptOptimizationBillingStatus.REFUNDED || await this.hasBillingLog(recordId, ACTION.INC, manager);
+            if (!wasDeducted || alreadyRefunded) {
+                return false;
+            }
+            await this.billingService.addUserPower({
+                userId,
+                amount: locked.consumedPower,
+                remark,
+                associationNo: recordId,
+                associationUserId: userId,
+            }, manager);
+            locked.consumedPower = 0;
+            locked.billingStatus = VideoPromptOptimizationBillingStatus.REFUNDED;
+            await manager.save(VideoPromptOptimization, locked);
+            return true;
+        });
+    }
+
+    private async hasBillingLog(
+        associationNo: string,
+        action: (typeof ACTION)[keyof typeof ACTION],
+        manager?: EntityManager,
+    ) {
+        const repository = manager?.getRepository(AccountLog) ?? this.accountLogRepository;
+        return repository.exists({
+            where: {
+                associationNo,
+                accountType: ACCOUNT_LOG_TYPE.PLUGIN_DEC,
+                action,
+            } as FindOptionsWhere<AccountLog>,
+        });
+    }
+
+    private async markOptimizationFailed(recordId: string, message: string) {
+        await this.optimizationRepository.update(recordId, {
+            billingStatus: VideoPromptOptimizationBillingStatus.FAILED,
+            warning: message,
+        });
+    }
+
+    private isInsufficientPowerError(error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        return message.includes("积分不足");
+    }
+
+    private isUniqueConstraintError(error: unknown) {
+        const code = (error as { code?: string }).code;
+        return code === "23505";
     }
 }

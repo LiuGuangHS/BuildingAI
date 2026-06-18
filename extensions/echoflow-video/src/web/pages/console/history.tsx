@@ -20,7 +20,6 @@ import {
     useVideoListQuery,
 } from "../../services";
 import type { VideoGeneration, VideoGenerationBillingStatus, VideoGenerationStatus } from "../../services/types/generation";
-import { HappyHorseModel } from "../../services/types/generation";
 
 const statusLabel: Record<string, string> = {
     pending: "排队中",
@@ -37,6 +36,11 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "o
 };
 
 const modelLabel: Record<string, string> = {
+    "doubao-seedance-2-0-260128": "Seedance 2.0",
+    "doubao-seedance-1-5-pro-251215": "Seedance 1.5 Pro",
+    "kling-text2video": "可灵文生视频",
+    "kling-image2video": "可灵图生视频",
+    "kling-multi-image2video": "可灵多图参考",
     "happyhorse-1.0-i2v": "图生视频",
     "happyhorse-1.0-r2v": "参考图生视频",
     "happyhorse-1.0-t2v": "文生视频",
@@ -69,7 +73,7 @@ export default function HistoryPage() {
         pageSize: 12,
         keyword: keyword || undefined,
         status: statusFilter !== "all" ? (statusFilter as VideoGenerationStatus) : undefined,
-        model: modelFilter !== "all" ? (modelFilter as HappyHorseModel) : undefined,
+        model: modelFilter !== "all" ? modelFilter : undefined,
         billingStatus: billingFilter !== "all" ? (billingFilter as VideoGenerationBillingStatus) : undefined,
         failureCategory: failureCategory || undefined,
         dateFrom: dateFrom || undefined,
@@ -211,6 +215,11 @@ export default function HistoryPage() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">全部模型</SelectItem>
+                                <SelectItem value="doubao-seedance-2-0-260128">Seedance 2.0</SelectItem>
+                                <SelectItem value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</SelectItem>
+                                <SelectItem value="kling-text2video">可灵文生视频</SelectItem>
+                                <SelectItem value="kling-image2video">可灵图生视频</SelectItem>
+                                <SelectItem value="kling-multi-image2video">可灵多图参考</SelectItem>
                                 <SelectItem value="happyhorse-1.0-t2v">文生视频</SelectItem>
                                 <SelectItem value="happyhorse-1.0-i2v">图生视频</SelectItem>
                                 <SelectItem value="happyhorse-1.0-r2v">参考图生视频</SelectItem>

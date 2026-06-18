@@ -17,8 +17,12 @@ const mockAuditRepo = {
     find: jest.fn(),
 };
 
+const mockAiModelService = {
+    getModelInfo: jest.fn(),
+};
+
 function makeService(): ProviderConfigService {
-    return new ProviderConfigService(mockConfigRepo as any, mockAuditRepo as any);
+    return new ProviderConfigService(mockConfigRepo as any, mockAuditRepo as any, mockAiModelService as any);
 }
 
 function makeConfig(overrides: Partial<VideoProviderConfig> = {}): VideoProviderConfig {
@@ -47,6 +51,12 @@ function makeConfig(overrides: Partial<VideoProviderConfig> = {}): VideoProvider
 
 beforeEach(() => {
     jest.clearAllMocks();
+    mockAiModelService.getModelInfo.mockResolvedValue({
+        id: "11111111-1111-4111-8111-111111111111",
+        modelType: "llm",
+        isActive: true,
+        provider: { isActive: true },
+    });
 });
 
 describe("ProviderConfigService", () => {
@@ -97,5 +107,53 @@ describe("ProviderConfigService", () => {
                 }),
             }),
         );
+    });
+
+    it("rejects inactive prompt optimizer models on update", async () => {
+        mockConfigRepo.findOne.mockResolvedValue(makeConfig());
+        mockAiModelService.getModelInfo.mockResolvedValue({
+            id: "11111111-1111-4111-8111-111111111111",
+            modelType: "llm",
+            isActive: false,
+            provider: { isActive: true },
+        });
+
+        await expect(
+            makeService().updateConsoleConfig({
+                promptOptimizerModelId: "11111111-1111-4111-8111-111111111111",
+            }),
+        ).rejects.toThrow("默认提示词优化模型未启用或供应商未启用");
+    });
+
+    it("rejects non-LLM prompt optimizer model pool entries", async () => {
+        mockConfigRepo.findOne.mockResolvedValue(makeConfig());
+        mockAiModelService.getModelInfo.mockResolvedValue({
+            id: "22222222-2222-4222-8222-222222222222",
+            modelType: "text-to-image",
+            isActive: true,
+            provider: { isActive: true },
+        });
+
+        await expect(
+            makeService().updateConsoleConfig({
+                promptOptimizerAllowedModelIds: ["22222222-2222-4222-8222-222222222222"],
+            }),
+        ).rejects.toThrow("提示词优化模型池必须选择 LLM 文本模型");
+    });
+
+    it("rejects invalid runtime numeric config even when service is called directly", async () => {
+        mockConfigRepo.findOne.mockResolvedValue(makeConfig());
+
+        await expect(
+            makeService().updateConsoleConfig({ maxRetries: 99 }),
+        ).rejects.toThrow("重试次数必须是 0 到 5 之间的整数");
+    });
+
+    it("rejects private HappyHorse base URLs", async () => {
+        mockConfigRepo.findOne.mockResolvedValue(makeConfig());
+
+        await expect(
+            makeService().updateConsoleConfig({ baseUrl: "http://127.0.0.1:8080" }),
+        ).rejects.toThrow("本机或内网");
     });
 });

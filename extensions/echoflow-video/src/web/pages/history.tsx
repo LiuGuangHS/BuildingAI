@@ -11,7 +11,6 @@ import { ErrorState } from "../components/error-state";
 import { HistoryList } from "../components/history-list";
 import { useWebVideoListQuery } from "../services";
 import type { VideoGenerationBillingStatus, VideoGenerationStatus } from "../services/types/generation";
-import { HappyHorseModel } from "../services/types/generation";
 
 export default function WebHistoryPage() {
     useDocumentHead({ title: "我的视频历史 - AI视频工作台" });
@@ -31,7 +30,7 @@ export default function WebHistoryPage() {
         pageSize,
         keyword: keyword || undefined,
         status: statusFilter !== "all" ? (statusFilter as VideoGenerationStatus) : undefined,
-        model: modelFilter !== "all" ? (modelFilter as HappyHorseModel) : undefined,
+        model: modelFilter !== "all" ? modelFilter : undefined,
         billingStatus: billingFilter !== "all" ? (billingFilter as VideoGenerationBillingStatus) : undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
@@ -91,6 +90,11 @@ export default function WebHistoryPage() {
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">全部模型</SelectItem>
+                            <SelectItem value="doubao-seedance-2-0-260128">Seedance 2.0</SelectItem>
+                            <SelectItem value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</SelectItem>
+                            <SelectItem value="kling-text2video">可灵文生视频</SelectItem>
+                            <SelectItem value="kling-image2video">可灵图生视频</SelectItem>
+                            <SelectItem value="kling-multi-image2video">可灵多图参考</SelectItem>
                             <SelectItem value="happyhorse-1.0-t2v">文生视频</SelectItem>
                             <SelectItem value="happyhorse-1.0-i2v">图生视频</SelectItem>
                             <SelectItem value="happyhorse-1.0-r2v">参考图生视频</SelectItem>

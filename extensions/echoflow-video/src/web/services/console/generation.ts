@@ -15,16 +15,8 @@ import type {
 
 export interface VideoHealthStatus {
     status: "ok" | "attention" | string;
-    happyhorse: "healthy" | "disabled" | "unconfigured" | "unavailable" | "unknown" | string;
-    provider: {
-        configured: boolean;
-        enabled: boolean;
-        baseUrl: string;
-        requestTimeoutMs: number;
-        maxRetries: number;
-        webhookSecretConfigured: boolean;
-    };
     enabledModelCount: number;
+    missingEndpointModels?: string[];
     modelCompleteness?: {
         expected: number;
         configured: number;

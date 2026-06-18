@@ -7,6 +7,7 @@ import { Injectable } from "@nestjs/common";
 
 import { HappyHorseModel } from "../../../db/entities/video-generation.entity";
 import { VideoBillingRule } from "../../../db/entities/video-billing-rule.entity";
+import { ECHOFLOW_VIDEO_MODEL } from "./video-model-catalog";
 import {
     EstimateVideoBillingDto,
     QueryVideoBillingRuleDto,
@@ -112,6 +113,11 @@ export class BillingRuleService extends BaseService<VideoBillingRule> {
 
     private defaultPerSecondCost(model?: string) {
         const modelMultiplier: Record<string, number> = {
+            [ECHOFLOW_VIDEO_MODEL.SEEDANCE_2_0]: 4,
+            [ECHOFLOW_VIDEO_MODEL.SEEDANCE_1_5_PRO]: 3,
+            [ECHOFLOW_VIDEO_MODEL.KLING_TEXT2VIDEO]: 3,
+            [ECHOFLOW_VIDEO_MODEL.KLING_IMAGE2VIDEO]: 3,
+            [ECHOFLOW_VIDEO_MODEL.KLING_MULTI_IMAGE2VIDEO]: 4,
             [HappyHorseModel.T2V]: 2,
             [HappyHorseModel.I2V]: 3,
             [HappyHorseModel.R2V]: 3,

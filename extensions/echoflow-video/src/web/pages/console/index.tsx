@@ -39,7 +39,7 @@ export default function AIVideoConsolePage() {
         onError: (error) => toast.error(error.message || "扫描失败"),
     });
     const stats = buildStats(historyData?.items || []);
-    const healthLabel = buildHealthLabel(healthData?.happyhorse);
+    const healthLabel = healthData?.status === "ok" ? "正常" : "需处理";
 
     const handleDeleteRequest = (id: string) => {
         setDeleteTarget(id);
@@ -67,13 +67,17 @@ export default function AIVideoConsolePage() {
                         AI视频工作台管理
                     </h1>
                     <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
-                        查看生成状态、处理失败记录，并维护 HappyHorse 服务配置。
+                        查看生成状态、处理失败记录，并维护模型接入点。
                     </p>
                 </div>
                 <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => navigate("/console/config")}>
                         <Settings className="size-4" />
-                        服务配置
+                        优化配置
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => navigate("/console/models")}>
+                        <ServerCog className="size-4" />
+                        模型配置
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => navigate("/console/history")}>
                         完整历史
@@ -97,13 +101,13 @@ export default function AIVideoConsolePage() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-4">
-                <StatCard icon={<ServerCog className="size-4" />} label="HappyHorse" value={healthLabel} />
+                <StatCard icon={<ServerCog className="size-4" />} label="接入状态" value={healthLabel} />
                 <StatCard icon={<Film className="size-4" />} label="启用模型" value={healthData?.enabledModelCount ?? "-"} />
                 <StatCard icon={<Clock className="size-4" />} label="全局处理中" value={healthData?.activeTasks ?? "-"} />
                 <StatCard
                     icon={<ShieldCheck className="size-4" />}
-                    label="Webhook"
-                    value={healthData?.provider.webhookSecretConfigured ? "已配置" : "未配置"}
+                    label="缺接入点"
+                    value={healthData?.missingEndpointModels?.length ?? "-"}
                 />
             </div>
 
@@ -122,7 +126,7 @@ export default function AIVideoConsolePage() {
                 />
                 <StatCard
                     icon={<ServerCog className="size-4" />}
-                    label="24h Provider 5xx"
+                    label="24h 接口 5xx"
                     value={healthData?.recentFailures?.provider5xx ?? "-"}
                 />
                 <StatCard
@@ -132,9 +136,17 @@ export default function AIVideoConsolePage() {
                 />
             </div>
 
-            {(healthData?.modelCompleteness?.missingModels.length || healthData?.recentFailures?.total) ? (
+            {(healthData?.modelCompleteness?.missingModels.length || healthData?.missingEndpointModels?.length || healthData?.recentFailures?.total) ? (
                 <Card>
                     <CardContent className="space-y-3 p-4">
+                        {healthData?.missingEndpointModels?.length ? (
+                            <div>
+                                <p className="text-sm font-medium">缺少可用接入点的模型</p>
+                                <p className="text-muted-foreground mt-1 text-xs">
+                                    {healthData.missingEndpointModels.join(", ")}
+                                </p>
+                            </div>
+                        ) : null}
                         {healthData?.modelCompleteness?.missingModels.length ? (
                             <div>
                                 <p className="text-sm font-medium">缺失模型配置</p>
@@ -195,14 +207,6 @@ function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string
             </CardContent>
         </Card>
     );
-}
-
-function buildHealthLabel(status?: string) {
-    if (status === "healthy") return "可用";
-    if (status === "disabled") return "已停用";
-    if (status === "unconfigured") return "未配置";
-    if (status === "unavailable") return "不可用";
-    return "-";
 }
 
 function buildStats(items: Array<{ status: string }>) {

@@ -38,7 +38,7 @@ export class ProviderConfigController extends BaseController {
     }
 
     @Post("test")
-    async testConfig(@Body() dto: Partial<UpdateProviderConfigDto>) {
+    async testConfig(@Body() dto: UpdateProviderConfigDto) {
         return this.providerConfigService.testConsoleConfig(dto);
     }
 

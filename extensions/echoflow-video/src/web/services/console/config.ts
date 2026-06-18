@@ -26,14 +26,6 @@ export interface ProviderConfig {
     updatedAt?: string;
 }
 
-export interface VideoProviderDescriptor {
-    providerId: string;
-    displayName: string;
-    enabled: boolean;
-    status: "ready" | "reserved";
-    description: string;
-}
-
 export interface PromptTemplate {
     label: string;
     prompt: string;
@@ -72,14 +64,6 @@ export function useProviderConfigQuery(options?: QueryOptionsUtil<ProviderConfig
     return useQuery<ProviderConfig>({
         queryKey: ["echoflow-video", "provider-config"],
         queryFn: () => consoleHttpClient.get<ProviderConfig>("/config"),
-        ...options,
-    });
-}
-
-export function useProviderRegistryQuery(options?: QueryOptionsUtil<VideoProviderDescriptor[]>) {
-    return useQuery<VideoProviderDescriptor[]>({
-        queryKey: ["echoflow-video", "provider-registry"],
-        queryFn: () => consoleHttpClient.get<VideoProviderDescriptor[]>("/config/providers"),
         ...options,
     });
 }

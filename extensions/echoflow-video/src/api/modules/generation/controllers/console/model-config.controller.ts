@@ -7,6 +7,7 @@ import {
     CreateVideoModelConfigDto,
     QueryVideoModelConfigDto,
     UpdateVideoModelConfigDto,
+    VideoModelEndpointDto,
 } from "../../dto";
 import { ModelConfigService } from "../../services/model-config.service";
 
@@ -32,6 +33,14 @@ export class ModelConfigController extends BaseController {
         @Body() dto: UpdateVideoModelConfigDto,
     ) {
         return this.modelConfigService.updateConfig(id, dto);
+    }
+
+    @Post(":id/test-endpoint")
+    async testEndpoint(
+        @Param("id", UUIDValidationPipe) id: string,
+        @Body() dto: VideoModelEndpointDto,
+    ) {
+        return this.modelConfigService.testEndpoint(id, dto);
     }
 
     @Delete(":id")

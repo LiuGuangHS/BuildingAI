@@ -41,6 +41,20 @@ export interface VideoModelDefaultParams {
     watermark?: boolean;
 }
 
+export interface VideoModelEndpoint {
+    id?: string;
+    name: string;
+    baseUrl: string;
+    apiKey?: string;
+    apiKeyMasked?: string;
+    enabled: boolean;
+    priority: number;
+    requestTimeoutMs?: number;
+    testTimeoutMs?: number;
+    maxRetries?: number;
+    retryDelayMs?: number;
+}
+
 @ExtensionEntity()
 export class VideoModelConfig {
     @PrimaryGeneratedColumn("uuid")
@@ -69,6 +83,9 @@ export class VideoModelConfig {
 
     @Column({ type: "jsonb", default: () => "'{}'", comment: "Default generation params" })
     defaultParams: VideoModelDefaultParams;
+
+    @Column({ type: "jsonb", default: () => "'[]'", comment: "Model-level API endpoints" })
+    endpoints: VideoModelEndpoint[];
 
     @Column({ type: "int", default: 0, comment: "Sort order" })
     sortOrder: number;

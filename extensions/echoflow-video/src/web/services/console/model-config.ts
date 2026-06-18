@@ -2,7 +2,7 @@ import type { MutationOptionsUtil, PaginatedQueryOptionsUtil, PaginatedResponse 
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { consoleHttpClient } from "../base";
-import type { OperationResult, SaveVideoModelConfigParams, VideoModelConfig } from "../types/generation";
+import type { OperationResult, SaveVideoModelConfigParams, VideoModelConfig, VideoModelEndpoint } from "../types/generation";
 
 const queryDefaults = { retry: false, staleTime: 30_000 } as const;
 
@@ -18,13 +18,6 @@ export function useConsoleVideoModelConfigsQuery(
     });
 }
 
-export function useCreateVideoModelConfigMutation(options?: MutationOptionsUtil<VideoModelConfig, SaveVideoModelConfigParams>) {
-    return useMutation<VideoModelConfig, Error, SaveVideoModelConfigParams>({
-        mutationFn: (data) => consoleHttpClient.post<VideoModelConfig>("/models", data),
-        ...options,
-    });
-}
-
 export function useUpdateVideoModelConfigMutation(
     options?: MutationOptionsUtil<VideoModelConfig, { id: string; data: SaveVideoModelConfigParams }>,
 ) {
@@ -34,9 +27,11 @@ export function useUpdateVideoModelConfigMutation(
     });
 }
 
-export function useDeleteVideoModelConfigMutation(options?: MutationOptionsUtil<OperationResult, string>) {
-    return useMutation<OperationResult, Error, string>({
-        mutationFn: (id) => consoleHttpClient.delete<OperationResult>(`/models/${id}`),
+export function useTestVideoModelEndpointMutation(
+    options?: MutationOptionsUtil<OperationResult, { id: string; data: VideoModelEndpoint }>,
+) {
+    return useMutation<OperationResult, Error, { id: string; data: VideoModelEndpoint }>({
+        mutationFn: ({ id, data }) => consoleHttpClient.post<OperationResult>(`/models/${id}/test-endpoint`, data),
         ...options,
     });
 }

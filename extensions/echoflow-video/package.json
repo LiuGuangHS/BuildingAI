@@ -41,6 +41,7 @@
     "dependencies": {
         "@buildingai/base": "workspace:*",
         "@buildingai/ai-sdk": "workspace:*",
+        "@buildingai/cache": "workspace:*",
         "@buildingai/constants": "workspace:*",
         "@buildingai/core": "workspace:*",
         "@buildingai/db": "workspace:*",
@@ -97,6 +98,8 @@
             "^@buildingai/db/typeorm$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
             "^@buildingai/errors$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
             "^@buildingai/utils$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
+            "^@buildingai/constants/(.*)$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
+            "^@buildingai/extension-sdk$": "<rootDir>/tests/api/test-utils/buildingai-stubs.ts",
             "^@buildingai/core$": "<rootDir>/../../packages/core/src",
             "^@buildingai/core/(.*)$": "<rootDir>/../../packages/core/src/$1",
             "^@buildingai/db$": "<rootDir>/../../packages/@buildingai/db/src",

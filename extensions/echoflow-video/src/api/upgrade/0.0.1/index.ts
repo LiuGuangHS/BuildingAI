@@ -72,7 +72,7 @@ export class Upgrade {
         await this.dataSource.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_video"."video_provider_config" (
                 "id" uuid NOT NULL DEFAULT gen_random_uuid(),
-                "provider" varchar(50) NOT NULL DEFAULT 'happyhorse',
+                "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
                 "api_key" text NOT NULL DEFAULT '',
                 "base_url" varchar(500) NOT NULL DEFAULT 'https://api.echoflow.cn',
                 "request_timeout_ms" integer NOT NULL DEFAULT 120000,
@@ -115,7 +115,7 @@ export class Upgrade {
         await this.dataSource.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_video"."video_model_config" (
                 "id" uuid NOT NULL DEFAULT gen_random_uuid(),
-                "provider" varchar(50) NOT NULL DEFAULT 'happyhorse',
+                "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
                 "model" varchar(100) NOT NULL,
                 "display_name" varchar(120) NOT NULL,
                 "description" text,
@@ -123,6 +123,7 @@ export class Upgrade {
                 "visible_to_user" boolean NOT NULL DEFAULT true,
                 "capabilities" jsonb NOT NULL DEFAULT '{}',
                 "default_params" jsonb NOT NULL DEFAULT '{}',
+                "endpoints" jsonb NOT NULL DEFAULT '[]',
                 "sort_order" integer NOT NULL DEFAULT 0,
                 "created_at" TIMESTAMP NOT NULL DEFAULT now(),
                 "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
@@ -130,6 +131,7 @@ export class Upgrade {
                 CONSTRAINT "uq_video_model_config_model" UNIQUE ("model")
             )
         `);
+        await this.ensureColumn("video_model_config", "endpoints", "jsonb NOT NULL DEFAULT '[]'");
         await this.dataSource.query(`
             CREATE INDEX IF NOT EXISTS "idx_video_model_config_enabled"
             ON "echoflow_video"."video_model_config" ("enabled", "visible_to_user")
@@ -206,7 +208,7 @@ export class Upgrade {
                 "max_image_size_mb" integer NOT NULL DEFAULT 20,
                 "max_concurrent_jobs_per_user" integer NOT NULL DEFAULT 3,
                 "daily_jobs_per_user" integer NOT NULL DEFAULT 100,
-                "allow_public_media_url" boolean NOT NULL DEFAULT true,
+                "allow_public_media_url" boolean NOT NULL DEFAULT false,
                 "enabled" boolean NOT NULL DEFAULT true,
                 "created_at" TIMESTAMP NOT NULL DEFAULT now(),
                 "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
@@ -219,7 +221,7 @@ export class Upgrade {
         await this.ensureColumn("video_policy_config", "max_video_size_mb", "integer NOT NULL DEFAULT 300");
         await this.copyColumnIfExists("video_policy_config", "max_media_size_mb", "max_video_size_mb", "300");
         await this.ensureColumn("video_policy_config", "max_image_size_mb", "integer NOT NULL DEFAULT 20");
-        await this.ensureColumn("video_policy_config", "allow_public_media_url", "boolean NOT NULL DEFAULT true");
+        await this.ensureColumn("video_policy_config", "allow_public_media_url", "boolean NOT NULL DEFAULT false");
         await this.ensureColumn("video_policy_config", "max_concurrent_jobs_per_user", "integer NOT NULL DEFAULT 3");
         await this.dataSource.query(`
             CREATE INDEX IF NOT EXISTS "idx_video_policy_config_scope_model"
@@ -417,9 +419,10 @@ export class Upgrade {
                         "visible_to_user",
                         "capabilities",
                         "default_params",
+                        "endpoints",
                         "sort_order"
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10)
                     ON CONFLICT ("model") DO UPDATE SET
                         "updated_at" = now(),
                         "provider" = EXCLUDED."provider",
@@ -427,6 +430,12 @@ export class Upgrade {
                         "description" = EXCLUDED."description",
                         "capabilities" = EXCLUDED."capabilities",
                         "default_params" = EXCLUDED."default_params",
+                        "endpoints" = CASE
+                            WHEN "echoflow_video"."video_model_config"."endpoints" IS NULL
+                              OR "echoflow_video"."video_model_config"."endpoints" = '[]'::jsonb
+                            THEN EXCLUDED."endpoints"
+                            ELSE "echoflow_video"."video_model_config"."endpoints"
+                        END,
                         "sort_order" = EXCLUDED."sort_order"
                 `,
                 [
@@ -438,6 +447,7 @@ export class Upgrade {
                     config.visibleToUser,
                     JSON.stringify(config.capabilities ?? {}),
                     JSON.stringify(config.defaultParams ?? {}),
+                    JSON.stringify(config.endpoints ?? []),
                     config.sortOrder,
                 ],
             );
@@ -457,10 +467,10 @@ export class Upgrade {
                         "enabled",
                         "sort_order"
                     )
-                    SELECT $1, $2, $3, $4::jsonb, $5::jsonb, true, $6
+                    SELECT $1::varchar(120), $2::varchar(80), $3::text, $4::jsonb, $5::jsonb, true, $6::integer
                     WHERE NOT EXISTS (
                         SELECT 1 FROM "echoflow_video"."video_prompt_template"
-                        WHERE "title" = $1 AND "category" = $2
+                        WHERE "title" = $1::varchar(120) AND "category" = $2::varchar(80)
                     )
                 `,
                 [
@@ -495,10 +505,10 @@ export class Upgrade {
                             "enabled",
                             "sort_order"
                         )
-                        SELECT $1, 'legacy', $2, '[]'::jsonb, '{}'::jsonb, true, 0
+                        SELECT $1::varchar(120), 'legacy'::varchar(80), $2::text, '[]'::jsonb, '{}'::jsonb, true, 0::integer
                         WHERE NOT EXISTS (
                             SELECT 1 FROM "echoflow_video"."video_prompt_template"
-                            WHERE "title" = $1 AND "prompt" = $2
+                            WHERE "title" = $1::varchar(120) AND "prompt" = $2::text
                         )
                     `,
                     [template.label.slice(0, 120), template.prompt],

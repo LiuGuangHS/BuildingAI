@@ -1,8 +1,7 @@
-import type { HappyHorseModel } from "../../db/entities/video-generation.entity";
 import type { VideoMediaItem, VideoParameters } from "../../db/entities/video-generation.entity";
 
 export interface SubmitTaskInput {
-    model: HappyHorseModel;
+    model: string;
     prompt: string;
     media?: VideoMediaItem[];
     parameters?: VideoParameters;
@@ -32,7 +31,7 @@ export interface VideoModelOption {
 export interface VideoProviderClient {
     readonly providerId: string;
     submitTask(input: SubmitTaskInput): Promise<SubmitTaskOutput>;
-    pollTask(taskId: string): Promise<PollTaskOutput>;
+    pollTask(taskId: string, model?: string): Promise<PollTaskOutput>;
     testConnection(): Promise<void>;
     listModels(): VideoModelOption[];
 }

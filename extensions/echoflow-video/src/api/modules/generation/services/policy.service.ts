@@ -39,10 +39,12 @@ export class PolicyService extends BaseService<VideoPolicyConfig> {
     async resolvePolicy(modelConfigId?: string) {
         const global = await this.policyRepository.findOne({
             where: { scope: VideoPolicyScope.GLOBAL, enabled: true } as FindOptionsWhere<VideoPolicyConfig>,
+            order: { createdAt: "DESC" },
         });
         const model = modelConfigId
             ? await this.policyRepository.findOne({
                 where: { scope: VideoPolicyScope.MODEL, modelConfigId, enabled: true } as FindOptionsWhere<VideoPolicyConfig>,
+                order: { createdAt: "DESC" },
             })
             : undefined;
 
@@ -78,7 +80,7 @@ export class PolicyService extends BaseService<VideoPolicyConfig> {
                 );
             }
         }
-        if (!policy.allowPublicMediaUrl && dto.media?.some((item) => /^https?:\/\//i.test(item.url))) {
+        if (!policy.allowPublicMediaUrl && dto.media?.some((item) => !item.fileId && /^https?:\/\//i.test(item.url))) {
             throw HttpErrorFactory.badRequest("当前策略不允许使用外部媒体 URL");
         }
 
@@ -115,6 +117,7 @@ export class PolicyService extends BaseService<VideoPolicyConfig> {
                 scope: dto.scope,
                 modelConfigId: dto.modelConfigId ?? IsNull(),
             } as FindOptionsWhere<VideoPolicyConfig>,
+            order: { createdAt: "DESC" },
         });
 
         if (existing) {
@@ -140,7 +143,7 @@ export class PolicyService extends BaseService<VideoPolicyConfig> {
             maxImageSizeMb: 20,
             maxConcurrentJobsPerUser: 3,
             dailyJobsPerUser: 100,
-            allowPublicMediaUrl: true,
+            allowPublicMediaUrl: false,
             enabled: true,
         };
     }

@@ -47,7 +47,7 @@ export interface VideoParameters {
 export interface VideoGeneration {
     id: string;
     userId: string;
-    model: HappyHorseModel;
+    model: string;
     modelConfigId?: string;
     provider?: string;
     modelName?: string;
@@ -112,6 +112,20 @@ export interface VideoModelDefaultParams {
     watermark?: boolean;
 }
 
+export interface VideoModelEndpoint {
+    id?: string;
+    name: string;
+    baseUrl: string;
+    apiKey?: string;
+    apiKeyMasked?: string;
+    enabled: boolean;
+    priority: number;
+    requestTimeoutMs?: number;
+    testTimeoutMs?: number;
+    maxRetries?: number;
+    retryDelayMs?: number;
+}
+
 export interface VideoModelOption {
     id: string;
     modelConfigId?: string;
@@ -135,6 +149,7 @@ export interface VideoModelConfig {
     visibleToUser: boolean;
     capabilities: VideoModelCapabilities;
     defaultParams: VideoModelDefaultParams;
+    endpoints?: VideoModelEndpoint[];
     sortOrder: number;
     createdAt: string;
     updatedAt: string;
@@ -149,6 +164,7 @@ export interface SaveVideoModelConfigParams {
     visibleToUser?: boolean;
     capabilities?: VideoModelCapabilities;
     defaultParams?: VideoModelDefaultParams;
+    endpoints?: VideoModelEndpoint[];
     sortOrder?: number;
 }
 

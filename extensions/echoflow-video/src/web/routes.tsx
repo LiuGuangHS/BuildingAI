@@ -70,7 +70,7 @@ export const routeOption = defineRouteOption({
             icon: "history",
         },
         {
-            title: "服务配置",
+            title: "优化配置",
             path: "/config",
             icon: "settings",
         },

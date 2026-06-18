@@ -4,54 +4,62 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
-import { Textarea } from "@buildingai/ui/components/ui/textarea";
-import { Plus, Save, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
+import { Switch } from "@buildingai/ui/components/ui/switch";
+import { cn } from "@buildingai/ui/lib/utils";
+import { CheckCircle2, KeyRound, Plus, Save, SlidersHorizontal, Trash2, Zap } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
     useConsoleVideoModelConfigsQuery,
-    useCreateVideoModelConfigMutation,
-    useDeleteVideoModelConfigMutation,
+    useTestVideoModelEndpointMutation,
     useUpdateVideoModelConfigMutation,
 } from "../../services";
-import type { SaveVideoModelConfigParams, VideoMediaItem, VideoModelConfig } from "../../services/types/generation";
+import type { SaveVideoModelConfigParams, VideoModelConfig, VideoModelEndpoint } from "../../services/types/generation";
 
-const abilityOptions = [
-    ["text_to_video", "文生视频"],
-    ["first_frame_i2v", "首帧图生视频"],
-    ["reference_to_video", "参考图生视频"],
-    ["video_editing", "视频编辑"],
-    ["action_transfer", "动作迁移"],
-    ["native_audio", "原生音频"],
-] as const;
+const abilityLabels: Record<string, string> = {
+    text_to_video: "文生视频",
+    first_frame_i2v: "首帧图生视频",
+    reference_to_video: "参考图生视频",
+    video_editing: "视频编辑",
+    action_transfer: "动作迁移",
+    digital_human: "数字人",
+    native_audio: "原生音频",
+};
 
-const mediaTypeOptions: Array<[VideoMediaItem["type"], string]> = [
-    ["first_frame", "首帧图"],
-    ["reference_image", "参考图"],
-    ["video", "视频"],
-];
+const mediaLabels: Record<string, string> = {
+    first_frame: "首帧图",
+    reference_image: "参考图",
+    video: "视频",
+    audio: "音频",
+};
 
 export default function ConsoleVideoModelsPage() {
     useDocumentHead({ title: "视频模型配置" });
-    const { data, isLoading, refetch } = useConsoleVideoModelConfigsQuery({ page: 1, pageSize: 50 });
-    const createMutation = useCreateVideoModelConfigMutation();
+    const { data, isLoading, refetch } = useConsoleVideoModelConfigsQuery({ page: 1, pageSize: 100 });
     const updateMutation = useUpdateVideoModelConfigMutation();
-    const deleteMutation = useDeleteVideoModelConfigMutation();
-    const [editing, setEditing] = useState<VideoModelConfig | undefined>();
-    const [editorNonce, setEditorNonce] = useState(0);
+    const testEndpointMutation = useTestVideoModelEndpointMutation({
+        onSuccess: (result) => toast.success(result.message || "接入点配置可用"),
+        onError: (error) => toast.error(error.message || "测试失败"),
+    });
     const items = data?.items ?? [];
+    const [selectedId, setSelectedId] = useState<string>();
+    const selected = useMemo(
+        () => items.find((item) => item.id === selectedId) ?? items[0],
+        [items, selectedId],
+    );
 
-    const handleSave = async (form: SaveVideoModelConfigParams) => {
+    useEffect(() => {
+        if (!selectedId && items[0]?.id) {
+            setSelectedId(items[0].id);
+        }
+    }, [items, selectedId]);
+
+    const handleSave = async (id: string, form: SaveVideoModelConfigParams) => {
         try {
-            if (editing?.id) {
-                await updateMutation.mutateAsync({ id: editing.id, data: form });
-                toast.success("模型配置已更新");
-            } else {
-                await createMutation.mutateAsync(form);
-                toast.success("模型配置已创建");
-            }
-            setEditing(undefined);
+            await updateMutation.mutateAsync({ id, data: form });
+            toast.success("模型配置已更新");
             refetch();
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "保存失败");
@@ -63,292 +71,396 @@ export default function ConsoleVideoModelsPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight">模型配置</h1>
-                    <p className="text-muted-foreground text-sm">配置视频模型、素材要求、默认参数和用户端可见性。</p>
+                    <p className="text-muted-foreground text-sm">模型目录固定，给每个模型配置一组或多组 Base URL / API Key 接入点。</p>
                 </div>
-                <Button onClick={() => {
-                    setEditing(createDraft());
-                    setEditorNonce((value) => value + 1);
-                }}>
-                    <Plus className="size-4" />
-                    新增模型
-                </Button>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_460px]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_520px]">
                 <Card>
                     <CardHeader>
-                        <CardTitle>已配置模型</CardTitle>
-                        <CardDescription>用户端只展示启用且可见的模型；未配置时后端会使用 HappyHorse 默认模型。</CardDescription>
+                        <CardTitle>固定视频模型</CardTitle>
+                        <CardDescription>用户端只展示启用且用户可见、并配置了可用接入点的模型。</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         {isLoading ? <div className="text-muted-foreground text-sm">加载中...</div> : null}
-                        {items.map((item) => (
-                            <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                                <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <div className="truncate font-medium">{item.displayName}</div>
-                                        <Badge variant={item.enabled ? "default" : "secondary"}>{item.enabled ? "启用" : "停用"}</Badge>
-                                        <Badge variant={item.visibleToUser ? "outline" : "secondary"}>{item.visibleToUser ? "用户可见" : "仅后台"}</Badge>
+                        {items.map((item) => {
+                            const ready = (item.endpoints ?? []).some((endpoint) => endpoint.enabled && endpoint.apiKeyMasked);
+                            return (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => setSelectedId(item.id)}
+                                    className={cn(
+                                        "flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors",
+                                        selected?.id === item.id ? "border-primary bg-primary/5" : "hover:border-primary/40 hover:bg-muted/40",
+                                    )}
+                                >
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <div className="truncate font-medium">{item.displayName}</div>
+                                            <Badge variant={item.enabled ? "default" : "secondary"}>{item.enabled ? "启用" : "停用"}</Badge>
+                                            <Badge variant={item.visibleToUser ? "outline" : "secondary"}>{item.visibleToUser ? "用户可见" : "隐藏"}</Badge>
+                                            <Badge variant={ready ? "default" : "destructive"}>{ready ? "已接入" : "未接入"}</Badge>
+                                        </div>
+                                        <div className="text-muted-foreground mt-1 truncate text-xs">
+                                            {item.model}
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                            {(item.capabilities?.abilityTypes ?? []).slice(0, 4).map((ability) => (
+                                                <Badge key={ability} variant="secondary">{abilityLabels[ability] ?? ability}</Badge>
+                                            ))}
+                                        </div>
                                     </div>
-                                    <div className="text-muted-foreground mt-1 truncate text-xs">
-                                        {item.provider} · {item.model}
-                                    </div>
-                                </div>
-                                <div className="flex shrink-0 gap-2">
-                                    <Button variant="outline" size="sm" onClick={() => {
-                                        setEditing(item);
-                                        setEditorNonce((value) => value + 1);
-                                    }}>编辑</Button>
-                                    <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        onClick={async () => {
-                                            await deleteMutation.mutateAsync(item.id);
-                                            toast.success("已删除");
-                                            refetch();
-                                        }}
-                                    >
-                                        <Trash2 className="size-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
+                                    {selected?.id === item.id ? <CheckCircle2 className="text-primary size-5 shrink-0" /> : null}
+                                </button>
+                            );
+                        })}
                         {!isLoading && items.length === 0 ? (
                             <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
-                                尚未写入模型配置。可以先使用内置 HappyHorse 默认配置，也可以在这里新增可运营配置。
+                                暂无内置模型配置，重启插件服务或执行首版升级后会自动补齐。
                             </div>
                         ) : null}
                     </CardContent>
                 </Card>
 
-                <ModelEditor
-                    key={`${editing?.id || "empty"}-${editorNonce}`}
-                    value={editing}
+                <ModelOperationsEditor
+                    value={selected}
+                    saving={updateMutation.isPending}
+                    testing={testEndpointMutation.isPending}
                     onSave={handleSave}
-                    onCancel={() => setEditing(undefined)}
+                    onTestEndpoint={(id, endpoint) => testEndpointMutation.mutateAsync({ id, data: endpoint })}
                 />
             </div>
         </div>
     );
 }
 
-function ModelEditor({
+function ModelOperationsEditor({
     value,
+    saving,
+    testing,
     onSave,
-    onCancel,
+    onTestEndpoint,
 }: {
     value?: VideoModelConfig;
-    onSave: (data: SaveVideoModelConfigParams) => void;
-    onCancel: () => void;
+    saving: boolean;
+    testing: boolean;
+    onSave: (id: string, data: SaveVideoModelConfigParams) => void;
+    onTestEndpoint: (id: string, data: VideoModelEndpoint) => Promise<unknown>;
 }) {
-    const [provider, setProvider] = useState(value?.provider ?? "happyhorse");
-    const [model, setModel] = useState(value?.model ?? "");
-    const [displayName, setDisplayName] = useState(value?.displayName ?? "");
-    const [description, setDescription] = useState(value?.description ?? "");
-    const [enabled, setEnabled] = useState(value?.enabled ?? true);
-    const [visibleToUser, setVisibleToUser] = useState(value?.visibleToUser ?? true);
-    const [sortOrder, setSortOrder] = useState(String(value?.sortOrder ?? 0));
-    const [abilityTypes, setAbilityTypes] = useState<string[]>(value?.capabilities?.abilityTypes ?? ["text_to_video"]);
-    const [mediaTypes, setMediaTypes] = useState<VideoMediaItem["type"][]>((value?.capabilities?.mediaTypes ?? []) as VideoMediaItem["type"][]);
-    const [resolutionsText, setResolutionsText] = useState((value?.capabilities?.resolutions ?? ["720P", "1080P"]).join("\n"));
-    const [ratiosText, setRatiosText] = useState((value?.capabilities?.ratios ?? ["16:9", "9:16", "1:1"]).join("\n"));
-    const [durationMin, setDurationMin] = useState(String(value?.capabilities?.duration?.min ?? 3));
-    const [durationMax, setDurationMax] = useState(String(value?.capabilities?.duration?.max ?? 15));
-    const [defaultDuration, setDefaultDuration] = useState(String(value?.defaultParams?.duration ?? 5));
-    const [defaultResolution, setDefaultResolution] = useState(value?.defaultParams?.resolution ?? "720P");
-    const [defaultRatio, setDefaultRatio] = useState(value?.defaultParams?.ratio ?? "16:9");
-    const [watermark, setWatermark] = useState(value?.defaultParams?.watermark ?? true);
+    const [displayName, setDisplayName] = useState("");
+    const [description, setDescription] = useState("");
+    const [enabled, setEnabled] = useState(true);
+    const [visibleToUser, setVisibleToUser] = useState(true);
+    const [sortOrder, setSortOrder] = useState("0");
+    const [duration, setDuration] = useState("5");
+    const [resolution, setResolution] = useState("");
+    const [ratio, setRatio] = useState("");
+    const [watermark, setWatermark] = useState(true);
+    const [endpoints, setEndpoints] = useState<VideoModelEndpoint[]>([]);
 
-    const capabilities = useMemo(() => ({
-        abilityTypes,
-        mediaTypes,
-        duration: {
-            min: Number(durationMin || 1),
-            max: Number(durationMax || 30),
-        },
-        resolutions: parseLines(resolutionsText),
-        ratios: parseLines(ratiosText),
-        fps: value?.capabilities?.fps ?? 24,
-        format: value?.capabilities?.format ?? "mp4",
-        apiContractVerified: value?.capabilities?.apiContractVerified ?? provider === "happyhorse",
-    }), [abilityTypes, durationMax, durationMin, mediaTypes, provider, ratiosText, resolutionsText, value?.capabilities]);
-    const defaultParams = useMemo(() => ({
-        duration: Number(defaultDuration || 5),
-        resolution: defaultResolution,
-        ratio: defaultRatio || undefined,
-        watermark,
-    }), [defaultDuration, defaultResolution, defaultRatio, watermark]);
-    const preview = useMemo(() => JSON.stringify({ capabilities, defaultParams }, null, 2), [capabilities, defaultParams]);
+    useEffect(() => {
+        setDisplayName(value?.displayName ?? "");
+        setDescription(value?.description ?? "");
+        setEnabled(value?.enabled ?? true);
+        setVisibleToUser(value?.visibleToUser ?? true);
+        setSortOrder(String(value?.sortOrder ?? 0));
+        setDuration(String(value?.defaultParams?.duration ?? 5));
+        setResolution(value?.defaultParams?.resolution ?? "");
+        setRatio(value?.defaultParams?.ratio ?? "");
+        setWatermark(value?.defaultParams?.watermark ?? true);
+        setEndpoints((value?.endpoints?.length ? value.endpoints : [makeEndpoint()]).map((endpoint, index) => ({
+            ...endpoint,
+            id: endpoint.id || `endpoint-${index + 1}`,
+            apiKey: "",
+        })));
+    }, [value]);
 
     if (!value) {
         return (
             <Card>
                 <CardHeader>
-                    <CardTitle>配置编辑</CardTitle>
-                    <CardDescription>选择左侧模型或新增配置。</CardDescription>
+                    <CardTitle>模型配置</CardTitle>
+                    <CardDescription>选择左侧模型后调整。</CardDescription>
                 </CardHeader>
-                <CardContent className="text-muted-foreground text-sm">模型配置会决定用户端可选项、素材校验和默认参数。</CardContent>
+                <CardContent className="text-muted-foreground text-sm">模型目录由插件内置。</CardContent>
             </Card>
         );
     }
 
+    const resolutions = value.capabilities?.resolutions ?? [];
+    const ratios = value.capabilities?.ratios ?? [];
+    const durationOptions = getDurationOptions(value);
+    const mediaTypes = value.capabilities?.mediaTypes ?? [];
+
+    const savePayload = (): SaveVideoModelConfigParams => ({
+        displayName,
+        description,
+        enabled,
+        visibleToUser,
+        sortOrder: Number(sortOrder || 0),
+        defaultParams: {
+            duration: Number(duration || value.defaultParams?.duration || 5),
+            resolution,
+            ratio: ratio || undefined,
+            watermark,
+        },
+        endpoints: endpoints.map((endpoint, index) => ({
+            ...endpoint,
+            id: endpoint.id || `endpoint-${index + 1}`,
+            name: endpoint.name || `接入点 ${index + 1}`,
+            baseUrl: endpoint.baseUrl,
+            apiKey: endpoint.apiKey?.trim() || undefined,
+            enabled: endpoint.enabled,
+            priority: Number(endpoint.priority ?? 100 - index),
+            requestTimeoutMs: Number(endpoint.requestTimeoutMs ?? 120000),
+            testTimeoutMs: Number(endpoint.testTimeoutMs ?? 15000),
+            maxRetries: Number(endpoint.maxRetries ?? 2),
+            retryDelayMs: Number(endpoint.retryDelayMs ?? 1000),
+        })),
+    });
+
     return (
         <Card>
             <CardHeader>
-                <CardTitle>配置编辑</CardTitle>
-                <CardDescription>模型 ID 必须与后端 Provider Adapter 支持的模型名一致。</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                    <SlidersHorizontal className="size-5" />
+                    模型配置
+                </CardTitle>
+                <CardDescription>{value.model}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                        <Label>服务商</Label>
-                        <Input value={provider} onChange={(event) => setProvider(event.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>模型 ID</Label>
-                        <Input value={model} onChange={(event) => setModel(event.target.value)} />
-                    </div>
+                    <SwitchField label="启用模型" checked={enabled} onCheckedChange={setEnabled} />
+                    <SwitchField label="用户可见" checked={visibleToUser} onCheckedChange={setVisibleToUser} />
                 </div>
+
                 <div className="space-y-2">
                     <Label>展示名称</Label>
                     <Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
                 </div>
+
                 <div className="space-y-2">
-                    <Label>描述</Label>
-                    <Textarea value={description} onChange={(event) => setDescription(event.target.value)} />
+                    <Label>说明</Label>
+                    <Input value={description} onChange={(event) => setDescription(event.target.value)} />
                 </div>
-                <div className="grid grid-cols-3 gap-3">
-                    <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                        <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-                        启用
-                    </label>
-                    <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                        <input type="checkbox" checked={visibleToUser} onChange={(event) => setVisibleToUser(event.target.checked)} />
-                        用户可见
-                    </label>
-                    <div className="space-y-1">
+
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
                         <Label>排序</Label>
                         <Input type="number" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} />
                     </div>
+                    <SelectField label="默认时长" value={duration} options={durationOptions.map(String)} suffix="秒" onValueChange={setDuration} />
+                    <SelectField label="默认分辨率" value={resolution} options={resolutions} onValueChange={setResolution} />
+                    {ratios.length ? (
+                        <SelectField label="默认比例" value={ratio} options={ratios} onValueChange={setRatio} />
+                    ) : (
+                        <div className="space-y-2">
+                            <Label>默认比例</Label>
+                            <Input value="跟随输入" disabled />
+                        </div>
+                    )}
                 </div>
+
+                <SwitchField label="默认带水印" checked={watermark} onCheckedChange={setWatermark} />
+
                 <div className="space-y-2">
-                    <Label>模型能力</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                        {abilityOptions.map(([key, label]) => (
-                            <ToggleLine key={key} checked={abilityTypes.includes(key)} label={label} onChange={(checked) => {
-                                setAbilityTypes((current) => checked ? [...current, key] : current.filter((item) => item !== key));
-                            }} />
+                    <Label>固定能力</Label>
+                    <div className="flex flex-wrap gap-2">
+                        {(value.capabilities?.abilityTypes ?? []).map((ability) => (
+                            <Badge key={ability} variant="secondary">{abilityLabels[ability] ?? ability}</Badge>
+                        ))}
+                        {mediaTypes.map((type) => (
+                            <Badge key={type} variant="outline">{mediaLabels[type] ?? type}</Badge>
                         ))}
                     </div>
                 </div>
-                <div className="space-y-2">
-                    <Label>素材类型</Label>
-                    <div className="grid grid-cols-3 gap-2">
-                        {mediaTypeOptions.map(([key, label]) => (
-                            <ToggleLine key={key} checked={mediaTypes.includes(key)} label={label} onChange={(checked) => {
-                                setMediaTypes((current) => checked ? [...current, key] : current.filter((item) => item !== key));
-                            }} />
-                        ))}
+
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <Label>接入点</Label>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEndpoints((items) => [...items, makeEndpoint(items.length)])}
+                        >
+                            <Plus className="size-4" />
+                            添加
+                        </Button>
                     </div>
+                    {endpoints.map((endpoint, index) => (
+                        <EndpointEditor
+                            key={endpoint.id ?? index}
+                            value={endpoint}
+                            canRemove={endpoints.length > 1}
+                            testing={testing}
+                            onChange={(next) => setEndpoints((items) => items.map((item, itemIndex) => itemIndex === index ? next : item))}
+                            onRemove={() => setEndpoints((items) => items.filter((_, itemIndex) => itemIndex !== index))}
+                            onTest={() => onTestEndpoint(value.id, endpoint)}
+                        />
+                    ))}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                    <ListField label="允许分辨率" value={resolutionsText} onChange={setResolutionsText} placeholder="720P" />
-                    <ListField label="允许比例" value={ratiosText} onChange={setRatiosText} placeholder="16:9" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2"><Label>最小时长</Label><Input type="number" value={durationMin} onChange={(event) => setDurationMin(event.target.value)} /></div>
-                    <div className="space-y-2"><Label>最大时长</Label><Input type="number" value={durationMax} onChange={(event) => setDurationMax(event.target.value)} /></div>
-                    <div className="space-y-2"><Label>默认时长</Label><Input type="number" value={defaultDuration} onChange={(event) => setDefaultDuration(event.target.value)} /></div>
-                    <div className="space-y-2"><Label>默认分辨率</Label><Input value={defaultResolution} onChange={(event) => setDefaultResolution(event.target.value)} /></div>
-                    <div className="space-y-2"><Label>默认比例</Label><Input value={defaultRatio} onChange={(event) => setDefaultRatio(event.target.value)} /></div>
-                    <label className="mt-7 flex h-10 items-center gap-2 rounded-md border px-3 text-sm">
-                        <input type="checkbox" checked={watermark} onChange={(event) => setWatermark(event.target.checked)} />
-                        默认水印
-                    </label>
-                </div>
-                <div className="space-y-2">
-                    <Label>配置预览</Label>
-                    <Textarea className="min-h-44 font-mono text-xs" value={preview} readOnly />
-                </div>
-                <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={onCancel}>取消</Button>
-                    <Button onClick={() => {
-                        if (!model.trim() || !displayName.trim()) {
-                            toast.error("请填写模型 ID 和展示名称");
+
+                <Button
+                    className="w-full"
+                    disabled={saving}
+                    onClick={() => {
+                        if (!displayName.trim()) {
+                            toast.error("展示名称不能为空");
                             return;
                         }
-                        onSave({
-                            provider,
-                            model,
-                            displayName,
-                            description,
-                            enabled,
-                            visibleToUser,
-                            capabilities,
-                            defaultParams,
-                            sortOrder: Number(sortOrder || 0),
-                        });
-                    }}>
-                        <Save className="size-4" />
-                        保存
-                    </Button>
-                </div>
+                        onSave(value.id, savePayload());
+                    }}
+                >
+                    <Save className="size-4" />
+                    {saving ? "保存中..." : "保存配置"}
+                </Button>
             </CardContent>
         </Card>
     );
 }
 
-function ToggleLine({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
+function EndpointEditor({
+    value,
+    canRemove,
+    testing,
+    onChange,
+    onRemove,
+    onTest,
+}: {
+    value: VideoModelEndpoint;
+    canRemove: boolean;
+    testing: boolean;
+    onChange: (value: VideoModelEndpoint) => void;
+    onRemove: () => void;
+    onTest: () => void;
+}) {
+    const patch = (data: Partial<VideoModelEndpoint>) => onChange({ ...value, ...data });
     return (
-        <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-            <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-            {label}
-        </label>
-    );
-}
-
-function ListField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
-    return (
-        <div className="space-y-2">
-            <Label>{label}</Label>
-            <Textarea
-                className="min-h-20 font-mono text-xs"
-                value={value}
-                onChange={(event) => onChange(event.target.value)}
-                placeholder={`${placeholder}\n每行一个值`}
-            />
+        <div className="space-y-3 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    <KeyRound className="text-muted-foreground size-4" />
+                    <span className="text-sm font-medium">{value.name || "接入点"}</span>
+                    {value.apiKeyMasked ? <Badge variant="outline">{value.apiKeyMasked}</Badge> : null}
+                </div>
+                <div className="flex items-center gap-2">
+                    <Switch checked={value.enabled} onCheckedChange={(checked) => patch({ enabled: checked })} />
+                    <Button type="button" variant="ghost" size="icon" disabled={!canRemove} onClick={onRemove}>
+                        <Trash2 className="size-4" />
+                    </Button>
+                </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+                <Field label="名称" value={value.name} onChange={(next) => patch({ name: next })} />
+                <Field label="优先级" type="number" value={String(value.priority ?? 100)} onChange={(next) => patch({ priority: Number(next) })} />
+            </div>
+            <Field label="Base URL" value={value.baseUrl} onChange={(next) => patch({ baseUrl: next })} />
+            <Field label="API Key" type="password" value={value.apiKey ?? ""} placeholder={value.apiKeyMasked ? "留空保留当前密钥" : "请输入 API Key"} onChange={(next) => patch({ apiKey: next })} />
+            <div className="grid gap-3 md:grid-cols-4">
+                <Field label="请求超时" type="number" value={String(value.requestTimeoutMs ?? 120000)} onChange={(next) => patch({ requestTimeoutMs: Number(next) })} />
+                <Field label="测试超时" type="number" value={String(value.testTimeoutMs ?? 15000)} onChange={(next) => patch({ testTimeoutMs: Number(next) })} />
+                <Field label="重试次数" type="number" value={String(value.maxRetries ?? 2)} onChange={(next) => patch({ maxRetries: Number(next) })} />
+                <Field label="重试延迟" type="number" value={String(value.retryDelayMs ?? 1000)} onChange={(next) => patch({ retryDelayMs: Number(next) })} />
+            </div>
+            <Button type="button" variant="outline" size="sm" disabled={testing} onClick={onTest}>
+                <Zap className="size-4" />
+                测试接入点
+            </Button>
         </div>
     );
 }
 
-function parseLines(value: string) {
-    return value
-        .split(/\r?\n|,/)
-        .map((item) => item.trim())
-        .filter(Boolean);
+function Field({
+    label,
+    value,
+    type,
+    placeholder,
+    onChange,
+}: {
+    label: string;
+    value: string;
+    type?: string;
+    placeholder?: string;
+    onChange: (value: string) => void;
+}) {
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            <Input type={type} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+        </div>
+    );
 }
 
-function createDraft(): VideoModelConfig {
+function SwitchField({
+    label,
+    checked,
+    onCheckedChange,
+}: {
+    label: string;
+    checked: boolean;
+    onCheckedChange: (checked: boolean) => void;
+}) {
+    return (
+        <label className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+            <span>{label}</span>
+            <Switch checked={checked} onCheckedChange={onCheckedChange} />
+        </label>
+    );
+}
+
+function SelectField({
+    label,
+    value,
+    options,
+    suffix,
+    onValueChange,
+}: {
+    label: string;
+    value: string;
+    options: string[];
+    suffix?: string;
+    onValueChange: (value: string) => void;
+}) {
+    return (
+        <div className="space-y-2">
+            <Label>{label}</Label>
+            <Select value={value} onValueChange={onValueChange}>
+                <SelectTrigger className="w-full">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    {options.map((option) => (
+                        <SelectItem key={option} value={option}>{option}{suffix ?? ""}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+    );
+}
+
+function getDurationOptions(value: VideoModelConfig) {
+    const capability = value.capabilities?.duration;
+    if (capability?.allowedValues?.length) {
+        return capability.allowedValues;
+    }
+    const min = capability?.min ?? 3;
+    const max = capability?.max ?? 15;
+    return Array.from({ length: Math.max(max - min + 1, 1) }, (_, index) => min + index);
+}
+
+function makeEndpoint(index = 0): VideoModelEndpoint {
     return {
-        id: "",
-        provider: "happyhorse",
-        model: "",
-        displayName: "",
-        description: "",
-        enabled: true,
-        visibleToUser: true,
-        capabilities: {
-            abilityTypes: ["text_to_video"],
-            mediaTypes: [],
-            duration: { min: 3, max: 15 },
-            resolutions: ["720P", "1080P"],
-            ratios: ["16:9", "9:16", "1:1"],
-            fps: 24,
-            format: "mp4",
-        },
-        defaultParams: { duration: 5, resolution: "720P", ratio: "16:9", watermark: true },
-        sortOrder: 0,
-        createdAt: "",
-        updatedAt: "",
+        id: `endpoint-${index + 1}`,
+        name: index === 0 ? "主接口" : `备用接口 ${index}`,
+        baseUrl: "https://api.echoflow.cn",
+        apiKey: "",
+        enabled: index === 0,
+        priority: 100 - index,
+        requestTimeoutMs: 120000,
+        testTimeoutMs: 15000,
+        maxRetries: 2,
+        retryDelayMs: 1000,
     };
 }

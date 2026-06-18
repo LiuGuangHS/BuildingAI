@@ -95,6 +95,13 @@ describe("HappyHorseClient", () => {
             const client = new HappyHorseClient("sk-test");
             expect(client).toBeInstanceOf(HappyHorseClient);
         });
+
+        it("rejects unsafe baseUrl values", () => {
+            expect(() => new HappyHorseClient("sk-test", { baseUrl: "ftp://api.example.com" })).toThrow("http/https");
+            expect(() => new HappyHorseClient("sk-test", { baseUrl: "https://user:pass@example.com" })).toThrow("用户名或密码");
+            expect(() => new HappyHorseClient("sk-test", { baseUrl: "http://127.0.0.1:8080" })).toThrow("本机或内网");
+            expect(() => new HappyHorseClient("sk-test", { baseUrl: "   " })).toThrow("不能为空");
+        });
     });
 
     describe("submitTask", () => {

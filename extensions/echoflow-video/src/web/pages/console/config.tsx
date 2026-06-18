@@ -16,7 +16,6 @@ import {
     useClearProviderConfigMutation,
     useProviderConfigAuditsQuery,
     useProviderConfigQuery,
-    useProviderRegistryQuery,
     useTestProviderConfigMutation,
     useUpdateProviderConfigMutation,
 } from "../../services";
@@ -40,7 +39,6 @@ export default function ProviderConfigPage() {
     const [promptOptimizerEstimatedTokens, setPromptOptimizerEstimatedTokens] = useState(500);
     const [enabled, setEnabled] = useState(true);
     const { data, isLoading, isError, refetch } = useProviderConfigQuery();
-    const { data: providers = [] } = useProviderRegistryQuery();
     const { data: audits = [] } = useProviderConfigAuditsQuery();
     const updateMutation = useUpdateProviderConfigMutation({
         onSuccess: () => {
@@ -83,7 +81,7 @@ export default function ProviderConfigPage() {
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
         if (!apiKey.trim() && !data?.configured) {
-            toast.error("请输入 HappyHorse API Key");
+            toast.error("请输入兼容接口 API Key，或到模型配置页为模型接入点配置密钥");
             return;
         }
         await updateMutation.mutateAsync({
@@ -131,7 +129,7 @@ export default function ProviderConfigPage() {
     if (isError) {
         return (
             <div className="min-h-screen p-4 md:p-6">
-                <ErrorState title="加载配置失败" message="无法获取 HappyHorse 配置" onRetry={() => refetch()} />
+                <ErrorState title="加载配置失败" message="无法获取优化配置" onRetry={() => refetch()} />
             </div>
         );
     }
@@ -141,9 +139,9 @@ export default function ProviderConfigPage() {
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <Badge variant="secondary" className="mb-3 shadow-sm">管理后台</Badge>
-                    <h1 className="text-3xl font-semibold tracking-tight">AI视频工作台配置</h1>
+                    <h1 className="text-3xl font-semibold tracking-tight">优化配置</h1>
                     <p className="text-muted-foreground mt-2 text-sm">
-                        配置 HappyHorse 服务凭据，用户端生成视频时会从这里读取。
+                        视频模型的 Base URL / API Key 在模型配置页维护；这里保留提示词优化、Webhook 和旧兼容配置。
                     </p>
                 </div>
                 <Badge variant={data?.configured && data.enabled ? "default" : "secondary"} className="w-fit">
@@ -156,7 +154,7 @@ export default function ProviderConfigPage() {
                     <CardContent className="flex items-center gap-3 p-4">
                         <KeyRound className="size-5 text-primary" />
                         <div>
-                            <p className="text-sm font-medium">密钥</p>
+                            <p className="text-sm font-medium">兼容密钥</p>
                             <p className="text-muted-foreground text-xs">
                                 {isLoading ? "加载中" : data?.configured ? data.apiKeyMasked : "未配置"}
                             </p>
@@ -167,8 +165,8 @@ export default function ProviderConfigPage() {
                     <CardContent className="flex items-center gap-3 p-4">
                         <CheckCircle2 className="size-5 text-primary" />
                         <div>
-                            <p className="text-sm font-medium">服务状态</p>
-                            <p className="text-muted-foreground text-xs">{data?.enabled ? "允许用户提交" : "用户提交会被阻止"}</p>
+                            <p className="text-sm font-medium">优化状态</p>
+                            <p className="text-muted-foreground text-xs">{data?.promptOptimizerEnabled ? "允许提示词优化" : "提示词优化关闭"}</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -176,38 +174,18 @@ export default function ProviderConfigPage() {
                     <CardContent className="flex items-center gap-3 p-4">
                         <ServerCog className="size-5 text-primary" />
                         <div>
-                            <p className="text-sm font-medium">网关</p>
+                            <p className="text-sm font-medium">旧兼容地址</p>
                             <p className="text-muted-foreground text-xs">{data?.baseUrl ?? "https://api.echoflow.cn"}</p>
                         </div>
                     </CardContent>
                 </Card>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>供应商</CardTitle>
-                    <CardDescription>当前只启用 HappyHorse，其他供应商为后续接入占位。</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    {providers.map((provider) => (
-                        <div key={provider.providerId} className="rounded-md border p-3">
-                            <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-medium">{provider.displayName}</p>
-                                <Badge variant={provider.status === "ready" ? "default" : "secondary"}>
-                                    {provider.status === "ready" ? "ready" : "reserved"}
-                                </Badge>
-                            </div>
-                            <p className="text-muted-foreground mt-2 text-xs">{provider.description}</p>
-                        </div>
-                    ))}
-                </CardContent>
-            </Card>
-
             <Card className="max-w-4xl">
                 <CardHeader>
-                    <CardTitle>HappyHorse</CardTitle>
+                    <CardTitle>兼容配置</CardTitle>
                     <CardDescription>
-                        API Key 与 Webhook Secret 仅保存到插件后端配置，页面不会回显完整密钥。
+                        新视频模型优先读取模型配置页的接入点；这里的密钥仅保留给旧回调和兼容测试。
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -220,7 +198,7 @@ export default function ProviderConfigPage() {
                                     type="password"
                                     autoComplete="new-password"
                                     value={apiKey}
-                                    placeholder={data?.configured ? "输入新密钥以替换当前配置" : "输入 HappyHorse API Key"}
+                                    placeholder={data?.configured ? "输入新密钥以替换当前配置" : "输入兼容接口 API Key"}
                                     onChange={(event) => setApiKey(event.target.value)}
                                 />
                             </div>
@@ -326,7 +304,7 @@ export default function ProviderConfigPage() {
                             <div className="flex items-center gap-2">
                                 <Switch id="happyhorse-enabled" checked={enabled} onCheckedChange={setEnabled} />
                                 <Label htmlFor="happyhorse-enabled" className="cursor-pointer">
-                                    启用 HappyHorse
+                                    启用兼容配置
                                 </Label>
                             </div>
                             <Badge variant={data?.webhookSecretConfigured ? "default" : "secondary"} className="gap-1">
@@ -466,7 +444,7 @@ export default function ProviderConfigPage() {
             <Card className="max-w-4xl">
                 <CardHeader>
                     <CardTitle>配置审计</CardTitle>
-                    <CardDescription>最近的供应商配置保存、清除记录，敏感字段已脱敏。</CardDescription>
+                    <CardDescription>最近的优化配置保存、清除记录，敏感字段已脱敏。</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                     {audits.length === 0 ? (

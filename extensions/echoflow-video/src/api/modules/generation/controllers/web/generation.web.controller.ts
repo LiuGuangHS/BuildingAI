@@ -6,11 +6,10 @@ import { Public } from "@buildingai/decorators/public.decorator";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 
-import { webApiRateLimitGuard } from "../../../../common/guards/rate-limit.guard";
-import { CreateVideoGenerationDto, OptimizePromptDto, QueryVideoGenerationDto } from "../../dto";
+import { WebApiRateLimitGuard } from "../../../../common/guards/rate-limit.guard";
+import { CreateVideoGenerationDto, OptimizePromptDto, QueryVideoGenerationDto, QueryVideoTemplateDto } from "../../dto";
 import { GenerationService } from "../../services/generation.service";
 import { PromptOptimizationService } from "../../services/prompt-optimization.service";
-import { ProviderConfigService } from "../../services/provider-config.service";
 import { TemplateService } from "../../services/template.service";
 
 /**
@@ -21,7 +20,6 @@ import { TemplateService } from "../../services/template.service";
 export class GenerationWebController extends BaseController {
     constructor(
         private readonly generationService: GenerationService,
-        private readonly providerConfigService: ProviderConfigService,
         private readonly templateService: TemplateService,
         private readonly promptOptimizationService: PromptOptimizationService,
     ) {
@@ -29,7 +27,7 @@ export class GenerationWebController extends BaseController {
     }
 
     @Post()
-    @UseGuards(webApiRateLimitGuard)
+    @UseGuards(WebApiRateLimitGuard)
     async create(
         @Body() dto: CreateVideoGenerationDto,
         @Playground() user: UserPlayground,
@@ -38,7 +36,7 @@ export class GenerationWebController extends BaseController {
     }
 
     @Post("prompt/optimize")
-    @UseGuards(webApiRateLimitGuard)
+    @UseGuards(WebApiRateLimitGuard)
     async optimizePrompt(@Body() dto: OptimizePromptDto, @Playground() user: UserPlayground) {
         return this.promptOptimizationService.optimize(dto, user.id);
     }
@@ -66,18 +64,29 @@ export class GenerationWebController extends BaseController {
     @Get("options/provider-status")
     @Public()
     async providerStatus() {
-        return this.providerConfigService.getPublicStatus();
+        const models = await this.generationService.listModels();
+        return {
+            available: models.length > 0,
+            configured: models.length > 0,
+            enabled: models.length > 0,
+        };
     }
 
     @Get("options/templates")
     @Public()
-    async promptTemplates() {
-        const result = await this.templateService.listPublicTemplates({ page: 1, pageSize: 20 });
+    async promptTemplates(@Query() query: QueryVideoTemplateDto) {
+        const result = await this.templateService.listPublicTemplates({
+            ...query,
+            page: query.page ?? 1,
+            pageSize: query.pageSize ?? 20,
+        });
         return {
             templates: result.items.map((item) => ({
                 label: item.title,
                 prompt: item.prompt,
                 category: item.category,
+                abilityTypes: item.abilityTypes,
+                modelConfigId: item.modelConfigId,
                 defaultParams: item.defaultParams,
             })),
         };

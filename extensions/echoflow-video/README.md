@@ -1,80 +1,33 @@
 # AI视频工作台
 
-面向创作者的 BuildingAI AI 视频生成插件。当前以 HappyHorse 为首个可用供应商，支持文生视频、图生视频、视频编辑、任务历史和算力计费，后续按统一 Provider Adapter 扩展 Kling、Seedance/ARK、RunningHub/ComfyUI 等视频能力。
+面向创作者的 BuildingAI AI 视频生成插件。当前按固定 P0 模型目录接入 Seedance、Kling 和 HappyHorse 视频能力；管理员不配置供应商，只为每个固定模型维护一组或多组 `Base URL + API Key` 接入点。
 
-插件定位是“用户视频创作台 + 管理员视频运营台”：用户端只做生成、历史和结果查看；管理员端负责供应商、模型、计费、模板、风控和任务运维。
+插件定位是“用户视频创作台 + 管理员视频运营台”：用户端只做生成、历史和结果查看；管理员端负责模型接入点、计费、模板、风控和任务运维。
 
 ## 当前状态
 
-- 版本：`0.0.12`
-- 当前主供应商：HappyHorse
+- 版本：`0.0.1`
+- 当前模型体系：固定 P0 模型目录 + 模型级接入点
 - 当前边界：核心通用视频工作台，暂不包含脚本、分镜、TTS、BGM、字幕和多片段合成
-- 已有能力：插件实体、Web/Console 双入口、双 Controller、双 HTTP client、前端上传、插件扣费、任务历史、模型配置、计费规则、模板预设、提示词优化、优化模型选择、按对话 token 计费、素材元数据、基础风控、批量运维、任务备注、状态时间线、失败分类、配置审计列表、健康统计、HappyHorse Adapter、Provider Registry、短视频制作预留入口、HappyHorse 运行配置和 Webhook Secret
-- 下一目标：使用真实 HappyHorse Key 完成四类模型的端到端联调，并验证提示词优化到生成的完整体验
-- 2026-06-14 审查结论：用户端/管理端边界已按 Web API、Console API、Web service、Console service 分离；通用工作台功能主干已完成，剩余工作集中在真实联调、生产化队列/缓存/E2E、平台 Secret 绑定、多供应商真实接入和短视频独立页面
+- 已有能力：插件实体、Web/Console 双入口、双 Controller、双 HTTP client、前端上传、插件扣费、任务历史、固定 P0 视频模型目录、模型级多接入点配置、计费规则、模板预设、提示词优化、优化模型选择、按对话 token 计费、素材元数据、基础风控、批量运维、任务备注、状态时间线、失败分类、配置审计列表、健康统计、短视频制作预留入口、Webhook Secret 和异步终态加锁写回
+- 下一目标：使用真实 API Key 完成 Seedance、Kling、HappyHorse P0 模型端到端联调，并验证提示词优化到生成的完整体验
+- 2026-06-14 审查结论：用户端/管理端边界已按 Web API、Console API、Web service、Console service 分离；通用工作台功能主干已完成，剩余工作集中在真实联调、生产化队列/缓存/E2E、平台 Secret 绑定和短视频独立页面
+- 2026-06-15 审查结论：当前仍按未上线首版 `0.0.1` 收口，所有表结构、默认配置和初始化逻辑合并进首版 Upgrade；已补齐文件归属校验、计费幂等、模型删除保护、baseURL 校验和提示词优化幂等状态保护，发布前仍需做真实供应商 smoke。
+- 2026-06-16 审查修复：首版 Upgrade 的 PostgreSQL 参数已显式类型转换，避免空库安装时 `could not determine data type of parameter`；提示词优化模型校验改为复用主系统 `AiPublicModule` / `PublicAiModelService`，不再直接注入主系统模型仓库。
 
-## 版本记录
-
-### 0.0.12
+## 首版能力快照
 
 - 修复管理端禁用/隐藏模型后，用户端仍可能通过默认模型兜底提交的问题
 - 视频生成扣费与任务 `billingStatus` 更新改为事务绑定，失败退款也同步保存账务和业务状态
 - Webhook 未配置 Secret 时不再信任公开回调，避免外部请求直接改写任务终态
+- Webhook、轮询、超时扫描和取消写回终态前会重新加锁；已成功或失败的任务不会被旧轮询对象覆盖，成功任务也不会被失败分支退款
 - 用户端限流从整个 Controller 收窄到生成提交和提示词优化，避免模型/模板/轮询请求误伤
 - 主站上传素材的插件文件 URL 允许带 `fileId` 的本地/内网上传路径通过校验，外部 URL 仍保留 SSRF 防护
 - 风控策略开始校验上传素材 size，执行管理端配置的图片/视频大小限制
-- 提示词优化新增插件内幂等记录表 `video_prompt_optimization`，同一 `requestKey` 不重复扣费
+- 提示词优化内置幂等记录表 `video_prompt_optimization`，同一 `requestKey` 不重复扣费；命中 `PENDING` / `FAILED` 记录时不会返回占位优化结果
 - 配置审计记录管理员 `operatorId`
 - `pnpm test` 改为类型检查 + Jest 单测，并替换已漂移的旧单测；测试文件迁移到 `tests/api`，避免混入发布源码
-- 新增 `0.0.12` Upgrade，创建提示词优化幂等记录表
-
-### 0.0.11
-
-- 用户上传素材保存并展示 `fileId`、URL、mimeType、size、fileName，用户详情和管理详情均可查看
-- Console 配置页新增配置审计列表，复用已有脱敏审计表
-- 管理首页健康检查新增模型配置完整度、24h 失败分类和 Provider 5xx 统计
-- Console 详情新增单任务取消、失败任务重试；历史页新增当前页批量取消和批量重试失败任务
-- 新增 `0.0.11` Upgrade，用于更新插件版本记录
-
-### 0.0.10
-
-- 提示词优化支持管理员配置模型池，用户端可在白名单模型中选择优化模型
-- 新增 `GET /generation/prompt/options` Web API，用户端读取默认优化模型、可选模型和计费状态
-- 提示词优化按主站对话 token 口径计费：优先使用主站模型 `billingRule`，公式为 `ceil(totalTokens / tokens * power)`
-- AI Provider 未返回 usage 时使用 `generateTextWithUsage` 估算 token，保证计费有兜底
-- Console 配置页新增按 token 计费开关、兜底 `power/tokens` 与预检 token 数
-- 新增 `0.0.10` Upgrade，补齐提示词优化模型池与计费配置列
-
-### 0.0.9
-
-- P1 用户工作台增强：后端计费估算接入表单、复制参数再生成、失败任务沿用参数重试、历史页时间/账务/排序筛选
-- P1 提示词优化历史：生成记录保存原始提示词、优化来源、优化风格和主站模型 ID
-- P2 管理运营增强：任务详情新增管理员备注、失败分类、状态时间线、标记失败、批量标记失败、超时任务扫描
-- P2 配置审计：供应商配置保存/清除写入脱敏审计表
-- P3 稳定性增强：Provider 错误归一化、状态事件、超时扫描、失败退款复用、Webhook 幂等保护继续沿用终态短路
-- P4 架构整理：新增 `VideoProviderAdapter`、`ProviderRegistryService`、`HappyHorseAdapter`
-- P5 多供应商预留：Kling、Seedance/ARK、DashScope Video、RunningHub/ComfyUI 在管理端显示为 reserved，不开放用户生成
-- 短视频制作预留入口：用户端 `/studio`、管理端 `/console/studio`
-- 新增 `0.0.9` Upgrade，补齐生成记录运营字段与配置审计表
-
-### 0.0.8
-
-- 前置开发提示词优化能力：用户端生成前可一键优化当前提示词
-- 新增 `POST /generation/prompt/optimize` Web API
-- 提示词优化优先调用主站已配置 AI 模型；未配置或模型不可用时使用本地规则优化兜底
-- Console 配置页新增提示词优化开关和主站 AI 模型 ID
-- 新增 `0.0.8` Upgrade，幂等补齐 `prompt_optimizer_enabled` 与 `prompt_optimizer_model_id`
-- 插件依赖补充 `@buildingai/ai-sdk`，用于基于主站模型执行文本生成
-
-### 0.0.7
-
-- HappyHorse 供应商配置从“只配 API Key”扩展为完整运行配置：Base URL、请求超时、测试超时、重试次数、重试延迟、启用状态
-- Webhook Secret 改为 Console 配置和插件内加密保存，不再从环境变量读取
-- HappyHorse 提交、轮询、连接测试、健康检查统一读取后台配置
-- Console 配置页补齐运行参数表单和 Webhook Secret 状态
-- Console 管理首页补 HappyHorse 健康状态、启用模型数、处理中任务数、Webhook 配置状态
-- 新增 `0.0.7` Upgrade，幂等补齐 `video_provider_config` 运行配置列
-- 文档明确当前模块是通用视频工作台，完整短视频制作后置为独立模块或大版本
+- 当前所有字段、默认值和初始化数据都合并在 `src/api/upgrade/0.0.1/index.ts`，未上线前不再保留本地迭代版本号。
 
 ## 架构
 
@@ -103,9 +56,9 @@ extensions/echoflow-video/
 
 核心原则：
 
-- `GenerationService` 编排任务，当前只允许 HappyHorse 模型进入提交链路
-- 后续多供应商版本再通过 `VideoProviderAdapter` 处理鉴权、提交、轮询、回调、错误归一化
-- Provider、Model、Billing、Policy、Template 配置独立建模
+- `GenerationService` 编排任务，按 `model -> endpoint -> submitPath/pollPath` 提交与轮询
+- 固定模型目录在代码中维护模型能力、协议路径、默认参数和外部模型 ID
+- `VideoModelConfig.endpoints` 保存每个模型的一组或多组 `Base URL + API Key`，用户端只展示启用且已有可用接入点的模型
 - 任务记录保存 provider、taskId、modelConfigId、模型快照、计费快照、raw request/response 摘要和失败原因
 - 插件业务密钥不放 `.env`，优先走 Console 配置或平台 Secret
 
@@ -134,18 +87,13 @@ extensions/echoflow-video/
 
 访问路径：`/extension/echoflow-video/console/`
 
-### 供应商配置
+### 模型配置
 
-- HappyHorse API Key、Base URL、启用状态
-- 连接测试、请求超时、测试超时、重试次数、重试延迟
-- Webhook Secret 加密保存，回调从 Console 配置校验
-- 长期支持绑定平台 Secret，插件内加密保存作为 fallback
-
-### 模型管理
-
-- 模型 ID、展示名、供应商、能力类型
-- 输入素材要求、时长范围、分辨率列表、比例列表
-- 是否启用、是否用户可见、排序
+- 固定 P0 视频模型由插件内置目录提供，不在 Console 手工新增或删除模型协议
+- Console 只调整展示名、说明、启用状态、用户可见性、排序、默认参数和接入点
+- 每个模型可配置多组接入点：名称、Base URL、API Key、启用状态、优先级、超时和重试
+- 生成时选择该模型优先级最高且已启用、有 API Key 的接入点
+- 输入素材要求、能力类型、时长范围、分辨率列表和比例列表来自内置模型定义，避免管理员误填导致提交协议漂移
 
 ### 计费与风控
 
@@ -166,22 +114,32 @@ extensions/echoflow-video/
 
 ## 配置
 
-在 BuildingAI 管理端配置 HappyHorse 供应商：
+视频生成接入点在模型配置页维护：
 
-`/extension/echoflow-video/console/config`
+`/extension/echoflow-video/console/models`
 
-插件不从环境变量读取业务 API Key 或 Webhook Secret。生产环境若继续使用插件内加密密钥，需要配置加密密钥；长期建议支持平台 Secret 后绑定 `secretId`。
+插件不要求管理员配置供应商，也不从环境变量读取业务 API Key。每个固定模型可以维护多组接入点，适合官方渠道、代理渠道、私有网关或备用网关并存。运行时按模型选择启用、优先级最高且已有 API Key 的接入点。
 
-### HappyHorse 管理员配置项
+### 模型接入点字段
+
+| 字段 | 说明 |
+|------|------|
+| 名称 | 管理员识别用，例如官方、备用、代理网关 |
+| Base URL | 兼容视频网关地址；必须是公开可访问的 `http(s)` 地址，禁止本机、内网和带凭据 URL |
+| API Key | 后端加密保存，不回显明文 |
+| 优先级 | 数字越小越优先；同一模型可配置多组备用接入点 |
+| 请求超时 | 提交任务和轮询状态的单次请求超时 |
+| 测试超时 | Console 连接测试请求超时 |
+| 重试次数 | 429、5xx、timeout、连接中断等错误的最大重试次数 |
+| 重试延迟 | 指数退避基础延迟 |
+| 启用状态 | 关闭后该接入点不会进入运行选择 |
+
+### 优化与回调配置
+
+`/extension/echoflow-video/console/config` 只保留提示词优化、Webhook Secret 和旧兼容配置：
 
 | 字段 | 默认值 | 说明 |
 |------|--------|------|
-| API Key | 空 | HappyHorse 鉴权密钥，仅后端加密保存，不回显明文 |
-| Base URL | `https://api.echoflow.cn` | HappyHorse API 网关地址，可用于代理网关或私有转发 |
-| 请求超时 | `120000` ms | 提交任务和轮询状态的单次请求超时 |
-| 测试超时 | `15000` ms | Console 连接测试请求超时 |
-| 重试次数 | `2` | 429、5xx、timeout、连接中断等错误的最大重试次数 |
-| 重试延迟 | `1000` ms | 指数退避基础延迟 |
 | Webhook Secret | 空 | 配置后 Webhook 必须携带 `x-webhook-secret` |
 | 提示词优化 | 启用 | 用户端生成前的提示词优化开关 |
 | 提示词优化模型 ID | 空 | 默认主站 AI 模型 ID；留空使用本地规则 |
@@ -189,26 +147,24 @@ extensions/echoflow-video/
 | 提示词优化 token 计费 | 启用 | 按主站对话 token 口径扣费，优先使用模型自身 `billingRule` |
 | 提示词优化兜底计费 | `1 / 1000 tokens` | 当模型未配置有效规则时使用 |
 | 提示词优化预检 tokens | `500` | 优化前余额预检使用，实际扣费按真实或估算 usage |
-| 启用状态 | 启用 | 关闭后用户端不能提交 HappyHorse 任务 |
 
 ### 管理员操作流程
 
-1. 进入 `/extension/echoflow-video/console/config`
-2. 填写 HappyHorse API Key，确认 Base URL、超时和重试参数
-3. 按需开启提示词优化；如需 AI 优化，填写默认主站 AI 模型 ID，并配置允许用户选择的模型池
-4. 点击“测试连接”，确认 HappyHorse 鉴权和网关可用
-5. 如需回调，设置 Webhook Secret，并在 HappyHorse 回调侧使用同一密钥
-6. 开启 HappyHorse 后，在用户端优化提示词并提交测试任务
-7. 到 Console 历史页或管理首页检查任务状态、扣费状态和健康检查结果
+1. 进入 `/extension/echoflow-video/console/models`
+2. 选择一个固定模型，确认启用、用户可见和默认参数
+3. 为该模型新增至少一个接入点，填写 Base URL、API Key、超时、重试和优先级
+4. 点击接入点测试，确认鉴权和网关可达
+5. 按需进入 `/extension/echoflow-video/console/config` 配置提示词优化模型池和 Webhook Secret
+6. 在用户端提交测试任务，到 Console 历史页或管理首页检查任务状态、扣费状态和健康统计
 
 ### 常见排障
 
 | 现象 | 优先检查 |
 |------|----------|
-| 用户端提示未配置或未启用 | Console 配置页是否保存 API Key，启用开关是否打开 |
-| 连接测试失败 | API Key 是否有效，Base URL 是否可访问，测试超时是否过短 |
-| 任务一直处理中 | HappyHorse taskId 是否存在，批量刷新是否可更新状态，轮询请求是否超时；可在 Console 执行超时扫描 |
-| Webhook 无效 | HappyHorse 回调 URL 是否正确，`x-webhook-secret` 是否与 Console 配置一致 |
+| 用户端看不到模型 | 模型是否启用、用户可见，且至少有一个启用并配置 API Key 的接入点 |
+| 接入点测试失败 | API Key 是否有效，Base URL 是否可访问，测试超时是否过短 |
+| 任务一直处理中 | 上游 taskId 是否存在，批量刷新是否可更新状态，轮询请求是否超时；可在 Console 执行超时扫描 |
+| Webhook 无效 | 回调 URL 是否正确，`x-webhook-secret` 是否与 Console 配置一致 |
 | 提示词优化使用本地规则 | Console 未配置主站 AI 模型 ID，或主站模型/密钥不可用 |
 | 用户端看不到可选优化模型 | Console 未填写默认模型或模型池，或对应主站模型不存在/未启用 |
 | 扣费后提交失败 | 记录应进入失败并触发退款；若退款失败，管理员在详情页复核账务状态 |
@@ -220,7 +176,7 @@ Web 接口挂载在 `/echoflow-video/api/` 下，Console 接口挂载在 `/echof
 | 通道 | 用途 |
 |------|------|
 | Web API | 当前用户生成、历史、详情、状态刷新、算力预估、模板读取 |
-| Console API | 供应商配置、模型管理、计费规则、风控策略、模板管理、全站历史、批量运维、健康检查 |
+| Console API | 模型接入点、优化配置、计费规则、风控策略、模板管理、全站历史、批量运维、健康检查 |
 
 ## 主站能力复用
 
@@ -238,14 +194,15 @@ Web 接口挂载在 `/echoflow-video/api/` 下，Console 接口挂载在 `/echof
 优先补强：
 
 - 使用 `ExtensionBillingModule` 统一提供扣费/退款服务，业务侧只保留 `VideoBillingRule`
-- 提示词优化已接入 `PublicAiModelService` 与 `@buildingai/ai-sdk`，优先使用主站模型配置
+- 提示词优化已接入 `AiPublicModule` / `PublicAiModelService` 与 `@buildingai/ai-sdk`，优先使用主站模型配置
 - 提示词优化计费复用主站对话 token 口径：`ceil(totalTokens / tokens * power)`，优先读取主站模型 `billingRule`
 - 需要脚本、分镜、素材分析、VLM 时继续复用 `AiPublicModule` / `PublicAiModelService`
-- 支持 `SecretService` / 平台 Secret，Provider 配置保存 `secretId`
+- 视频生成当前不直接塞进主站 `ai_models`：主站现有模型类型没有文生视频、图生视频、视频编辑等异步生成类型，插件在内置模型目录里维护提交、轮询、Webhook、素材校验和结果 URL 安全；后续若主系统新增视频生成模型抽象，再迁移为主站模型
+- 后续支持 `SecretService` / 平台 Secret，模型接入点保存 `secretId`；首版暂留插件内 AES-GCM，避免把强加密降级为当前 SecretService 的简化字段加密
 - 长任务、自动轮询、批量任务、完整短视频流水线使用队列/worker，不写内存队列
-- 当前仍使用插件内存 `RateLimitGuard`；接入主站 Redis/Cache 前，不改主系统只读区
+- 当前 Web 提交限流已复用主系统 `@buildingai/cache` 的 `CacheService`；分布式 Redis 限流仍作为生产化增强，不改主系统只读区
 - 文件记录保存 fileId、相对路径或平台文件字段，列表/详情用统一文件 URL 能力转换
-- 多供应商后统一 `ProviderHttpClient`，负责超时、重试、代理、脱敏和错误归一化
+- 兼容视频网关客户端统一负责超时、重试、脱敏和错误归一化
 
 ## 开发
 
@@ -281,28 +238,34 @@ pnpm --dir extensions/echoflow-video build:publish
 
 ## 种子数据
 
-插件当前通过升级脚本初始化 4 个默认 HappyHorse 视频模型，并由 `GET /generation/options/models` 返回给用户端：
+插件当前通过升级脚本初始化固定 P0 视频模型；运行时如果发现缺失，也会自动补齐。只有启用、用户可见且至少有一个可用接入点的模型，才会由 `GET /generation/options/models` 返回给用户端：
 
+- `doubao-seedance-2-0-260128`：Seedance 2.0
+- `doubao-seedance-1-5-pro-251215`：Seedance 1.5 Pro
+- `kling-text2video`：可灵文生视频
+- `kling-image2video`：可灵图生视频
+- `kling-multi-image2video`：可灵多图参考生视频
 - `happyhorse-1.0-t2v`：文生视频
 - `happyhorse-1.0-i2v`：图生视频，首帧驱动
 - `happyhorse-1.0-r2v`：参考视频生成
 - `happyhorse-1.0-video-edit`：视频编辑
 
-默认模型写入插件自己的 `video_model_config` 表，升级脚本需要保持幂等，避免重复插入。发布或升级前从插件根目录执行发布构建：
+默认模型写入插件自己的 `video_model_config` 表，升级脚本需要保持幂等，避免重复插入。Console 不再新增或删除模型，只允许调整运营字段和模型接入点；模型协议字段始终以插件内置定义为准。发布或升级前从插件根目录执行发布构建：
 
 ```bash
 pnpm buildingai extension:release
 ```
 
-管理员在 BuildingAI Console 的 `/extension/echoflow-video/console/config` 配置 HappyHorse。插件读取自己的管理员配置表，不要求把业务 API Key 写入环境变量。
+管理员在 BuildingAI Console 的 `/extension/echoflow-video/console/models` 为每个模型配置接入点。插件读取模型自己的接入点配置，不要求把业务 API Key 写入环境变量。
 
-可配置字段包括：
+每个接入点可配置字段包括：
 
-- API Key
+- 名称
 - Base URL
+- API Key
+- 优先级
 - 请求 / 测试超时
 - 重试次数和重试间隔
-- Webhook Secret
 - 启用状态
 
 ## 质量基线
@@ -324,35 +287,28 @@ pnpm buildingai extension:release
 当前结论：
 
 - 通用视频工作台的插件内功能主干已完成：用户端生成、历史、详情、提示词优化、素材上传、参数复用；管理端配置、模型、计费、风控、模板、历史、运维、审计、健康统计均已具备。
-- 尚未完成的不属于“通用工作台页面功能”的部分，主要是：真实 HappyHorse Key 联调、真实主站环境联调、队列/Redis/E2E 等生产化、多供应商真实接入，以及短视频制作独立页面。
+- 尚未完成的不属于“通用工作台页面功能”的部分，主要是：真实 P0 模型 Key 联调、真实主站环境联调、队列/Redis/E2E 等生产化，以及短视频制作独立页面。
 - 短视频制作保留在 `echoflow-video` 插件内作为独立页面和独立后端模块规划，不塞进当前首页单任务生成表单。
 - 下一阶段不要优先扩新页面，先完成真实供应商联调和主站环境联调；短视频页面只保留入口，进入独立排期。
 
 ### 下一阶段优先级
 
-1. HappyHorse 真实闭环：真实 Key、四类模型 payload、素材上传 URL、状态映射、Webhook、失败退款、提示词优化到生成。
+1. P0 视频模型真实闭环：Seedance、Kling、HappyHorse 的真实 Key、payload、素材上传 URL、状态映射、Webhook、失败退款、提示词优化到生成。
 2. 主站环境联调：插件安装、Upgrade、Console 配置保存、用户端生成、账务扣费、文件 URL、重启后页面可用。
-3. 生产化可靠性：队列/worker 自动轮询、Redis/Cache 限流、E2E、升级回归。
-4. 安全与运维：平台 Secret 绑定、配置审计筛选、失败退款复核台账、发布前 smoke checklist。
-5. 短视频制作独立页：只做独立模块规划，不并入当前通用生成表单。
+3. 发布升级联调：`build:publish` / `extension:release`、版本识别、Upgrade 幂等、旧数据和 storage 保留。
+4. 生产化可靠性：队列/worker 自动轮询、Redis 分布式限流、E2E、失败退款复核台账。
+5. 安全与运维：平台 Secret 绑定、模型接入点保存 `secretId`、配置审计筛选、发布前 smoke checklist。
+6. 短视频制作独立页：只做独立模块规划，不并入当前通用生成表单。
 
-### P0：HappyHorse 真实可用闭环
+### P0：固定模型真实可用闭环
 
-- [x] Console 供应商配置、连接测试、超时、重试、Webhook Secret
-- [x] Console 风控策略提供用户并发与每日任务限制
-- [x] Console 模型管理，用户端模型从后台读取
-- [x] Console 计费规则，生成前预估和失败退款
-- [x] Console Prompt 模板，用户端只读使用
-- [x] 用户端提示词优化前置能力
-- [x] Web 按模型能力动态表单和素材上传校验
-- [ ] HappyHorse 四类视频模式真实 Key 端到端联调
-- [x] 后端按模型能力校验参数
-- [x] 任务历史、详情、刷新、失败原因和账务状态闭环
-- [ ] 校验 T2V、I2V、R2V、VIDEO_EDIT 的真实请求 payload、媒体字段和参数映射
-- [ ] 记录 HappyHorse 返回状态全集，补齐 pending/running/succeeded/failed/cancelled 等状态映射
+- [ ] Seedance 2.0、Seedance 1.5 Pro、Kling 和 HappyHorse 真实 Key 端到端联调
+- [ ] 校验文生视频、首帧图生视频、多参考图生视频、视频编辑的真实请求 payload、媒体字段和参数映射
+- [ ] 记录各模型返回状态全集，补齐 pending/running/succeeded/failed/cancelled 等状态映射
+- [ ] 接入点测试覆盖 200、401/403、404 task missing、429、5xx 和 timeout
 - [ ] 真实回调测试：成功、失败、重复回调、缺少 taskId、Secret 错误
 - [ ] 失败退款联调：提交失败、上游失败、taskId 丢失、重复退款保护
-- [ ] 提示词优化真实模型联调：主站模型 ID、Provider Secret、失败 fallback、优化结果可生成
+- [ ] 提示词优化真实模型联调：主站模型 ID、模型密钥、失败 fallback、优化结果可生成
 - [ ] 4090 完整主站联调：当前主系统 notification TypeScript 错误需单独授权后处理
 
 ### P1：用户端通用工作台完善
@@ -373,37 +329,33 @@ pnpm buildingai extension:release
 - [x] Admin 详情页增强：rawRequest/rawResponse、任务耗时、requestKey、状态时间线
 - [x] Admin 任务详情补 failureCategory、providerTaskId、管理员备注
 - [x] 批量运维：批量刷新、标记失败、取消、失败重试、失败退款复核
-- [x] 配置审计：Provider 配置保存/清除脱敏审计，并在 Console 配置页展示
-- [x] 健康检查：HappyHorse 配置、连接、模型数量、处理中任务
+- [x] 配置审计：兼容配置保存/清除脱敏审计，并在 Console 配置页展示
+- [x] 健康检查：模型接入点完整度、模型数量、处理中任务
 - [x] 健康检查增强：长时间 processing 超时扫描
-- [x] 健康检查增强：Provider 5xx 统计、最近失败原因统计、模型配置完整度
+- [x] 健康检查增强：上游 5xx 统计、最近失败原因统计、模型配置完整度
 - [x] API Key 与 Webhook Secret 插件内加密存储
-- [ ] 平台 Secret 绑定，Provider 配置保存 `secretId`
+- [ ] 平台 Secret 绑定，模型接入点保存 `secretId`
+- [ ] 配置审计筛选与导出，便于发布前复核管理员配置变更
+- [ ] 失败退款复核台账，按任务、账务状态和退款失败原因筛选
 
 ### P3：稳定性与生产化
 
 - [ ] 队列/worker 自动轮询，减少对用户页面轮询和手动批量刷新的依赖
-- [ ] Redis/Cache 限流替代当前内存级防护
+- [x] Web 提交限流复用主系统 `CacheService`，替代插件自管 Map / 定时器
+- [ ] Redis 分布式限流替代当前默认内存 Cache 后端
 - [x] 幂等增强：提交、扣费、退款、Webhook 重复回调都可安全处理
-- [x] Provider 错误归一化：鉴权失败、余额不足、参数错误、限流、服务不可用
+- [x] 上游错误归一化：鉴权失败、余额不足、参数错误、限流、服务不可用
 - [ ] E2E：用户生成流程、Console 配置、模型 CRUD、计费 CRUD、策略 CRUD
 - [ ] 发布升级联调：版本识别、Upgrade 执行、旧数据保留、storage 保留、服务重启后页面可打开
+- [ ] `build:publish` / `extension:release` 发布包检查，确认 `tests/api` 不进入发布包、`README.md` 和 `storage/static` 正确携带
 
-### P4：架构扩展，但暂不接多供应商
+### P4：模型网关扩展
 
-- [x] 抽象 `VideoProviderAdapter`
-- [x] HappyHorse 实现统一 Adapter
-- [x] Provider Registry 按 `providerId` 路由
+- [x] 固定模型目录维护模型能力、协议路径、默认参数和外部模型 ID
+- [x] 单模型支持多组 Base URL / API Key 接入点
 - [x] 提交、轮询、Webhook、错误归一化统一接口化
-- [x] 当前只注册 HappyHorse，避免未联调供应商进入用户端
-
-### P5：多供应商后置
-
-- [x] Kling 后台 reserved 占位
-- [x] Seedance/ARK 后台 reserved 占位
-- [x] DashScope video 后台 reserved 占位
-- [x] RunningHub/ComfyUI 工作流型供应商后台 reserved 占位
-- [ ] 接入真实供应商 API、计费、模型能力和媒体合同
+- [x] 用户端只展示已启用、用户可见且存在可用接入点的模型
+- [ ] 新增视频模型时只扩展内置目录和 payload 映射，不引入供应商配置页面
 
 ### P6：高级视频能力
 
@@ -411,7 +363,7 @@ pnpm buildingai extension:release
 - [ ] 动作迁移
 - [ ] 数字人口播轻量版
 - [ ] 批量任务
-- [x] HappyHorse Webhook 回调
+- [x] Webhook 回调
 - [ ] Playwright E2E
 
 ### P7：短视频制作独立页面
@@ -436,3 +388,40 @@ pnpm buildingai extension:release
 `.agents/references/Pixelle-Video` 仅作为能力参考，不复制页面、代码、文案或资源。可参考的方向包括 direct media providers、模型元数据、模式/流水线、模板、素材管理、历史和运维能力。
 
 Pixelle 的 Streamlit 页面结构不适合作为 BuildingAI 插件前端实现；本插件继续按 Web 用户端、Console 管理端、Web API、Console API 四条边界拆分。
+
+## 后端业务逻辑审查（2026-06-15）
+
+### 本轮已修复
+
+| 模块 | 修复点 | 当前状态 |
+|------|--------|----------|
+| Model Endpoint | `baseURL` 现在强制 `http(s)`、禁止凭证片段，并会拒绝本机和内网地址。 | 管理端不会再保存明显非法的模型接入点。 |
+| Model Endpoint | 每个固定模型可保存多组接入点，运行时只选择启用、有密钥且优先级最高的接入点。 | 支持官方、代理、私有网关和备用网关并存。 |
+| Model Endpoint | 保存和测试配置时都会校验超时、重试、提示词优化兜底参数的合法范围；默认/模型池提示词优化模型会重新校验启用状态与 LLM 类型。 | 避免异常运行参数和失效主站模型进入配置。 |
+| Model Config | 创建/更新和用户端读取时只允许当前插件内置的固定 P0 模型；删除前检查计费、策略、模板和历史引用。 | 避免保存不可用模型、展示历史坏配置和制造孤儿配置。 |
+| Policy / Media | 外部媒体 URL 默认关闭；当前生成链路要求素材必须先通过平台上传并提交 `fileId`。 | 解决了素材归属、大小/MIME 信任来源和默认 SSRF 风险。 |
+| Generation | 生成结果 URL 做协议、凭证和内网 host 校验，`PENDING` / `PROCESSING` 状态不能删除。 | 解决了结果地址和任务删除边界问题。 |
+| Billing | 扣费 / 退款已用悲观锁、账务日志和业务状态事务绑定。 | 重试、恢复和失败分支不会重复扣退。 |
+| Generation | Webhook、手动轮询、超时扫描和取消在状态写回前重新加锁并短路终态记录。 | 防止并发回调和轮询用旧对象覆盖成功结果或触发成功后的失败退款。 |
+| Prompt Optimization | 提示词优化记录先落库，AI 优化按预估 token 预扣，失败回退本地优化时事务退款；相同 `requestKey` 只复用已完成记录，`PENDING` / `FAILED` 会明确提示稍后重试或重新提交。 | 解决了重复优化重复扣费、处理中结果误复用和模型失败未退款问题；仍需关注预估 token 与真实 token 的策略偏差。 |
+| Prompt Optimization | 用户端读取模型池和实际优化前都会重新过滤/校验主站模型状态、Provider 状态和 LLM 类型，默认模型失效时回退到第一个可用模型。 | 避免保存后主站模型被禁用或改类型，用户端仍继续展示或调用旧配置。 |
+| Web Templates | `/generation/options/templates` 兼容端点支持传入模板查询参数，返回 abilityTypes 和 modelConfigId。 | 快捷模板可以按当前能力过滤，避免不适配模型的模板混入用户端。 |
+| Main System Reuse | Web 提交限流改为复用主系统 `CacheService`，生成模块导入 `AiPublicModule` 和 `ExtensionBillingModule`，Console 密钥脱敏复用 `maskSensitiveValue`。 | 移除插件自管限流 Map / 定时器和手写脱敏函数，减少手动注册 SDK Service。 |
+
+### 仍需跟进
+
+| 优先级 | 模块 | 问题 | 后续方案 |
+|--------|------|------|----------|
+| P1 | Release / Install | 当前版本已回收为未上线首版 `0.0.1`，发布前仍需要真实安装 smoke。 | 跑 `extension:release` / 安装验证，确认首版 Upgrade、发布产物和本地登记同步。 |
+| P1 | Model Smoke | Seedance、Kling、HappyHorse 真实 Key、payload、Webhook 和失败退款还未跑端到端。 | 准备测试 Key、素材、测试用户和算力余额，跑真实任务并记录状态全集。 |
+| P2 | Stability | 轮询和执行仍偏进程内，单机更顺手，多节点恢复能力有限。 | 接 Redis/BullMQ 或官方队列，减少对用户页面轮询和手动批量刷新依赖。 |
+| P2 | Prompt Optimization | 提示词 AI 优化仍在请求路径内完成。 | 上游 LLM 慢或不稳定时，用户请求会被阻塞；后续可改为创建优化任务并轮询结果。 |
+| P2 | Billing / Policy | 多条启用规则现在按最新创建记录命中，但缺少数据库唯一约束或显式优先级。 | 后续加显式优先级或唯一启用约束，并在 Console 展示最终命中规则。 |
+| P2 | Secret | 首版暂留插件内 AES-GCM，尚未迁移到平台 Secret `secretId`。 | 等主系统 Secret 能满足强加密与运行时读取后，把模型接入点迁移为 `secretId` 绑定。 |
+| P3 | Gateway Client | 当前固定模型目录和兼容网关客户端已经进入运行路径，旧 provider registry 仅剩兼容代码。 | 后续新增模型只扩展目录和 payload 映射，清理不再使用的 registry 预留面。 |
+
+### 已确认较好的边界
+
+- Web / Console 页面、service 和 Controller 已按用户端/管理端拆分。
+- Webhook Secret 未配置时默认拒绝公开回调，避免无密钥改写终态。
+- 生成扣费主流程已放入事务，优于先调用上游再扣费的模式。

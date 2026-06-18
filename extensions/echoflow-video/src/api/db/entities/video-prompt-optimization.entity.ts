@@ -10,8 +10,10 @@ import {
 import type { PromptOptimizationStyle } from "../../modules/generation/dto/prompt-optimization.dto";
 
 export enum VideoPromptOptimizationBillingStatus {
+    PENDING = "pending",
     FREE = "free",
     DEDUCTED = "deducted",
+    REFUNDED = "refunded",
     FAILED = "failed",
 }
 

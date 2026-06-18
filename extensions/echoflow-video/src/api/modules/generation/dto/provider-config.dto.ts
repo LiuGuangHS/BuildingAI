@@ -1,4 +1,4 @@
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
     ArrayMaxSize,
     IsArray,
@@ -128,6 +128,7 @@ export class UpdateProviderConfigDto {
     @IsArray()
     @ArrayMaxSize(20)
     @ValidateNested({ each: true })
+    @Type(() => PromptTemplateDto)
     @IsOptional()
     templates?: PromptTemplateDto[];
 }

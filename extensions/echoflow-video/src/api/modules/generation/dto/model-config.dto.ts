@@ -1,11 +1,71 @@
 import { PaginationDto } from "@buildingai/dto";
-import { Transform } from "class-transformer";
-import { IsBoolean, IsInt, IsObject, IsOptional, IsString, Length } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import { IsArray, IsBoolean, IsInt, IsObject, IsOptional, IsString, Length, Max, Min, ValidateNested } from "class-validator";
 
 import type {
     VideoModelCapabilities,
     VideoModelDefaultParams,
 } from "../../../db/entities/video-model-config.entity";
+
+export class VideoModelEndpointDto {
+    @IsString()
+    @Length(1, 80)
+    @IsOptional()
+    id?: string;
+
+    @IsString()
+    @Length(1, 80)
+    name: string;
+
+    @IsString()
+    @Length(1, 500)
+    baseUrl: string;
+
+    @IsString()
+    @Length(1, 4096)
+    @IsOptional()
+    apiKey?: string;
+
+    @Transform(({ value }) => (value === undefined ? value : value === "true" || value === true))
+    @IsBoolean()
+    @IsOptional()
+    enabled?: boolean;
+
+    @Transform(({ value }) => (value == null ? value : Number(value)))
+    @IsInt()
+    @Min(0)
+    @Max(100000)
+    @IsOptional()
+    priority?: number;
+
+    @Transform(({ value }) => (value == null ? value : Number(value)))
+    @IsInt()
+    @Min(3000)
+    @Max(300000)
+    @IsOptional()
+    requestTimeoutMs?: number;
+
+    @Transform(({ value }) => (value == null ? value : Number(value)))
+    @IsInt()
+    @Min(3000)
+    @Max(60000)
+    @IsOptional()
+    testTimeoutMs?: number;
+
+    @Transform(({ value }) => (value == null ? value : Number(value)))
+    @IsInt()
+    @Min(0)
+    @Max(5)
+    @IsOptional()
+    maxRetries?: number;
+
+    @Transform(({ value }) => (value == null ? value : Number(value)))
+    @IsInt()
+    @Min(100)
+    @Max(10000)
+    @IsOptional()
+    retryDelayMs?: number;
+}
 
 export class QueryVideoModelConfigDto extends PaginationDto {
     @IsString()
@@ -51,6 +111,12 @@ export class CreateVideoModelConfigDto {
     @IsObject()
     @IsOptional()
     defaultParams?: VideoModelDefaultParams;
+
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => VideoModelEndpointDto)
+    @IsOptional()
+    endpoints?: VideoModelEndpointDto[];
 
     @Transform(({ value }) => (value == null ? value : Number(value)))
     @IsInt()

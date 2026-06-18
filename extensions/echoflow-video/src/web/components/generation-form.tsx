@@ -134,13 +134,6 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
         setMedia([...media, { type: defaultType, url: "" }]);
     };
 
-    const handleMediaChange = (index: number, field: "type" | "url", value: string) => {
-        const updated = media.map((item, itemIndex) =>
-            itemIndex === index ? { ...item, [field]: value } : item,
-        );
-        setMedia(updated);
-    };
-
     const handleMediaTypeChange = (index: number, value: string) => {
         const updated = media.map((item, itemIndex) =>
             itemIndex === index ? { type: value as VideoMediaItem["type"], url: "" } : item,
@@ -205,7 +198,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             watermark,
         };
 
-        const submittedMedia = media.filter((item) => item.url.trim());
+        const submittedMedia = media.filter((item) => item.fileId && item.url.trim());
         if (submittedMedia.length > 0) {
             params.media = submittedMedia;
         }
@@ -385,12 +378,13 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
                                                     ))}
                                                 </SelectContent>
                                             </Select>
-                                            <Input
-                                                placeholder="https://..."
-                                                value={item.url}
-                                                onChange={(event) => handleMediaChange(index, "url", event.target.value)}
-                                                className="flex-1"
-                                            />
+                                            <div className="flex min-h-10 flex-1 items-center rounded-md border bg-muted/30 px-3 text-sm">
+                                                {item.fileId ? (
+                                                    <span className="truncate">{item.fileName || item.url}</span>
+                                                ) : (
+                                                    <span className="text-muted-foreground">请上传{typeLabel(item.type)}素材</span>
+                                                )}
+                                            </div>
                                             <div className="flex gap-2">
                                                 <input
                                                     ref={(node) => {
@@ -426,7 +420,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
                                 ))}
                             </div>
                             {media.length === 0 && (
-                                <p className="text-muted-foreground text-xs">点击"添加"上传素材，或填写公网可访问的素材 URL。</p>
+                                <p className="text-muted-foreground text-xs">点击"添加"后上传素材，系统会使用平台上传记录校验文件归属。</p>
                             )}
                             {uploadError && <p className="text-destructive text-xs">{uploadError}</p>}
                             {mediaIssue && <p className="text-destructive text-xs">{mediaIssue}</p>}
@@ -519,7 +513,7 @@ function MediaPreview({ item }: { item: VideoMediaItem }) {
             <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1 text-xs font-medium">
                     {item.type === "video" ? <Video className="size-3.5" /> : <ImageIcon className="size-3.5" />}
-                    {item.fileId ? "已上传素材" : "外部素材 URL"}
+                    {item.fileId ? "已上传素材" : "待重新上传素材"}
                 </p>
                 <p className="text-muted-foreground flex items-center gap-1 truncate text-xs">
                     <Link className="size-3 shrink-0" />
@@ -554,14 +548,25 @@ function getMediaIssue(model: VideoModelOption | undefined, media: VideoMediaIte
     if (model.mediaTypes.length === 0 && media.some((item) => item.url.trim())) {
         return "该模型不需要媒体素材";
     }
-    if (abilityTypes.includes("first_frame_i2v") && firstFrames.length !== 1) {
-        return "图生视频需要 1 张首帧图片";
+    if (media.some((item) => item.url.trim() && !item.fileId)) {
+        return "历史外链素材需要重新上传后才能提交";
     }
-    if (abilityTypes.includes("reference_to_video") && (references.length < 1 || references.length > 4)) {
-        return "参考图生视频需要 1-4 张参考图";
+    if (firstFrames.length > 0) {
+        if (!abilityTypes.includes("first_frame_i2v")) return "当前模型不支持首帧图生视频";
+        if (firstFrames.length !== 1 || references.length > 0 || videos.length > 0) return "图生视频需要且只需要 1 张首帧图片";
     }
-    if ((abilityTypes.includes("video_editing") || abilityTypes.includes("action_transfer")) && videos.length !== 1) {
-        return "视频编辑需要 1 个视频，可再添加参考图";
+    if (references.length > 0) {
+        if (!abilityTypes.includes("reference_to_video") && !abilityTypes.includes("video_editing")) return "当前模型不支持参考图素材";
+        if (references.length > 4) return "参考图最多 4 张";
+    }
+    if (videos.length > 0) {
+        if (!abilityTypes.includes("video_editing") && !abilityTypes.includes("action_transfer")) return "当前模型不支持视频编辑";
+        if (videos.length !== 1 || firstFrames.length > 0) return "视频编辑需要 1 个视频，可再添加参考图";
+    }
+    if (!media.some((item) => item.url.trim()) && !abilityTypes.includes("text_to_video")) {
+        if (abilityTypes.includes("first_frame_i2v")) return "图生视频需要 1 张首帧图片";
+        if (abilityTypes.includes("reference_to_video")) return "参考图生视频需要 1-4 张参考图";
+        if (abilityTypes.includes("video_editing") || abilityTypes.includes("action_transfer")) return "视频编辑需要 1 个视频";
     }
     return undefined;
 }
@@ -584,6 +589,11 @@ function getUploadAcceptIssue(type: VideoMediaItem["type"] | undefined, file: Fi
 
 function estimatePower(model: VideoModelOption | undefined, resolution: string, duration: number) {
     const modelMultiplier: Record<string, number> = {
+        "doubao-seedance-2-0-260128": 4,
+        "doubao-seedance-1-5-pro-251215": 3,
+        "kling-text2video": 3,
+        "kling-image2video": 3,
+        "kling-multi-image2video": 4,
         "happyhorse-1.0-t2v": 2,
         "happyhorse-1.0-i2v": 3,
         "happyhorse-1.0-r2v": 3,

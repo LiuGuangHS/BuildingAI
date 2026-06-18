@@ -1,5 +1,6 @@
+import { CacheModule } from "@buildingai/cache";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
-import { ExtensionBillingModule } from "@buildingai/extension-sdk";
+import { AiPublicModule, ExtensionBillingModule } from "@buildingai/extension-sdk";
 import { Module } from "@nestjs/common";
 
 import { BillingRuleController } from "./controllers/console/billing-rule.controller";
@@ -12,6 +13,7 @@ import { BillingWebController } from "./controllers/web/billing.web.controller";
 import { GenerationWebController } from "./controllers/web/generation.web.controller";
 import { TemplateWebController } from "./controllers/web/template.web.controller";
 import { WebhookController } from "./controllers/web/webhook.controller";
+import { WebApiRateLimitGuard } from "../../common/guards/rate-limit.guard";
 import {
     generationModuleEntities,
     generationModuleProviders,
@@ -19,7 +21,7 @@ import {
 } from "./services/generation.service";
 
 @Module({
-    imports: [TypeOrmModule.forFeature(generationModuleEntities), ExtensionBillingModule],
+    imports: [TypeOrmModule.forFeature(generationModuleEntities), AiPublicModule, ExtensionBillingModule, CacheModule],
     controllers: [
         GenerationController,
         ProviderConfigController,
@@ -32,7 +34,7 @@ import {
         TemplateWebController,
         WebhookController,
     ],
-    providers: generationModuleProviders,
+    providers: [...generationModuleProviders, WebApiRateLimitGuard],
     exports: [GenerationService],
 })
 export class GenerationModule {}

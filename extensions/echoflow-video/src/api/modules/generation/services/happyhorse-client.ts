@@ -3,7 +3,6 @@ import { Logger } from "@nestjs/common";
 
 import type { HappyHorseModel, VideoMediaItem, VideoParameters } from "../../../db/entities/video-generation.entity";
 import type { SubmitTaskInput, SubmitTaskOutput, PollTaskOutput, VideoProviderClient, VideoModelOption } from "./video-provider.interface";
-import { providerRegistry } from "./video-provider.interface";
 
 export interface HappyHorseClientOptions {
     baseUrl?: string;
@@ -225,7 +224,46 @@ export class HappyHorseClient implements VideoProviderClient {
 }
 
 function normalizeBaseUrl(value: string): string {
-    return value.replace(/\/+$/, "");
+    const trimmed = value.trim().replace(/\/+$/, "");
+    if (!trimmed) {
+        throw HttpErrorFactory.badRequest("HappyHorse Base URL 不能为空");
+    }
+
+    let url: URL;
+    try {
+        url = new URL(trimmed);
+    } catch {
+        throw HttpErrorFactory.badRequest("HappyHorse Base URL 格式不正确");
+    }
+
+    if (!["http:", "https:"].includes(url.protocol)) {
+        throw HttpErrorFactory.badRequest("HappyHorse Base URL 仅支持 http/https");
+    }
+    if (url.username || url.password) {
+        throw HttpErrorFactory.badRequest("HappyHorse Base URL 不允许包含用户名或密码");
+    }
+    if (isPrivateOrLocalHost(url.hostname)) {
+        throw HttpErrorFactory.badRequest("HappyHorse Base URL 不允许指向本机或内网地址");
+    }
+
+    return trimmed;
+}
+
+function isPrivateOrLocalHost(hostname: string): boolean {
+    const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return (
+        host === "localhost" ||
+        host === "0.0.0.0" ||
+        host === "127.0.0.1" ||
+        host === "::1" ||
+        host.endsWith(".local") ||
+        host.startsWith("10.") ||
+        host.startsWith("127.") ||
+        host.startsWith("169.254.") ||
+        host.startsWith("192.168.") ||
+        /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    );
 }
 
 /** Determine if a status string represents a terminal success state. */

@@ -92,7 +92,7 @@ function PolicyEditor({ value, onSave }: { value?: VideoPolicyConfig; onSave: (d
     const [maxImageSizeMb, setMaxImageSizeMb] = useState(String(value?.maxImageSizeMb ?? 20));
     const [maxConcurrentJobsPerUser, setMaxConcurrentJobsPerUser] = useState(String(value?.maxConcurrentJobsPerUser ?? 3));
     const [dailyJobsPerUser, setDailyJobsPerUser] = useState(String(value?.dailyJobsPerUser ?? 100));
-    const [allowPublicMediaUrl, setAllowPublicMediaUrl] = useState(value?.allowPublicMediaUrl ?? true);
+    const [allowPublicMediaUrl, setAllowPublicMediaUrl] = useState(value?.allowPublicMediaUrl === true);
     const [enabled, setEnabled] = useState(value?.enabled ?? true);
 
     return (

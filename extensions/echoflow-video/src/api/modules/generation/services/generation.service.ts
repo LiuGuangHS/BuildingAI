@@ -1,15 +1,14 @@
 import { BaseService } from "@buildingai/base";
-import { SecretService } from "@buildingai/core";
+import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants/shared/account-log.constants";
 import { ExtensionBillingService, PublicAiModelService } from "@buildingai/extension-sdk";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AiModel, AiProvider, Secret, SecretTemplate } from "@buildingai/db/entities";
-import type { FindOptionsWhere } from "@buildingai/db/typeorm";
+import { AccountLog, File } from "@buildingai/db/entities";
+import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThanOrEqual, Like, MoreThanOrEqual, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { Injectable, Logger } from "@nestjs/common";
 
 import {
-    HappyHorseModel,
     VideoGeneration,
     VideoGenerationBillingStatus,
     VideoGenerationStatus,
@@ -24,18 +23,12 @@ import { VideoProviderConfig } from "../../../db/entities/video-provider-config.
 import type { VideoMediaItem } from "../../../db/entities/video-generation.entity";
 import { CreateVideoGenerationDto, QueryVideoGenerationDto } from "../dto";
 import { BillingRuleService } from "./billing-rule.service";
-import {
-    HappyHorseClient,
-    isFailedStatus,
-    isSuccessStatus,
-    isTerminalStatus,
-} from "./happyhorse-client";
 import { ModelConfigService, type ResolvedVideoModelConfig } from "./model-config.service";
 import { PolicyService } from "./policy.service";
 import { PromptOptimizationService } from "./prompt-optimization.service";
 import { ProviderConfigService } from "./provider-config.service";
-import { ProviderRegistryService } from "./provider-registry.service";
 import { TemplateService } from "./template.service";
+import { VideoGatewayClient } from "./video-gateway-client";
 
 @Injectable()
 export class GenerationService extends BaseService<VideoGeneration> {
@@ -44,12 +37,15 @@ export class GenerationService extends BaseService<VideoGeneration> {
     constructor(
         @InjectRepository(VideoGeneration)
         private readonly generationRepository: Repository<VideoGeneration>,
+        @InjectRepository(File)
+        private readonly fileRepository: Repository<File>,
+        @InjectRepository(AccountLog)
+        private readonly accountLogRepository: Repository<AccountLog>,
         private readonly billingService: ExtensionBillingService,
         private readonly providerConfigService: ProviderConfigService,
         private readonly modelConfigService: ModelConfigService,
         private readonly billingRuleService: BillingRuleService,
         private readonly policyService: PolicyService,
-        private readonly providerRegistryService: ProviderRegistryService,
     ) {
         super(generationRepository);
     }
@@ -60,24 +56,24 @@ export class GenerationService extends BaseService<VideoGeneration> {
     }
 
     /**
-     * Submit a video generation task to HappyHorse.
+     * Submit a video generation task through the model-level API endpoint.
      *
      * Flow:
      * 1. Validate input
      * 2. Create DB record (status = PROCESSING)
-     * 3. Submit to HappyHorse
+     * 3. Submit to the configured video endpoint
      * 4. Save taskId
      * 5. Return record
      */
     async createAndSubmit(dto: CreateVideoGenerationDto, userId: string) {
         const modelConfig = await this.modelConfigService.findEnabledByModel(dto.model);
-        this.assertHappyHorseCompatible(modelConfig);
-        const model = modelConfig.model as HappyHorseModel;
+        const model = modelConfig.model;
         const prompt = this.sanitizeText(dto.prompt, 4000);
-        const media = dto.media ?? [];
-        await this.policyService.validateGeneration(userId, modelConfig.id, dto);
-        this.validateMediaForModel(model, media);
-        this.validateParamsForModelConfig(modelConfig, dto);
+        const media = await this.normalizeAndValidateMedia(dto.media ?? [], userId);
+        const normalizedDto = { ...dto, media };
+        await this.policyService.validateGeneration(userId, modelConfig.id, normalizedDto);
+        this.validateMediaForModelConfig(modelConfig, media);
+        this.validateParamsForModelConfig(modelConfig, normalizedDto);
         const generationParams = {
             resolution: dto.resolution ?? modelConfig.defaultParams.resolution,
             duration: dto.duration ?? modelConfig.defaultParams.duration,
@@ -110,8 +106,9 @@ export class GenerationService extends BaseService<VideoGeneration> {
             throw HttpErrorFactory.badRequest("可用算力不足，请充值后重试");
         }
 
-        const runtimeConfig = await this.providerConfigService.getHappyHorseRuntimeConfig();
-        const client = this.createProviderClient(modelConfig.provider, runtimeConfig);
+        const endpoint = this.modelConfigService.pickRuntimeEndpoint(modelConfig);
+        const endpointApiKey = this.modelConfigService.decryptEndpointApiKey(endpoint);
+        const client = new VideoGatewayClient(modelConfig, endpoint, endpointApiKey);
 
         // Create DB record
         const record = this.generationRepository.create({
@@ -145,7 +142,7 @@ export class GenerationService extends BaseService<VideoGeneration> {
             statusEvents: [
                 this.makeStatusEvent(
                     VideoGenerationStatus.PROCESSING,
-                    "任务已创建，等待提交到 HappyHorse",
+                    "任务已创建，等待提交到视频接口",
                     "web",
                 ),
             ],
@@ -171,15 +168,26 @@ export class GenerationService extends BaseService<VideoGeneration> {
 
         try {
             saved = await this.withTransaction(async (manager) => {
-                await this.billingService.deductUserPower({
-                    userId,
-                    amount: billingAmount,
-                    remark: `Echoflow Video: ${model}`,
-                    associationNo: saved.id,
-                    associationUserId: userId,
-                }, manager);
-                saved.billingStatus = VideoGenerationBillingStatus.DEDUCTED;
-                return manager.save(VideoGeneration, saved);
+                const locked = await manager.findOne(VideoGeneration, {
+                    where: { id: saved.id } as FindOptionsWhere<VideoGeneration>,
+                    lock: { mode: "pessimistic_write" },
+                });
+                if (!locked) {
+                    throw HttpErrorFactory.notFound("视频生成记录不存在");
+                }
+
+                const duplicateDeduction = await this.hasBillingLog(locked.id, ACTION.DEC, manager);
+                if (!duplicateDeduction) {
+                    await this.billingService.deductUserPower({
+                        userId,
+                        amount: billingAmount,
+                        remark: `Echoflow Video: ${model}`,
+                        associationNo: locked.id,
+                        associationUserId: userId,
+                    }, manager);
+                }
+                locked.billingStatus = VideoGenerationBillingStatus.DEDUCTED;
+                return manager.save(VideoGeneration, locked);
             });
         } catch (error) {
             saved.status = VideoGenerationStatus.FAILED;
@@ -193,7 +201,6 @@ export class GenerationService extends BaseService<VideoGeneration> {
             throw HttpErrorFactory.badRequest("算力扣费失败，请稍后重试");
         }
 
-        // Submit to HappyHorse
         try {
             const result = await client.submitTask({
                 model,
@@ -206,7 +213,7 @@ export class GenerationService extends BaseService<VideoGeneration> {
             saved.rawRequest = this.compactRawPayload(result.rawRequest);
             saved.rawResponse = this.compactRawPayload(result.rawResponse);
             saved.progress = 20;
-            this.appendStatusEvent(saved, VideoGenerationStatus.PROCESSING, "任务已提交到 HappyHorse", "provider");
+            this.appendStatusEvent(saved, VideoGenerationStatus.PROCESSING, "任务已提交到视频接口", "provider");
             await this.generationRepository.save(saved);
 
             this.logger.log(`Video generation ${saved.id} submitted: taskId=${result.taskId}`);
@@ -229,7 +236,7 @@ export class GenerationService extends BaseService<VideoGeneration> {
     }
 
     /**
-     * Poll HappyHorse for the current task status and update the DB record.
+     * Poll the provider task status and update the DB record.
      * Returns the updated record. If the task has reached a terminal state
      * (succeeded/failed), the record is finalized.
      */
@@ -284,47 +291,27 @@ export class GenerationService extends BaseService<VideoGeneration> {
         };
     }
 
-    /** Health check: verify DB connectivity and HappyHorse availability. */
+    /** Health check: verify DB connectivity and model endpoint completeness. */
     async healthCheck() {
-        const providerConfig = await this.providerConfigService.getConsoleConfig();
         const activeTasks = await this.generationRepository.count({
             where: {
                 status: In([VideoGenerationStatus.PENDING, VideoGenerationStatus.PROCESSING]),
             } as FindOptionsWhere<VideoGeneration>,
         });
-        const enabledModels = await this.modelConfigService.listEnabledForWeb();
+        const modelList = await this.modelConfigService.list({ page: 1, pageSize: 100 });
+        const enabledModels = modelList.items.filter((model) => model.enabled && model.visibleToUser);
         const modelCompleteness = await this.modelConfigService.getConfigCompleteness();
         const recentFailureStats = await this.getRecentFailureStats();
-        let happyhorseStatus = providerConfig.configured
-            ? providerConfig.enabled
-                ? "unknown"
-                : "disabled"
-            : "unconfigured";
-
-        try {
-            if (providerConfig.configured && providerConfig.enabled) {
-                const runtimeConfig = await this.providerConfigService.getHappyHorseRuntimeConfig();
-                const client = this.createProviderClient("happyhorse", runtimeConfig);
-                await client.testConnection();
-                happyhorseStatus = "healthy";
-            }
-        } catch {
-            happyhorseStatus = "unavailable";
-        }
+        const missingEndpointModels = enabledModels.filter((model) => {
+            const endpoints = model.endpoints ?? [];
+            return !endpoints.some((endpoint) => endpoint.enabled && endpoint.apiKeyMasked);
+        });
 
         return {
-            status: happyhorseStatus === "healthy" ? "ok" : "attention",
-            happyhorse: happyhorseStatus,
-            provider: {
-                configured: providerConfig.configured,
-                enabled: providerConfig.enabled,
-                baseUrl: providerConfig.baseUrl,
-                requestTimeoutMs: providerConfig.requestTimeoutMs,
-                maxRetries: providerConfig.maxRetries,
-                webhookSecretConfigured: providerConfig.webhookSecretConfigured,
-            },
+            status: missingEndpointModels.length === 0 ? "ok" : "attention",
             enabledModelCount: enabledModels.length,
             modelCompleteness,
+            missingEndpointModels: missingEndpointModels.map((model) => model.model),
             activeTasks,
             recentFailures: recentFailureStats,
             checkedAt: new Date().toISOString(),
@@ -344,12 +331,13 @@ export class GenerationService extends BaseService<VideoGeneration> {
             record.completedAt = new Date();
             this.appendStatusEvent(record, VideoGenerationStatus.FAILED, "任务 ID 丢失，无法轮询", "system");
             await this.refundIfNeeded(record, userId, "视频任务 ID 丢失自动退款");
-            await this.generationRepository.save(record);
-            return record;
+            return this.saveNonTerminalUpdate(record);
         }
 
-        const runtimeConfig = await this.providerConfigService.getHappyHorseRuntimeConfig();
-        const client = this.createProviderClient(record.provider ?? "happyhorse", runtimeConfig);
+        const modelConfig = await this.modelConfigService.findEnabledByModel(record.model);
+        const endpoint = this.modelConfigService.pickRuntimeEndpoint(modelConfig);
+        const endpointApiKey = this.modelConfigService.decryptEndpointApiKey(endpoint);
+        const client = new VideoGatewayClient(modelConfig, endpoint, endpointApiKey);
 
         try {
             const pollResult = await client.pollTask(record.taskId);
@@ -358,14 +346,25 @@ export class GenerationService extends BaseService<VideoGeneration> {
             record.rawResponse = this.compactRawPayload(pollResult.rawResponse);
 
             if (isSuccessStatus(pollResult.status)) {
-                record.status = VideoGenerationStatus.SUCCEEDED;
-                record.videoUrl = pollResult.videoUrl;
-                record.progress = 100;
-                record.completedAt = new Date();
-                this.appendStatusEvent(record, VideoGenerationStatus.SUCCEEDED, "视频生成完成", "provider");
+                const videoUrl = this.normalizeResultVideoUrl(pollResult.videoUrl);
+                if (videoUrl) {
+                    record.status = VideoGenerationStatus.SUCCEEDED;
+                    record.videoUrl = videoUrl;
+                    record.progress = 100;
+                    record.completedAt = new Date();
+                    this.appendStatusEvent(record, VideoGenerationStatus.SUCCEEDED, "视频生成完成", "provider");
+                } else {
+                    record.status = VideoGenerationStatus.FAILED;
+                    record.errorMessage = "视频任务完成但未返回有效视频地址";
+                    record.failureCategory = "provider_missing_output";
+                    record.progress = 100;
+                    record.completedAt = new Date();
+                    this.appendStatusEvent(record, VideoGenerationStatus.FAILED, record.errorMessage, "provider");
+                    await this.refundIfNeeded(record, userId, "视频生成结果缺失自动退款");
+                }
             } else if (isFailedStatus(pollResult.status)) {
                 record.status = VideoGenerationStatus.FAILED;
-                record.errorMessage = `HappyHorse 任务失败: status=${pollResult.status}`;
+                record.errorMessage = `视频任务失败: status=${pollResult.status}`;
                 record.failureCategory = "provider_failed";
                 record.progress = 100;
                 record.completedAt = new Date();
@@ -376,8 +375,7 @@ export class GenerationService extends BaseService<VideoGeneration> {
             }
             // else: still processing, keep status as-is
 
-            await this.generationRepository.save(record);
-            return record;
+            return this.saveNonTerminalUpdate(record);
         } catch (error) {
             this.logger.error(`Poll failed for generation ${record.id}`, error);
             // Don't mark as failed on poll error — let the frontend retry
@@ -430,7 +428,8 @@ export class GenerationService extends BaseService<VideoGeneration> {
 
     /** Admin: delete any record by id (no user check). */
     async deleteOne(id: string) {
-        await this.findOne(id);
+        const record = await this.findOne(id);
+        this.assertVideoCanBeDeleted(record);
         await this.delete(id);
         return { success: true, message: "删除成功" };
     }
@@ -494,7 +493,7 @@ export class GenerationService extends BaseService<VideoGeneration> {
             record.completedAt = new Date();
             this.appendStatusEvent(record, VideoGenerationStatus.FAILED, record.errorMessage, "system");
             await this.refundIfNeeded(record, record.userId, "视频任务超时自动退款");
-            updated.push(await this.generationRepository.save(record));
+            updated.push(await this.saveNonTerminalUpdate(record));
         }
         return { total: records.length, updated };
     }
@@ -511,7 +510,7 @@ export class GenerationService extends BaseService<VideoGeneration> {
         record.completedAt = new Date();
         this.appendStatusEvent(record, VideoGenerationStatus.FAILED, message, "console");
         await this.refundIfNeeded(record, record.userId, "管理员取消任务自动退款");
-        return this.generationRepository.save(record);
+        return this.saveNonTerminalUpdate(record);
     }
 
     async batchCancel(ids: string[], message = "管理员批量取消任务") {
@@ -530,6 +529,9 @@ export class GenerationService extends BaseService<VideoGeneration> {
         const record = await this.findOne(id);
         if (record.status !== VideoGenerationStatus.FAILED) {
             throw HttpErrorFactory.badRequest("只有失败任务可以重试");
+        }
+        if (record.media?.some((item) => !item.fileId)) {
+            throw HttpErrorFactory.badRequest("历史视频任务未保存 fileId，无法重试，请重新上传素材");
         }
 
         return this.createAndSubmit({
@@ -574,12 +576,13 @@ export class GenerationService extends BaseService<VideoGeneration> {
     }
 
     async deleteOwnedById(id: string, userId: string) {
-        await this.findOwnedById(id, userId);
+        const record = await this.findOwnedById(id, userId);
+        this.assertVideoCanBeDeleted(record);
         await this.delete(id);
         return { success: true, message: "删除成功" };
     }
 
-    /** Find a generation record by HappyHorse taskId. */
+    /** Find a generation record by provider taskId. */
     async findByTaskId(taskId: string) {
         return this.generationRepository.findOne({
             where: { taskId } as FindOptionsWhere<VideoGeneration>,
@@ -599,14 +602,25 @@ export class GenerationService extends BaseService<VideoGeneration> {
         }
 
         if (isSuccessStatus(status)) {
-            record.status = VideoGenerationStatus.SUCCEEDED;
-            record.videoUrl = videoUrl;
-            record.progress = 100;
-            record.completedAt = new Date();
-            this.appendStatusEvent(record, VideoGenerationStatus.SUCCEEDED, "HappyHorse 回调成功", "webhook");
+            const normalizedVideoUrl = this.normalizeResultVideoUrl(videoUrl);
+            if (normalizedVideoUrl) {
+                record.status = VideoGenerationStatus.SUCCEEDED;
+                record.videoUrl = normalizedVideoUrl;
+                record.progress = 100;
+                record.completedAt = new Date();
+                this.appendStatusEvent(record, VideoGenerationStatus.SUCCEEDED, "视频回调成功", "webhook");
+            } else {
+                record.status = VideoGenerationStatus.FAILED;
+                record.errorMessage = "视频回调成功但未返回有效视频地址";
+                record.failureCategory = "provider_missing_output";
+                record.progress = 100;
+                record.completedAt = new Date();
+                this.appendStatusEvent(record, VideoGenerationStatus.FAILED, record.errorMessage, "webhook");
+                await this.refundIfNeeded(record, record.userId, "视频回调结果缺失自动退款");
+            }
         } else if (isFailedStatus(status)) {
             record.status = VideoGenerationStatus.FAILED;
-            record.errorMessage = `HappyHorse 回调: status=${status}`;
+            record.errorMessage = `视频回调: status=${status}`;
             record.failureCategory = "provider_webhook_failed";
             record.progress = 100;
             record.completedAt = new Date();
@@ -614,12 +628,12 @@ export class GenerationService extends BaseService<VideoGeneration> {
             await this.refundIfNeeded(record, record.userId, "视频生成失败自动退款");
         }
 
-        await this.generationRepository.save(record);
-        this.logger.log(`Webhook processed: taskId=${taskId} status=${record.status}`);
-        return record;
+        const saved = await this.saveNonTerminalUpdate(record);
+        this.logger.log(`Webhook processed: taskId=${taskId} status=${saved.status}`);
+        return saved;
     }
 
-    private validateMediaForModel(model: HappyHorseModel, media: VideoMediaItem[]) {
+    private validateMediaForModelConfig(modelConfig: ResolvedVideoModelConfig, media: VideoMediaItem[]) {
         for (const item of media) {
             this.validateMediaUrl(item);
             this.validateMediaMimeType(item);
@@ -628,30 +642,50 @@ export class GenerationService extends BaseService<VideoGeneration> {
         const firstFrames = media.filter((item) => item.type === "first_frame");
         const references = media.filter((item) => item.type === "reference_image");
         const videos = media.filter((item) => item.type === "video");
+        const mediaTypes = modelConfig.capabilities.mediaTypes ?? [];
+        const abilityTypes = modelConfig.capabilities.abilityTypes ?? [];
+        const supportsFirstFrame = mediaTypes.includes("first_frame");
+        const supportsReference = mediaTypes.includes("reference_image");
+        const supportsVideo = mediaTypes.includes("video");
 
-        switch (model) {
-            case HappyHorseModel.T2V:
-                if (media.length > 0) {
-                    throw HttpErrorFactory.badRequest("文生视频模型不需要媒体素材");
-                }
-                return;
-            case HappyHorseModel.I2V:
-                if (firstFrames.length !== 1 || references.length > 0 || videos.length > 0) {
-                    throw HttpErrorFactory.badRequest("图生视频模型必须且只能提交 1 张首帧图片");
-                }
-                return;
-            case HappyHorseModel.R2V:
-                if (references.length < 1 || references.length > 4 || firstFrames.length > 0 || videos.length > 0) {
-                    throw HttpErrorFactory.badRequest("参考图生视频模型必须提交 1-4 张参考图");
-                }
-                return;
-            case HappyHorseModel.VIDEO_EDIT:
-                if (videos.length !== 1 || firstFrames.length > 0 || references.length > 4) {
-                    throw HttpErrorFactory.badRequest("视频编辑模型必须提交 1 个视频，可选 0-4 张参考图");
-                }
-                return;
-            default:
-                throw HttpErrorFactory.badRequest("不支持的视频模型");
+        if (!supportsFirstFrame && firstFrames.length > 0) {
+            throw HttpErrorFactory.badRequest("当前模型不支持首帧图片素材");
+        }
+        if (!supportsReference && references.length > 0) {
+            throw HttpErrorFactory.badRequest("当前模型不支持参考图素材");
+        }
+        if (!supportsVideo && videos.length > 0) {
+            throw HttpErrorFactory.badRequest("当前模型不支持视频素材");
+        }
+        if (firstFrames.length > 0) {
+            if (!abilityTypes.includes("first_frame_i2v")) {
+                throw HttpErrorFactory.badRequest("当前模型不支持图生视频");
+            }
+            if (firstFrames.length !== 1 || references.length > 0 || videos.length > 0) {
+                throw HttpErrorFactory.badRequest("图生视频模型必须且只能提交 1 张首帧图片");
+            }
+        }
+        if (references.length > 0) {
+            if (!abilityTypes.includes("reference_to_video") && !abilityTypes.includes("video_editing")) {
+                throw HttpErrorFactory.badRequest("当前模型不支持参考图素材");
+            }
+            if (references.length < 1 || references.length > 4) {
+                throw HttpErrorFactory.badRequest("参考图生视频模型必须提交 1-4 张参考图");
+            }
+        }
+        if (videos.length > 0) {
+            if (!abilityTypes.includes("video_editing") && !abilityTypes.includes("action_transfer")) {
+                throw HttpErrorFactory.badRequest("当前模型不支持视频编辑");
+            }
+            if (videos.length !== 1 || firstFrames.length > 0) {
+                throw HttpErrorFactory.badRequest("视频编辑模型必须提交 1 个视频，可选 0-4 张参考图");
+            }
+        }
+        if (!mediaTypes.length && media.length > 0) {
+            throw HttpErrorFactory.badRequest("文生视频模型不需要媒体素材");
+        }
+        if (media.length === 0 && !abilityTypes.includes("text_to_video")) {
+            throw HttpErrorFactory.badRequest("当前模型需要上传素材");
         }
     }
 
@@ -676,8 +710,87 @@ export class GenerationService extends BaseService<VideoGeneration> {
             throw HttpErrorFactory.badRequest("媒体素材 URL 不允许包含用户名或密码");
         }
 
-        const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-        const isLocalOrPrivate =
+        const isPlatformUpload =
+            Boolean(item.fileId) &&
+            (url.pathname.startsWith("/echoflow-video/uploads/") ||
+                url.pathname.startsWith("/uploads/"));
+
+        if (this.isPrivateOrLocalHost(url.hostname) && !isPlatformUpload) {
+            throw HttpErrorFactory.badRequest("媒体素材 URL 不允许指向本机或内网地址");
+        }
+    }
+
+    private async normalizeAndValidateMedia(media: VideoMediaItem[], userId: string) {
+        const normalized = await Promise.all(
+            media.map(async (item) => {
+                if (!item.fileId) {
+                    throw HttpErrorFactory.badRequest("媒体素材必须先通过平台上传");
+                }
+
+                const file = await this.fileRepository.findOne({
+                    where: { id: item.fileId } as FindOptionsWhere<File>,
+                });
+                if (!file) {
+                    throw HttpErrorFactory.badRequest("媒体素材文件不存在");
+                }
+                if (file.uploaderId !== userId) {
+                    throw HttpErrorFactory.badRequest("媒体素材不属于当前用户");
+                }
+                if (file.extensionIdentifier !== "echoflow-video") {
+                    throw HttpErrorFactory.badRequest("媒体素材不属于当前插件上传文件");
+                }
+                if (!file.url) {
+                    throw HttpErrorFactory.badRequest("媒体素材缺少可访问地址");
+                }
+                if (!file.size || file.size <= 0) {
+                    throw HttpErrorFactory.badRequest("媒体素材大小无效");
+                }
+                if (file.size > 1024 * 1024 * 1024) {
+                    throw HttpErrorFactory.badRequest("媒体素材不能超过 1GB");
+                }
+
+                const normalizedItem: VideoMediaItem = {
+                    ...item,
+                    url: file.url,
+                    mimeType: file.mimeType,
+                    fileName: file.originalName,
+                    size: file.size,
+                };
+                this.validateMediaUrl(normalizedItem);
+                this.validateMediaMimeType(normalizedItem);
+                return normalizedItem;
+            }),
+        );
+
+        return normalized;
+    }
+
+    private normalizeResultVideoUrl(raw?: string) {
+        const value = raw?.trim();
+        if (!value) {
+            return undefined;
+        }
+
+        let url: URL;
+        try {
+            url = new URL(value);
+        } catch {
+            return undefined;
+        }
+
+        if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
+            return undefined;
+        }
+        if (this.isPrivateOrLocalHost(url.hostname)) {
+            return undefined;
+        }
+
+        return url.toString();
+    }
+
+    private isPrivateOrLocalHost(hostname: string): boolean {
+        const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+        return (
             host === "localhost" ||
             host === "0.0.0.0" ||
             host === "127.0.0.1" ||
@@ -688,14 +801,28 @@ export class GenerationService extends BaseService<VideoGeneration> {
             host.startsWith("169.254.") ||
             host.startsWith("192.168.") ||
             /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
-            /^172\.(1[6-9]|2\d|3[0-1])\./.test(host);
-        const isPlatformUpload =
-            Boolean(item.fileId) &&
-            (url.pathname.startsWith("/echoflow-video/uploads/") ||
-                url.pathname.startsWith("/uploads/"));
+            /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+        );
+    }
 
-        if (isLocalOrPrivate && !isPlatformUpload) {
-            throw HttpErrorFactory.badRequest("媒体素材 URL 不允许指向本机或内网地址");
+    private async hasBillingLog(
+        associationNo: string,
+        action: (typeof ACTION)[keyof typeof ACTION],
+        manager?: EntityManager,
+    ) {
+        const repository = manager?.getRepository(AccountLog) ?? this.accountLogRepository;
+        return repository.exists({
+            where: {
+                associationNo,
+                accountType: ACCOUNT_LOG_TYPE.PLUGIN_DEC,
+                action,
+            } as FindOptionsWhere<AccountLog>,
+        });
+    }
+
+    private assertVideoCanBeDeleted(record: VideoGeneration) {
+        if ([VideoGenerationStatus.PENDING, VideoGenerationStatus.PROCESSING].includes(record.status)) {
+            throw HttpErrorFactory.badRequest("视频任务处理中，完成或失败后才能删除");
         }
     }
 
@@ -715,26 +842,51 @@ export class GenerationService extends BaseService<VideoGeneration> {
     }
 
     private async refundIfNeeded(record: VideoGeneration, userId: string, remark: string) {
-        if (
-            record.billingStatus !== VideoGenerationBillingStatus.DEDUCTED ||
-            !record.billingAmount ||
-            record.billingAmount <= 0 ||
-            record.billingRuleSnapshot?.refundOnFailure === false
-        ) {
+        if (record.billingRuleSnapshot?.refundOnFailure === false) {
             return;
         }
 
         try {
             await this.withTransaction(async (manager) => {
-                await this.billingService.addUserPower({
-                    userId,
-                    amount: record.billingAmount,
-                    remark,
-                    associationNo: record.id,
-                    associationUserId: userId,
-                }, manager);
-                record.billingStatus = VideoGenerationBillingStatus.REFUNDED;
-                await manager.save(VideoGeneration, record);
+                const locked = await manager.findOne(VideoGeneration, {
+                    where: { id: record.id } as FindOptionsWhere<VideoGeneration>,
+                    lock: { mode: "pessimistic_write" },
+                });
+                if (!locked) {
+                    throw HttpErrorFactory.notFound("视频生成记录不存在");
+                }
+                if (locked.status === VideoGenerationStatus.SUCCEEDED) {
+                    record.billingStatus = locked.billingStatus;
+                    return;
+                }
+                if (
+                    !locked.billingAmount ||
+                    locked.billingAmount <= 0 ||
+                    locked.billingRuleSnapshot?.refundOnFailure === false
+                ) {
+                    return;
+                }
+
+                const wasDeducted =
+                    locked.billingStatus === VideoGenerationBillingStatus.DEDUCTED ||
+                    await this.hasBillingLog(locked.id, ACTION.DEC, manager);
+                if (!wasDeducted) {
+                    return;
+                }
+
+                const duplicateRefund = await this.hasBillingLog(locked.id, ACTION.INC, manager);
+                if (locked.billingStatus !== VideoGenerationBillingStatus.REFUNDED && !duplicateRefund) {
+                    await this.billingService.addUserPower({
+                        userId: locked.userId,
+                        amount: locked.billingAmount,
+                        remark,
+                        associationNo: locked.id,
+                        associationUserId: locked.userId,
+                    }, manager);
+                }
+                locked.billingStatus = VideoGenerationBillingStatus.REFUNDED;
+                await manager.save(VideoGeneration, locked);
+                record.billingStatus = locked.billingStatus;
             });
         } catch (error) {
             this.logger.error(`Video generation ${record.id} billing refund failed`, error);
@@ -743,6 +895,34 @@ export class GenerationService extends BaseService<VideoGeneration> {
                 2000,
             );
         }
+    }
+
+    private async saveNonTerminalUpdate(record: VideoGeneration) {
+        return this.withTransaction(async (manager) => {
+            const locked = await manager.findOne(VideoGeneration, {
+                where: { id: record.id } as FindOptionsWhere<VideoGeneration>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!locked) {
+                throw HttpErrorFactory.notFound("视频生成记录不存在");
+            }
+            if (isTerminalStatus(locked.status)) {
+                return locked;
+            }
+
+            locked.status = record.status;
+            locked.billingStatus = record.billingStatus;
+            locked.taskId = record.taskId;
+            locked.videoUrl = record.videoUrl;
+            locked.errorMessage = record.errorMessage;
+            locked.failureCategory = record.failureCategory;
+            locked.progress = record.progress;
+            locked.completedAt = record.completedAt;
+            locked.rawRequest = record.rawRequest;
+            locked.rawResponse = record.rawResponse;
+            locked.statusEvents = record.statusEvents;
+            return manager.save(VideoGeneration, locked);
+        });
     }
 
     private sanitizeText(text: string, maxLength: number): string {
@@ -855,28 +1035,6 @@ export class GenerationService extends BaseService<VideoGeneration> {
         return err.code === "23505" || (err.message?.includes("duplicate key") ?? false);
     }
 
-    private assertHappyHorseCompatible(modelConfig: ResolvedVideoModelConfig) {
-        if (modelConfig.provider !== "happyhorse") {
-            throw HttpErrorFactory.badRequest(
-                `视频供应商 ${modelConfig.provider} 尚未接入提交适配器`,
-            );
-        }
-        if (!Object.values(HappyHorseModel).includes(modelConfig.model as HappyHorseModel)) {
-            throw HttpErrorFactory.badRequest(`HappyHorse 模型 ${modelConfig.model} 暂不支持`);
-        }
-    }
-
-    private createProviderClient(providerId: string, runtimeConfig: {
-        apiKey: string;
-        clientOptions: Record<string, unknown>;
-    }) {
-        const adapter = this.providerRegistryService.getAdapter(providerId);
-        if (!adapter?.enabled) {
-            throw HttpErrorFactory.badRequest(`视频供应商 ${providerId} 尚未启用`);
-        }
-        return adapter.createClient(runtimeConfig);
-    }
-
     private validateParamsForModelConfig(
         modelConfig: ResolvedVideoModelConfig,
         dto: CreateVideoGenerationDto,
@@ -917,10 +1075,8 @@ export const generationModuleEntities = [
     VideoPolicyConfig,
     VideoConfigAudit,
     VideoPromptOptimization,
-    AiModel,
-    AiProvider,
-    Secret,
-    SecretTemplate,
+    AccountLog,
+    File,
 ];
 export const generationModuleProviders = [
     GenerationService,
@@ -930,7 +1086,16 @@ export const generationModuleProviders = [
     TemplateService,
     PolicyService,
     PromptOptimizationService,
-    PublicAiModelService,
-    SecretService,
-    ProviderRegistryService,
 ];
+
+function isSuccessStatus(status: string): boolean {
+    return ["succeeded", "success", "SUCCEEDED", "completed", "complete"].includes(status);
+}
+
+function isFailedStatus(status: string): boolean {
+    return ["failed", "cancelled", "canceled", "FAILED", "CANCELED", "error"].includes(status);
+}
+
+function isTerminalStatus(status: string): boolean {
+    return isSuccessStatus(status) || isFailedStatus(status);
+}
