@@ -59,6 +59,7 @@ export class InitAiTown1781539200003 {
         await queryRunner.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_ai_town"."town_ai_configs" (
                 "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                "key" varchar(50) NOT NULL DEFAULT 'default',
                 "enabled" boolean NOT NULL DEFAULT false,
                 "default_model_id" uuid,
                 "temperature" double precision NOT NULL DEFAULT 0.8,
@@ -66,7 +67,8 @@ export class InitAiTown1781539200003 {
                 "fallback_to_rules" boolean NOT NULL DEFAULT true,
                 "daily_limit_per_user" int NOT NULL DEFAULT 100,
                 "created_at" timestamptz NOT NULL DEFAULT now(),
-                "updated_at" timestamptz NOT NULL DEFAULT now()
+                "updated_at" timestamptz NOT NULL DEFAULT now(),
+                CONSTRAINT "uq_town_ai_configs_key" UNIQUE ("key")
             )
         `);
 

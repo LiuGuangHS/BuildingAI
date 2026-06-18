@@ -6,6 +6,9 @@ export class TownAiConfig {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
 
+    @Column({ type: "varchar", length: 50, default: "default", unique: true, comment: "Singleton config key" })
+    key!: string;
+
     @Column({ type: "boolean", default: false, comment: "Whether AI generation is enabled" })
     enabled!: boolean;
 

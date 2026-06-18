@@ -8,6 +8,8 @@ import { generateText } from "ai";
 import { TownAiCallLog, TownAiConfig, TownCharacter, TownEvent, TownSave } from "../../../db/entities";
 import { type UpdateTownAiConfigDto } from "../dto";
 
+const TOWN_AI_CONFIG_KEY = "default";
+
 type GenerateContext = {
     userId?: string;
     save?: TownSave;
@@ -63,8 +65,16 @@ export class TownAiService {
     }
 
     async getConfig() {
-        const config = await this.configRepo.findOne({ order: { createdAt: "ASC" } });
-        return config ?? this.createDefaultConfig();
+        const config = await this.configRepo.findOne({ where: { key: TOWN_AI_CONFIG_KEY } });
+        if (config) return config;
+        try {
+            return await this.configRepo.save(this.createDefaultConfig());
+        } catch (error) {
+            if ((error as { code?: string }).code !== "23505") throw error;
+            const racedConfig = await this.configRepo.findOne({ where: { key: TOWN_AI_CONFIG_KEY } });
+            if (racedConfig) return racedConfig;
+            throw error;
+        }
     }
 
     async updateConfig(dto: UpdateTownAiConfigDto) {
@@ -198,13 +208,24 @@ export class TownAiService {
         const startedAt = Date.now();
         const config = await this.getConfig();
 
+        await this.ensureDailyLimit(context.userId, config.dailyLimitPerUser);
+
         if (!config.enabled || !config.defaultModelId) {
+            await this.logCall({
+                type,
+                context,
+                config,
+                success: false,
+                fallbackUsed: allowFallback,
+                latencyMs: Date.now() - startedAt,
+                errorMessage: "AI 未启用或未配置模型",
+                usage: null,
+            });
             if (allowFallback) return fallback;
             throw new Error("AI 未启用或未配置模型");
         }
 
         try {
-            await this.ensureDailyLimit(context.userId, config.dailyLimitPerUser);
             const modelInfo = await this.loadLlmModel(config.defaultModelId);
             const providerConfig = this.flattenProviderConfig(await this.aiModelService.getProviderConfig(modelInfo.id));
             const provider = await this.aiModelService.getProviderAdapter(modelInfo.id, providerConfig);
@@ -249,6 +270,7 @@ export class TownAiService {
 
     private createDefaultConfig() {
         return this.configRepo.create({
+            key: TOWN_AI_CONFIG_KEY,
             enabled: false,
             defaultModelId: null,
             temperature: 0.8,
