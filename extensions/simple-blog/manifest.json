@@ -1,13 +1,13 @@
 {
     "identifier": "simple-blog",
-    "name": "文章资讯",
+    "name": "Simple Blog",
     "type": "application",
     "version": "0.0.1",
-    "description": "文章资讯发布与浏览应用",
+    "description": "A simple blog application",
     "homepage": "",
     "author": {
         "avatar": "/static/avatars/buildingai.png",
-        "name": "EchoflowAI Teams",
+        "name": "BuildingAI Teams",
         "homepage": ""
     },
     "changelog": [],

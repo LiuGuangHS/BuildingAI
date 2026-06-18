@@ -1,8 +1,8 @@
 {
     "name": "simple-blog",
     "version": "0.0.1",
-    "description": "文章资讯发布与浏览应用",
-    "author": "EchoflowAI Teams",
+    "description": "A simple blog extension",
+    "author": "BuildingAI Teams",
     "private": true,
     "main": "./manifest.json",
     "module": "./manifest.json",
