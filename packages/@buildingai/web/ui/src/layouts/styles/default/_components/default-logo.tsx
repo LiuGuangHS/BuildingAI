@@ -13,13 +13,14 @@ import { Link } from "react-router-dom";
 export function DefaultLogo() {
   const { websiteConfig } = useConfigStore((state) => state.config);
   const { state } = useSidebar();
+  const siteName = websiteConfig?.webinfo.name || "EchoFlowAI";
 
   return (
     <SidebarMenu>
-      <SidebarMenuItem className="flex">
-        <SidebarMenuButton size="lg" asChild>
-          <div>
-            <div className="group/default-logo-button relative flex items-center justify-between">
+      <SidebarMenuItem className="flex justify-center">
+        <SidebarMenuButton size="lg" className="justify-center" asChild>
+          <div className="group/default-logo-button relative flex items-center justify-center">
+            <div className="relative flex size-8 items-center justify-center">
               <SidebarTrigger
                 className={cn("absolute inset-0 z-2 hidden opacity-0 transition-opacity md:flex", {
                   "flex md:group-hover/default-logo-button:opacity-100": state === "collapsed",
@@ -35,18 +36,18 @@ export function DefaultLogo() {
               >
                 <>
                   {websiteConfig?.webinfo.logo ? (
-                    <Avatar className="h-8 w-auto rounded-md after:hidden">
+                    <Avatar className="size-8 shrink-0 rounded-md after:hidden">
                       <AvatarImage
                         className="rounded-md"
                         src={websiteConfig?.webinfo.logo}
-                        alt={websiteConfig?.webinfo.name}
+                        alt={siteName}
                       />
                       <AvatarFallback className="rounded-md">
-                        {websiteConfig?.webinfo.name?.slice(0, 1).toUpperCase()}
+                        {siteName.slice(0, 1).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                   ) : (
-                    <img className="size-8 rounded-md" src="/logo.png" alt="清云AI" />
+                    <img className="size-8 rounded-md object-contain" src="/logo.png" alt={siteName} />
                   )}
                 </>
               </Link>

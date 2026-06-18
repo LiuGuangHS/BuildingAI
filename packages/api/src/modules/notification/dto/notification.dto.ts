@@ -1,6 +1,6 @@
 import { PaginationDto } from "@buildingai/dto/pagination.dto";
-import { Transform } from "class-transformer";
-import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import { IsIn, IsObject, IsOptional, IsString, MaxLength, ValidateNested } from "class-validator";
 
 export class QueryNotificationDto extends PaginationDto {
     @IsOptional()
@@ -45,6 +45,16 @@ export class CreateNotificationDto {
     data?: Record<string, unknown>;
 }
 
+export class PushSubscriptionKeysDto {
+    @IsString()
+    @MaxLength(512)
+    p256dh: string;
+
+    @IsString()
+    @MaxLength(512)
+    auth: string;
+}
+
 export class SubscribePushDto {
     @IsString()
     endpoint: string;
@@ -53,10 +63,10 @@ export class SubscribePushDto {
     @Transform(({ value }) => (value ? new Date(value) : null))
     expirationTime?: Date | null;
 
-    keys: {
-        p256dh: string;
-        auth: string;
-    };
+    @IsObject()
+    @ValidateNested()
+    @Type(() => PushSubscriptionKeysDto)
+    keys: PushSubscriptionKeysDto;
 }
 
 export class UnsubscribePushDto {

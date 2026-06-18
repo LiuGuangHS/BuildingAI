@@ -1,44 +1,53 @@
 import { useConfigStore } from "@buildingai/stores";
 import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/ui/avatar";
-import { Badge } from "@buildingai/ui/components/ui/badge";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@buildingai/ui/components/ui/sidebar";
+import { cn } from "@buildingai/ui/lib/utils";
 import { Link } from "react-router-dom";
+
+function formatBrandVersion(version?: string) {
+  if (!version) return "26.0.0";
+  return version.split("+")[0] || version;
+}
 
 export function ConsoleLogo() {
   const { websiteConfig } = useConfigStore((state) => state.config);
+  const { state } = useSidebar();
+  const siteName = websiteConfig?.webinfo.name || "EchoFlowAI";
+  const siteVersion = formatBrandVersion(websiteConfig?.webinfo.version);
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <SidebarMenuButton size="lg" asChild>
-          <Link to="/">
+        <SidebarMenuButton
+          size="lg"
+          className={cn("justify-start", state === "collapsed" && "justify-center")}
+          asChild
+        >
+          <Link to="/" aria-label={siteName}>
             <>
               {websiteConfig?.webinfo.logo ? (
-                <Avatar className="h-8 rounded-md after:hidden">
+                <Avatar className="size-8 shrink-0 rounded-md after:hidden">
                   <AvatarImage
                     className="rounded-md"
                     src={websiteConfig?.webinfo.logo}
-                    alt={websiteConfig?.webinfo.name}
+                    alt={siteName}
                   />
                   <AvatarFallback className="rounded-md">
-                    {websiteConfig?.webinfo.name?.slice(0, 1).toUpperCase()}
+                    {siteName.slice(0, 1).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
               ) : (
-                <img className="h-8 w-auto max-w-24 shrink-0 object-contain" src="/logo-full.png" alt="清云AI" />
+                <img className="size-8 shrink-0 rounded-md object-contain" src="/logo.png" alt={siteName} />
               )}
-              <div className="flex flex-1 flex-col justify-center text-left text-sm">
-                <span className="truncate font-medium">{websiteConfig?.webinfo.name}</span>
-                <span className="flex items-center gap-1 truncate text-xs">
-                  工作台 ·{" "}
-                  <span className="text-muted-foreground">
-                    v{websiteConfig?.webinfo.version || "26.0.0"}
-                  </span>
-                  <Badge variant="outline">社区版</Badge>
+              <div className="flex min-w-0 flex-1 flex-col justify-center text-left text-sm group-data-[collapsible=icon]:hidden">
+                <span className="truncate font-medium">{siteName}</span>
+                <span className="text-muted-foreground truncate text-xs">
+                  工作台 · v{siteVersion}
                 </span>
               </div>
             </>
