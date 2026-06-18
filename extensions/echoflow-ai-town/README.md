@@ -38,6 +38,7 @@
 
 - 当前纳入版本为 `0.0.1`，已提交首版插件 migration：`src/api/db/migrations/1781539200003-0.0.1-init-ai-town.ts`。
 - 首版 migration 覆盖存档、角色、事件、AI 配置和 AI 调用日志；安装联调时需验证 migration 在目标数据库执行成功。
+- 首版 Upgrade：`src/api/upgrade/0.0.1/index.ts` 会幂等修复 `town_ai_configs.key` 单例配置列，并写入主系统 `extension` 安装记录，确保旧本地安装和新安装都能识别插件配置。
 - 后续字段变更时提升 `package.json.version` 与 `manifest.json.version`，并补充 migration 或 `src/api/upgrade/<version>/index.ts`。
 
 ## 质量门禁
