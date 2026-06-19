@@ -4,6 +4,7 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
+import { normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 
 import { ImageBillingRule } from "../../../db/entities/image-billing-rule.entity";
@@ -25,6 +26,7 @@ import {
 
 export interface ResolvedImageModelConfig {
     id?: string;
+    aiModelId?: string | null;
     provider: string;
     model: string;
     externalModelId: string;
@@ -157,7 +159,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         const config = await this.findByIdOrFail(id);
         this.assertSupportedModelConfig(config.model);
         const resolved = this.toResolvedConfig(config);
-        const [endpoint] = this.normalizeEndpointConfigs([endpointDto], config.endpoints ?? [], true);
+        const [endpoint] = this.normalizeEndpointConfigs([endpointDto], config.endpoints ?? []);
         const credential = await this.resolveEndpointCredential(endpoint);
         const { OpenAIImageClient } = await import("../../generation/services/openai-image-client");
         await new OpenAIImageClient({ apiKey: credential.apiKey, baseURL: credential.baseUrl }).testConnection(resolved.externalModelId, resolved.requestContract);
@@ -184,10 +186,10 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             throw HttpErrorFactory.badRequest("请先为接入点选择主站密钥");
         }
         const secretConfig = await this.secretService.getConfigKeyValuePairs(endpoint.secretId);
-        const values = this.flattenSecretConfig(secretConfig);
-        const apiKey = this.pickFirst(values, ["apiKey", "api_key", "API_KEY", "key", "token"]);
+        const values = normalizeProviderConfig(secretConfig);
+        const apiKey = values.apiKey;
         const baseUrl = endpoint.baseUrlOverride ||
-            this.pickFirst(values, ["baseURL", "baseUrl", "base_url", "BASE_URL", "endpoint"]) ||
+            values.baseURL ||
             "https://api.openai.com/v1";
         if (!apiKey) {
             throw HttpErrorFactory.badRequest("主站密钥中未找到 apiKey/api_key 字段");
@@ -214,7 +216,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             modelType: "image",
             description: config.description ?? "",
             mediaTypes: ["image"],
-            capabilities: config.capabilities ?? {},
+            capabilities: this.enforceProtocolCapabilities(config.requestContract, config.capabilities ?? {}),
             defaultParams: config.defaultParams ?? {},
         };
     }
@@ -231,6 +233,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
 
         const created = await this.modelConfigRepository.save(
             missing.map((config) => this.modelConfigRepository.create({
+                aiModelId: null,
                 provider: config.provider,
                 model: config.model,
                 externalModelId: config.externalModelId,
@@ -239,10 +242,10 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
                 description: config.description,
                 enabled: config.enabled,
                 visibleToUser: config.visibleToUser,
-                capabilities: config.capabilities,
+                capabilities: this.enforceProtocolCapabilities(config.requestContract, config.capabilities),
                 defaultParams: config.defaultParams,
                 allowedParams: config.allowedParams,
-                endpoints: this.normalizeEndpointConfigs(config.endpoints, [], false),
+                endpoints: this.normalizeEndpointConfigs(config.endpoints, []),
                 sortOrder: config.sortOrder,
             })),
         );
@@ -254,15 +257,22 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         if (!this.modelConfigRepository.manager?.query) {
             return;
         }
-        this.schemaReadyPromise ??= this.modelConfigRepository.manager.query(`
-            ALTER TABLE "echoflow_image"."image_model_config"
-            ADD COLUMN IF NOT EXISTS "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
-            ADD COLUMN IF NOT EXISTS "model" varchar(100),
-            ADD COLUMN IF NOT EXISTS "external_model_id" varchar(100) NOT NULL DEFAULT '',
-            ADD COLUMN IF NOT EXISTS "request_contract" varchar(50) NOT NULL DEFAULT 'responses',
-            ADD COLUMN IF NOT EXISTS "visible_to_user" boolean NOT NULL DEFAULT true,
-            ADD COLUMN IF NOT EXISTS "endpoints" jsonb NOT NULL DEFAULT '[]'
-        `);
+        this.schemaReadyPromise ??= (async () => {
+            await this.modelConfigRepository.manager.query(`
+                ALTER TABLE "echoflow_image"."image_model_config"
+                ADD COLUMN IF NOT EXISTS "ai_model_id" uuid,
+                ADD COLUMN IF NOT EXISTS "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
+                ADD COLUMN IF NOT EXISTS "model" varchar(100),
+                ADD COLUMN IF NOT EXISTS "external_model_id" varchar(100) NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS "request_contract" varchar(50) NOT NULL DEFAULT 'responses',
+                ADD COLUMN IF NOT EXISTS "visible_to_user" boolean NOT NULL DEFAULT true,
+                ADD COLUMN IF NOT EXISTS "endpoints" jsonb NOT NULL DEFAULT '[]'
+            `);
+            await this.modelConfigRepository.manager.query(`
+                ALTER TABLE "echoflow_image"."image_model_config"
+                ALTER COLUMN "ai_model_id" DROP NOT NULL
+            `);
+        })();
         await this.schemaReadyPromise;
     }
 
@@ -284,11 +294,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             description: dto.description ?? existing.description,
             enabled: dto.enabled ?? existing.enabled ?? true,
             visibleToUser: dto.visibleToUser ?? existing.visibleToUser ?? true,
-            capabilities: {
-                ...defaultConfig.capabilities,
-                ...(existing.capabilities ?? {}),
-                ...(dto.capabilities ?? {}),
-            },
+            capabilities: this.enforceProtocolCapabilities(defaultConfig.requestContract, defaultConfig.capabilities),
             defaultParams: {
                 ...defaultConfig.defaultParams,
                 ...(existing.defaultParams ?? {}),
@@ -307,14 +313,13 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     private normalizeEndpointConfigs(
         endpoints: ImageModelEndpointDto[] | undefined,
         existing: ImageModelEndpoint[],
-        allowEmptyApiKey = true,
     ): ImageModelEndpoint[] {
         const source = endpoints?.length ? endpoints : existing;
         return source.map((endpoint, index) => ({
             id: endpoint.id || `endpoint-${index + 1}`,
             name: endpoint.name || `接入点 ${index + 1}`,
-            secretId: endpoint.secretId || existing[index]?.secretId,
-            secretName: endpoint.secretName || existing[index]?.secretName,
+            secretId: endpoint.secretId?.trim() || undefined,
+            secretName: endpoint.secretName?.trim() || undefined,
             baseUrlOverride: endpoint.baseUrlOverride
                 ? this.normalizeBaseUrl(endpoint.baseUrlOverride)
                 : existing[index]?.baseUrlOverride,
@@ -344,7 +349,27 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         if (url.username || url.password) {
             throw HttpErrorFactory.badRequest("Base URL 不允许包含用户名或密码");
         }
+        if (this.isPrivateOrLocalHost(url.hostname)) {
+            throw HttpErrorFactory.badRequest("Base URL 不允许指向本机或内网地址");
+        }
         return trimmed;
+    }
+
+    private isPrivateOrLocalHost(hostname: string): boolean {
+        const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+        return (
+            host === "localhost" ||
+            host === "0.0.0.0" ||
+            host === "127.0.0.1" ||
+            host === "::1" ||
+            host.endsWith(".local") ||
+            host.startsWith("10.") ||
+            host.startsWith("127.") ||
+            host.startsWith("169.254.") ||
+            host.startsWith("192.168.") ||
+            /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
+            /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+        );
     }
 
     private isSupportedModelConfig(model: string) {
@@ -357,6 +382,27 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         }
     }
 
+    private enforceProtocolCapabilities(
+        requestContract: ImageRequestContract,
+        capabilities: ImageModelCapabilities,
+    ): ImageModelCapabilities {
+        if (requestContract === "responses") {
+            return {
+                ...capabilities,
+                mask: false,
+            };
+        }
+        if (requestContract === "images") {
+            return {
+                ...capabilities,
+                imageToImage: false,
+                mask: false,
+                multiReference: false,
+            };
+        }
+        return capabilities;
+    }
+
     private hasUsableEndpoint(config: ResolvedImageModelConfig) {
         return (config.endpoints ?? []).some((item) => item.enabled && Boolean(item.secretId));
     }
@@ -364,6 +410,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     private toResolvedConfig(config: ImageModelConfig): ResolvedImageModelConfig {
         return {
             id: config.id,
+            aiModelId: config.aiModelId ?? undefined,
             provider: config.provider,
             model: config.model,
             externalModelId: config.externalModelId,
@@ -372,7 +419,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             description: config.description,
             enabled: config.enabled,
             visibleToUser: config.visibleToUser,
-            capabilities: config.capabilities,
+            capabilities: this.enforceProtocolCapabilities(config.requestContract, config.capabilities),
             defaultParams: config.defaultParams,
             endpoints: config.endpoints ?? [],
             sortOrder: config.sortOrder,
@@ -386,15 +433,4 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         };
     }
 
-    private flattenSecretConfig(config: Record<string, { value: string; required: boolean }>): Record<string, string> {
-        return Object.fromEntries(Object.entries(config).map(([key, item]) => [key, item.value ?? ""]));
-    }
-
-    private pickFirst(values: Record<string, string>, keys: string[]): string {
-        for (const key of keys) {
-            const value = values[key]?.trim();
-            if (value) return value;
-        }
-        return "";
-    }
 }

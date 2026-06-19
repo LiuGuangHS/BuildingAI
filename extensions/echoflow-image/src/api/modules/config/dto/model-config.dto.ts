@@ -35,6 +35,11 @@ export class ImageModelEndpointDto {
     secretId?: string;
 
     @IsString()
+    @Length(1, 120)
+    @IsOptional()
+    secretName?: string;
+
+    @IsString()
     @Length(1, 500)
     @IsOptional()
     baseUrlOverride?: string;

@@ -56,6 +56,9 @@ export class ImageModelConfig {
     @PrimaryGeneratedColumn("uuid")
     id: string;
 
+    @Column({ type: "uuid", nullable: true, comment: "Linked main-system AI model ID" })
+    aiModelId?: string | null;
+
     @Column({ type: "varchar", length: 50, default: "echoflow-api", comment: "Provider identifier" })
     provider: string;
 

@@ -77,7 +77,6 @@ export const BUILT_IN_IMAGE_MODEL_CONFIGS: BuiltInImageModelConfig[] = [
         visibleToUser: true,
         capabilities: {
             ...baseCapabilities,
-            mask: true,
             inputFidelity: true,
         },
         defaultParams: {

@@ -17,7 +17,7 @@ export class GenerationWebController extends BaseController {
 
     @Post()
     async create(@Body() createGenerationDto: CreateGenerationDto, @Playground() user: UserPlayground) {
-        return this.generationService.createAndGenerate(createGenerationDto, user.id);
+        return this.generationService.createAndGenerateForWeb(createGenerationDto, user.id);
     }
 
     @Post("prompt/enhance")
@@ -27,7 +27,7 @@ export class GenerationWebController extends BaseController {
 
     @Get()
     async findAll(@Query() queryGenerationDto: QueryGenerationDto, @Playground() user: UserPlayground) {
-        return this.generationService.list(queryGenerationDto, user.id);
+        return this.generationService.listForWeb(queryGenerationDto, user.id);
     }
 
     @Get("options/models")
@@ -38,7 +38,7 @@ export class GenerationWebController extends BaseController {
 
     @Get(":id")
     async findOne(@Param("id", UUIDValidationPipe) id: string, @Playground() user: UserPlayground) {
-        return this.generationService.findOwnedById(id, user.id);
+        return this.generationService.findOwnedPublicById(id, user.id);
     }
 
     @Delete(":id")
@@ -48,6 +48,6 @@ export class GenerationWebController extends BaseController {
 
     @Post(":id/retry")
     async retry(@Param("id", UUIDValidationPipe) id: string, @Playground() user: UserPlayground) {
-        return this.generationService.retry(id, user.id);
+        return this.generationService.retryForWeb(id, user.id);
     }
 }

@@ -1,6 +1,10 @@
 import { QueueModule, UploadModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
-import { AiPublicModule, ExtensionBillingModule } from "@buildingai/extension-sdk";
+import {
+    AiPublicModule,
+    ExtensionBillingModule,
+    ExtensionNotificationModule,
+} from "@buildingai/extension-sdk";
 import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
 
@@ -26,6 +30,7 @@ import {
         UploadModule,
         AiPublicModule,
         ExtensionBillingModule,
+        ExtensionNotificationModule,
         QueueModule,
         BullModule.registerQueue({ name: IMAGE_GENERATION_QUEUE }),
     ],

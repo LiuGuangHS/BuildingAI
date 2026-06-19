@@ -26,6 +26,7 @@ export class Upgrade {
         await this.dataSource.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_image"."image_model_config" (
                 "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                "ai_model_id" uuid,
                 "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
                 "model" varchar(100),
                 "external_model_id" varchar(100) NOT NULL DEFAULT '',
@@ -43,6 +44,7 @@ export class Upgrade {
                 "updated_at" timestamp NOT NULL DEFAULT now()
             )
         `);
+        await this.ensureColumn("image_model_config", "ai_model_id", "uuid");
         await this.ensureColumn("image_model_config", "provider", "varchar(50) NOT NULL DEFAULT 'echoflow-api'");
         await this.ensureColumn("image_model_config", "model", "varchar(100)");
         await this.ensureColumn("image_model_config", "external_model_id", "varchar(100) NOT NULL DEFAULT ''");
@@ -53,6 +55,7 @@ export class Upgrade {
         await this.ensureColumn("image_model_config", "allowed_params", "jsonb NOT NULL DEFAULT '{}'");
         await this.ensureColumn("image_model_config", "endpoints", "jsonb NOT NULL DEFAULT '[]'");
         await this.ensureColumn("image_model_config", "sort_order", "int NOT NULL DEFAULT 0");
+        await this.dataSource.query(`ALTER TABLE "echoflow_image"."image_model_config" ALTER COLUMN "ai_model_id" DROP NOT NULL`);
 
         await this.dataSource.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_image"."image_billing_rule" (

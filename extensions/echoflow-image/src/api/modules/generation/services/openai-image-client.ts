@@ -1,11 +1,15 @@
 import { HttpErrorFactory } from "@buildingai/errors";
-import { lookup as dnsLookup } from "node:dns/promises";
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
-import { isIP } from "node:net";
 
 import { type GeneratedImageRecord } from "../../../db/entities/image-generation.entity";
 import type { ImageRequestContract } from "../../../db/entities/image-model-config.entity";
+import {
+    buildImageFilename,
+    downloadReferenceImageFromUrl,
+    normalizeImageBaseURL,
+    normalizeImageMimeType,
+    requestImageResponseText,
+    safeJsonParse,
+} from "./image-http-client";
 
 export interface OpenAIImageClientConfig {
     apiKey?: string;
@@ -15,12 +19,16 @@ export interface OpenAIImageClientConfig {
 export interface GenerateOpenAIImageOptions {
     model: string;
     prompt: string;
+    n?: number;
     size?: string;
     quality?: string;
+    style?: string;
+    responseFormat?: string;
     outputFormat?: string;
     background?: string;
     moderation?: string;
     referenceImages?: ReferenceImageInput[];
+    maskImage?: ReferenceImageInput;
     maxReferenceImageBytes?: number;
     requestContract?: ImageRequestContract;
 }
@@ -34,24 +42,21 @@ export interface ReferenceImageInput {
     source?: string;
 }
 
+type ResolvedReferenceImage = {
+    blob: Blob;
+    filename: string;
+    mimeType: string;
+    size: number;
+    source: string;
+};
+
 interface OpenAIResponsesResponse {
     id?: string;
     status?: string;
     output?: unknown[];
 }
 
-const DEFAULT_TIMEOUT_MS = 90_000;
-const DOWNLOAD_TIMEOUT_MS = 30_000;
-const MAX_RETRIES = 2;
 const MAX_REFERENCE_IMAGE_BYTES = 50 * 1024 * 1024;
-const MAX_REFERENCE_REDIRECTS = 3;
-
-class RetryableError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = "RetryableError";
-    }
-}
 
 export class OpenAIImageClient {
     private readonly apiKey: string;
@@ -59,10 +64,10 @@ export class OpenAIImageClient {
 
     constructor(config: OpenAIImageClientConfig) {
         if (!config.apiKey) {
-            throw HttpErrorFactory.badRequest("图片模型未配置 API Key");
+            throw HttpErrorFactory.badRequest("图片模型接入点绑定的主站密钥缺少 apiKey/api_key 字段");
         }
         this.apiKey = config.apiKey;
-        this.baseURL = normalizeBaseURL(config.baseURL || "https://api.openai.com/v1");
+        this.baseURL = normalizeImageBaseURL(config.baseURL || "https://api.openai.com/v1");
     }
 
     async testConnection(model: string, requestContract: ImageRequestContract = "responses") {
@@ -115,27 +120,22 @@ export class OpenAIImageClient {
             ],
         });
 
-        let lastError: Error | undefined;
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                return await this.executeResponsesRequest(body, attempt);
-            } catch (error) {
-                lastError = error instanceof Error ? error : new Error(String(error));
-                if (!(lastError instanceof RetryableError)) {
-                    throw lastError;
-                }
-                if (attempt < MAX_RETRIES) {
-                    await sleep(Math.pow(2, attempt * 2) * 1000);
-                }
-            }
-        }
-        throw lastError ?? new Error("图像生成请求失败");
+        return this.executeResponsesRequest(body);
     }
 
     private async generateImages(options: GenerateOpenAIImageOptions) {
-        if (options.referenceImages?.length) {
-            throw HttpErrorFactory.badRequest("Images API 参考图编辑尚未接入，请使用 Responses 模型");
+        const references = await this.resolveReferenceImages(options.referenceImages ?? [], options.maxReferenceImageBytes);
+        const mask = options.maskImage
+            ? await this.resolveAuxiliaryImage(options.maskImage, options.maxReferenceImageBytes ?? MAX_REFERENCE_IMAGE_BYTES)
+            : undefined;
+
+        if (mask && !references.length) {
+            throw HttpErrorFactory.badRequest("局部重绘需要同时提供参考图和遮罩图");
         }
+        if (references.length || mask) {
+            return this.generateImagesEdit(options, references, mask);
+        }
+
         const body = removeUndefined({
             model: options.model,
             prompt: options.prompt,
@@ -146,120 +146,125 @@ export class OpenAIImageClient {
             style: options.style,
         });
 
-        let lastError: Error | undefined;
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                return await this.executeImagesRequest(body, attempt);
-            } catch (error) {
-                lastError = error instanceof Error ? error : new Error(String(error));
-                if (!(lastError instanceof RetryableError)) {
-                    throw lastError;
-                }
-                if (attempt < MAX_RETRIES) {
-                    await sleep(Math.pow(2, attempt * 2) * 1000);
-                }
-            }
-        }
-        throw lastError ?? new Error("图像生成请求失败");
+        return this.executeImagesRequest(body);
     }
 
-    private async executeResponsesRequest(body: Record<string, unknown>, attempt: number) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
-
-        try {
-            const response = await fetch(`${this.baseURL}/responses`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: this.apiKey.includes("Bearer ") ? this.apiKey : `Bearer ${this.apiKey}`,
-                },
-                body: JSON.stringify(body),
-                signal: controller.signal,
-            });
-
-            const responseText = await response.text();
-            if (!response.ok) {
-                throw classifyHttpError(response.status, attempt, responseText);
-            }
-
-            const parsed = safeJsonParse<OpenAIResponsesResponse>(responseText);
-            const images = extractResponsesImages(parsed);
-            if (!images.length) {
-                throw HttpErrorFactory.badRequest("Responses API 响应中没有图片数据");
-            }
-
-            return {
-                images,
-                rawResponse: {
-                    id: parsed?.id,
-                    status: parsed?.status,
-                    imageCount: images.length,
-                    apiMode: "responses",
-                },
-                rawRequest: body,
-                baseURL: this.baseURL,
-            };
-        } catch (error) {
-            if (error instanceof DOMException && error.name === "AbortError") {
-                throw new RetryableError("图像生成请求超时");
-            }
-            throw error;
-        } finally {
-            clearTimeout(timeoutId);
+    private async generateImagesEdit(
+        options: GenerateOpenAIImageOptions,
+        references: ResolvedReferenceImage[],
+        mask?: ResolvedReferenceImage,
+    ) {
+        if (!references.length) {
+            throw HttpErrorFactory.badRequest("图生图需要提供参考图");
         }
+
+        const form = this.createImagesEditForm(options, references, mask);
+        return this.executeImagesEditRequest(form);
     }
 
-    private async executeImagesRequest(body: Record<string, unknown>, attempt: number) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    private createImagesEditForm(
+        options: GenerateOpenAIImageOptions,
+        references: ResolvedReferenceImage[],
+        mask?: ResolvedReferenceImage,
+    ) {
+        const form = new FormData();
+        form.set("model", options.model);
+        form.set("prompt", options.prompt);
+        form.set("n", String(options.n ?? 1));
+        if (options.size) form.set("size", options.size);
+        if (options.quality) form.set("quality", options.quality);
+        if (options.responseFormat) form.set("response_format", options.responseFormat);
+        if (mask) form.set("mask", mask.blob, mask.filename);
 
-        try {
-            const response = await fetch(`${this.baseURL}/images/generations`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: this.apiKey.includes("Bearer ") ? this.apiKey : `Bearer ${this.apiKey}`,
-                },
-                body: JSON.stringify(body),
-                signal: controller.signal,
-            });
+        references.forEach((reference) => {
+            form.append("image", reference.blob, reference.filename);
+        });
 
-            const responseText = await response.text();
-            if (!response.ok) {
-                throw classifyHttpError(response.status, attempt, responseText);
-            }
+        return form;
+    }
 
-            const parsed = safeJsonParse<{ data?: Array<Record<string, unknown>> }>(responseText);
-            const images = (parsed?.data ?? [])
-                .map((item) => ({
-                    url: typeof item.url === "string" ? item.url : undefined,
-                    b64Json: typeof item.b64_json === "string" ? item.b64_json : undefined,
-                    revisedPrompt: typeof item.revised_prompt === "string" ? item.revised_prompt : undefined,
-                    mimeType: typeof item.b64_json === "string" ? "image/png" : undefined,
-                }))
-                .filter((item) => item.url || item.b64Json);
-            if (!images.length) {
-                throw HttpErrorFactory.badRequest("Images API 响应中没有图片数据");
-            }
+    private async executeResponsesRequest(body: Record<string, unknown>) {
+        const responseText = await requestImageResponseText(`${this.baseURL}/responses`, {
+            method: "POST",
+            apiKey: this.apiKey,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
 
-            return {
-                images,
-                rawResponse: {
-                    imageCount: images.length,
-                    apiMode: "images",
-                },
-                rawRequest: body,
-                baseURL: this.baseURL,
-            };
-        } catch (error) {
-            if (error instanceof DOMException && error.name === "AbortError") {
-                throw new RetryableError("图像生成请求超时");
-            }
-            throw error;
-        } finally {
-            clearTimeout(timeoutId);
+        const parsed = safeJsonParse<OpenAIResponsesResponse>(responseText);
+        const images = extractResponsesImages(parsed);
+        if (!images.length) {
+            throw HttpErrorFactory.badRequest("Responses API 响应中没有图片数据");
         }
+
+        return {
+            images,
+            rawResponse: {
+                id: parsed?.id,
+                status: parsed?.status,
+                imageCount: images.length,
+                apiMode: "responses",
+            },
+            rawRequest: body,
+            baseURL: this.baseURL,
+        };
+    }
+
+    private async executeImagesRequest(body: Record<string, unknown>) {
+        const responseText = await requestImageResponseText(`${this.baseURL}/images/generations`, {
+            method: "POST",
+            apiKey: this.apiKey,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+
+        const parsed = safeJsonParse<{ data?: Array<Record<string, unknown>> }>(responseText);
+        const images = extractImagesApiImages(parsed);
+        if (!images.length) {
+            throw HttpErrorFactory.badRequest("Images API 响应中没有图片数据");
+        }
+
+        return {
+            images,
+            rawResponse: {
+                imageCount: images.length,
+                apiMode: "images",
+            },
+            rawRequest: body,
+            baseURL: this.baseURL,
+        };
+    }
+
+    private async executeImagesEditRequest(body: FormData) {
+        const responseText = await requestImageResponseText(`${this.baseURL}/images/edits`, {
+            method: "POST",
+            apiKey: this.apiKey,
+            body,
+        });
+
+        const parsed = safeJsonParse<{ data?: Array<Record<string, unknown>> }>(responseText);
+        const images = extractImagesApiImages(parsed);
+        if (!images.length) {
+            throw HttpErrorFactory.badRequest("Images Edit API 响应中没有图片数据");
+        }
+
+        return {
+            images,
+            rawResponse: {
+                imageCount: images.length,
+                apiMode: "images-edit",
+            },
+            rawRequest: {
+                model: body.get("model"),
+                prompt: body.get("prompt"),
+                n: body.get("n"),
+                size: body.get("size"),
+                quality: body.get("quality"),
+                responseFormat: body.get("response_format"),
+                hasMask: Boolean(body.get("mask")),
+            },
+            baseURL: this.baseURL,
+        };
     }
 
     private async resolveReferenceImages(images: ReferenceImageInput[], maxBytes = MAX_REFERENCE_IMAGE_BYTES) {
@@ -283,286 +288,19 @@ export class OpenAIImageClient {
 
     private async resolveAuxiliaryImage(image: ReferenceImageInput, maxBytes: number) {
         if (image.blob) return this.resolveProvidedImage(image);
-        if (image.url) return this.downloadReferenceImage(image.url, maxBytes);
+        if (image.url) return downloadReferenceImageFromUrl(image.url, maxBytes);
         throw HttpErrorFactory.badRequest("图像文件不存在或无法读取");
     }
 
-    private async referenceToDataUrl(reference: ReturnType<OpenAIImageClient["resolveProvidedImage"]>) {
+    private async referenceToDataUrl(reference: ResolvedReferenceImage) {
         const arrayBuffer = await reference.blob.arrayBuffer();
         const base64 = Buffer.from(arrayBuffer).toString("base64");
         return `data:${reference.mimeType};base64,${base64}`;
-    }
-
-    private async downloadReferenceImage(url: string, maxBytes: number) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
-
-        try {
-            let currentUrl = url;
-            let response: DownloadedImageResponse | undefined;
-
-            for (let redirectCount = 0; redirectCount <= MAX_REFERENCE_REDIRECTS; redirectCount++) {
-                response = await downloadPublicHttpUrl(currentUrl, maxBytes, controller.signal);
-                if (![301, 302, 303, 307, 308].includes(response.status)) {
-                    break;
-                }
-                const location = response.headers.location;
-                if (!location) {
-                    throw HttpErrorFactory.badRequest("参考图重定向地址无效");
-                }
-                currentUrl = new URL(location, response.url).toString();
-                response = undefined;
-            }
-
-            if (!response) {
-                throw HttpErrorFactory.badRequest("参考图重定向次数过多");
-            }
-            if (!response.ok) {
-                throw HttpErrorFactory.badRequest(`参考图下载失败，状态码 ${response.status}`);
-            }
-
-            const mimeType = normalizeImageMimeType(response.headers["content-type"], response.url.toString());
-            const contentLength = Number(response.headers["content-length"] || 0);
-            if (contentLength > maxBytes) {
-                throw HttpErrorFactory.badRequest(`参考图不能超过 ${Math.floor(maxBytes / 1024 / 1024)}MB`);
-            }
-
-            return {
-                blob: new Blob([response.buffer], { type: mimeType }),
-                filename: buildImageFilename(response.url.toString(), mimeType),
-                mimeType,
-                size: response.buffer.byteLength,
-                source: summarizeUrl(response.url.toString()),
-            };
-        } catch (error) {
-            if (error instanceof DOMException && error.name === "AbortError") {
-                throw HttpErrorFactory.badRequest("参考图下载超时");
-            }
-            throw error;
-        } finally {
-            clearTimeout(timeoutId);
-        }
-    }
-}
-
-interface PublicHttpUrl {
-    url: URL;
-    address: string;
-    family: 4 | 6;
-}
-
-interface DownloadedImageResponse {
-    url: URL;
-    status: number;
-    ok: boolean;
-    headers: Record<string, string>;
-    buffer: Buffer;
-}
-
-async function assertPublicHttpUrl(raw: string): Promise<PublicHttpUrl> {
-    let url: URL;
-    try {
-        url = new URL(raw);
-    } catch {
-        throw HttpErrorFactory.badRequest("图生图参考图地址无效");
-    }
-
-    if (!["http:", "https:"].includes(url.protocol)) {
-        throw HttpErrorFactory.badRequest("图生图参考图需要是可由服务端访问的 http(s) 地址");
-    }
-    if (url.username || url.password) {
-        throw HttpErrorFactory.badRequest("参考图地址不能包含认证信息");
-    }
-
-    const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-    if (!hostname || hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) {
-        throw HttpErrorFactory.badRequest("参考图地址不能指向本机或内网主机");
-    }
-
-    const addresses = isIP(hostname)
-        ? [{ address: hostname, family: isIP(hostname) as 4 | 6 }]
-        : await dnsLookup(hostname, { all: true, verbatim: true }).catch(() => {
-            throw HttpErrorFactory.badRequest("参考图地址无法解析");
-        });
-
-    if (!addresses.length || addresses.some((item) => isPrivateOrReservedIp(item.address))) {
-        throw HttpErrorFactory.badRequest("参考图地址不能指向本机、内网或保留网段");
-    }
-
-    return {
-        url,
-        address: addresses[0].address,
-        family: addresses[0].family as 4 | 6,
-    };
-}
-
-async function downloadPublicHttpUrl(raw: string, maxBytes: number, signal: AbortSignal): Promise<DownloadedImageResponse> {
-    const safe = await assertPublicHttpUrl(raw);
-    const requestImpl = safe.url.protocol === "https:" ? httpsRequest : httpRequest;
-
-    return new Promise((resolve, reject) => {
-        const req = requestImpl(
-            safe.url,
-            {
-                method: "GET",
-                lookup: (_hostname, _options, callback) => {
-                    callback(null, safe.address, safe.family);
-                },
-            },
-            (res) => {
-                const chunks: Buffer[] = [];
-                let total = 0;
-
-                res.on("data", (chunk: Buffer) => {
-                    total += chunk.byteLength;
-                    if (total > maxBytes) {
-                        req.destroy(HttpErrorFactory.badRequest(`参考图不能超过 ${Math.floor(maxBytes / 1024 / 1024)}MB`));
-                        return;
-                    }
-                    chunks.push(chunk);
-                });
-                res.on("end", () => {
-                    resolve({
-                        url: safe.url,
-                        status: res.statusCode ?? 0,
-                        ok: Boolean(res.statusCode && res.statusCode >= 200 && res.statusCode < 300),
-                        headers: normalizeHeaders(res.headers),
-                        buffer: Buffer.concat(chunks),
-                    });
-                });
-            },
-        );
-
-        const abort = () => req.destroy(new DOMException("Aborted", "AbortError"));
-        signal.addEventListener("abort", abort, { once: true });
-        req.on("error", reject);
-        req.on("close", () => signal.removeEventListener("abort", abort));
-        req.end();
-    });
-}
-
-function normalizeHeaders(headers: Record<string, string | string[] | number | undefined>): Record<string, string> {
-    return Object.fromEntries(
-        Object.entries(headers)
-            .filter(([, value]) => value !== undefined)
-            .map(([key, value]) => [key.toLowerCase(), Array.isArray(value) ? value[0] : String(value)]),
-    );
-}
-
-function isPrivateOrReservedIp(address: string): boolean {
-    const normalized = address.toLowerCase();
-    const mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPrivateOrReservedIpv4(mapped[1]);
-
-    if (isIP(normalized) === 4) {
-        return isPrivateOrReservedIpv4(normalized);
-    }
-
-    if (isIP(normalized) === 6) {
-        return (
-            normalized === "::" ||
-            normalized === "::1" ||
-            normalized.startsWith("fc") ||
-            normalized.startsWith("fd") ||
-            normalized.startsWith("fe80:") ||
-            normalized.startsWith("ff") ||
-            normalized.startsWith("2001:db8:")
-        );
-    }
-
-    return true;
-}
-
-function isPrivateOrReservedIpv4(address: string): boolean {
-    const parts = address.split(".").map((item) => Number(item));
-    if (parts.length !== 4 || parts.some((item) => !Number.isInteger(item) || item < 0 || item > 255)) {
-        return true;
-    }
-    const [a, b] = parts;
-    return (
-        a === 0 ||
-        a === 10 ||
-        a === 127 ||
-        (a === 100 && b >= 64 && b <= 127) ||
-        (a === 169 && b === 254) ||
-        (a === 172 && b >= 16 && b <= 31) ||
-        (a === 192 && b === 168) ||
-        (a === 192 && b === 0) ||
-        (a === 198 && (b === 18 || b === 19)) ||
-        (a === 198 && b === 51) ||
-        (a === 203 && b === 0) ||
-        a >= 224
-    );
-}
-
-function classifyHttpError(status: number, attempt: number, responseText?: string): Error {
-    const prefix = attempt > 0 ? `(重试 ${attempt} 次后) ` : "";
-    const detail = extractErrorMessage(responseText);
-    const suffix = detail ? `：${detail}` : "";
-    switch (status) {
-        case 400:
-            return HttpErrorFactory.badRequest(`${prefix}请求参数有误，请检查模型、尺寸、质量和提示词${suffix}`);
-        case 401:
-            return HttpErrorFactory.badRequest(`${prefix}API Key 无效或已过期，请检查模型接入点`);
-        case 403:
-            return HttpErrorFactory.badRequest(`${prefix}API Key 无权限访问该模型`);
-        case 429:
-            return new RetryableError(`${prefix}请求过于频繁，请稍后重试`);
-        case 500:
-        case 502:
-        case 503:
-        case 504:
-            return new RetryableError(`${prefix}图片服务暂时不可用 (${status})，请稍后重试`);
-        default:
-            return HttpErrorFactory.badRequest(`${prefix}图像生成请求失败，服务返回状态码 ${status}${suffix}`);
-    }
-}
-
-function normalizeBaseURL(raw: string): string {
-    try {
-        const trimmed = raw.trim().replace(/\/+$/, "");
-        if (!trimmed) {
-            throw new Error("empty baseURL");
-        }
-        const url = new URL(trimmed);
-        if (!["http:", "https:"].includes(url.protocol)) {
-            throw new Error("unsupported protocol");
-        }
-        if (url.username || url.password) {
-            throw new Error("credentials not allowed");
-        }
-        return trimmed;
-    } catch {
-        throw HttpErrorFactory.badRequest("图片模型 Base URL 配置无效");
     }
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T) {
     return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
-}
-
-function normalizeImageMimeType(raw: string | null | undefined, url: string) {
-    const mimeType = raw?.split(";")[0]?.trim().toLowerCase();
-    if (mimeType && ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(mimeType)) {
-        return mimeType === "image/jpg" ? "image/jpeg" : mimeType;
-    }
-    const lowerUrl = url.toLowerCase();
-    if (lowerUrl.includes(".png")) return "image/png";
-    if (lowerUrl.includes(".webp")) return "image/webp";
-    if (lowerUrl.includes(".jpg") || lowerUrl.includes(".jpeg")) return "image/jpeg";
-    throw HttpErrorFactory.badRequest("参考图格式仅支持 png、jpg、webp");
-}
-
-function buildImageFilename(url: string, mimeType: string) {
-    const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
-    try {
-        const pathname = new URL(url).pathname;
-        const rawName = pathname.split("/").pop();
-        if (rawName && /\.[a-z0-9]+$/i.test(rawName)) return rawName;
-    } catch {
-        // ignored
-    }
-    return `reference.${extension}`;
 }
 
 function dedupeReferenceImages(images: ReferenceImageInput[]) {
@@ -604,30 +342,13 @@ function extractResponsesImages(response: OpenAIResponsesResponse | undefined): 
     return images;
 }
 
-function summarizeUrl(raw: string) {
-    try {
-        const url = new URL(raw);
-        return `${url.protocol}//${url.host}${url.pathname}`;
-    } catch {
-        return "";
-    }
-}
-
-function extractErrorMessage(responseText?: string) {
-    if (!responseText) return "";
-    const parsed = safeJsonParse<{ error?: { message?: string }; message?: string }>(responseText);
-    const message = parsed?.error?.message || parsed?.message;
-    return message ? message.slice(0, 300) : "";
-}
-
-function safeJsonParse<T>(value: string): T | undefined {
-    try {
-        return JSON.parse(value) as T;
-    } catch {
-        return undefined;
-    }
-}
-
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+function extractImagesApiImages(response: { data?: Array<Record<string, unknown>> } | undefined): GeneratedImageRecord[] {
+    return (response?.data ?? [])
+        .map((item) => ({
+            url: typeof item.url === "string" ? item.url : undefined,
+            b64Json: typeof item.b64_json === "string" ? item.b64_json : undefined,
+            revisedPrompt: typeof item.revised_prompt === "string" ? item.revised_prompt : undefined,
+            mimeType: typeof item.b64_json === "string" ? "image/png" : undefined,
+        }))
+        .filter((item) => item.url || item.b64Json);
 }

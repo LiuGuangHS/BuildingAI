@@ -7,7 +7,12 @@ import { AccountLog } from "@buildingai/db/entities";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThan, Like, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { ExtensionBillingService, PublicAiModelService } from "@buildingai/extension-sdk";
+import {
+    ExtensionBillingService,
+    ExtensionNotificationService,
+    PublicAiModelService,
+    normalizeProviderConfig,
+} from "@buildingai/extension-sdk";
 import { buildWhere } from "@buildingai/utils";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
@@ -40,6 +45,8 @@ import { CreateGenerationDto, PromptEnhanceDto, QueryGenerationDto } from "../dt
 import { IMAGE_GENERATION_JOB, IMAGE_GENERATION_QUEUE } from "./generation-queue.constants";
 import { OpenAIImageClient } from "./openai-image-client";
 
+const EXTENSION_ID = "echoflow-image";
+
 @Injectable()
 export class GenerationService extends BaseService<ImageGeneration> implements OnModuleInit {
     protected readonly logger = new Logger(GenerationService.name);
@@ -55,18 +62,45 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         private readonly billingRuleService: BillingRuleService,
         private readonly policyService: PolicyService,
         private readonly fileUploadService: FileUploadService,
+        private readonly notificationService: ExtensionNotificationService,
         @InjectQueue(IMAGE_GENERATION_QUEUE)
         private readonly generationQueue: Queue,
     ) {
         super(generationRepository);
     }
 
-    onModuleInit() {
-        setTimeout(() => {
-            void this.recoverJobs().catch((error) => {
-                this.logger.error("Recover generation jobs failed", error);
-            });
-        }, 3000);
+    async onModuleInit() {
+        try {
+            await this.registerNotificationScenes();
+            await this.recoverJobs();
+        } catch (error) {
+            this.logger.error("Recover generation jobs failed", error);
+        }
+    }
+
+    private async registerNotificationScenes() {
+        await this.notificationService.registerScenes(EXTENSION_ID, [
+            {
+                sceneCode: `${EXTENSION_ID}.generation.succeeded`,
+                name: "图片生成完成",
+                description: "用户发起的图片生成任务处理成功。",
+                level: "success",
+                channels: ["in_app", "web_push", "wechat_oa_template"],
+                titleTemplate: "图片生成完成",
+                contentTemplate: "{{taskName}} 已生成，可前往查看结果。",
+                linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
+            },
+            {
+                sceneCode: `${EXTENSION_ID}.generation.failed`,
+                name: "图片生成失败",
+                description: "用户发起的图片生成任务处理失败。",
+                level: "error",
+                channels: ["in_app", "web_push", "wechat_oa_template"],
+                titleTemplate: "图片生成失败",
+                contentTemplate: "{{taskName}} 处理失败，{{reason}}",
+                linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
+            },
+        ]);
     }
 
     /**
@@ -197,6 +231,10 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         return saved;
     }
 
+    async createAndGenerateForWeb(dto: CreateGenerationDto, userId: string) {
+        return this.toPublicGeneration(await this.createAndGenerate(dto, userId));
+    }
+
     async recoverJobs() {
         const now = Date.now();
         const staleProcessingDate = new Date(now - 30 * 60 * 1000);
@@ -305,6 +343,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             saved.completedAt = new Date();
             await this.generationRepository.save(saved);
             this.logger.log(`Generation ${saved.id} succeeded: ${result.images.length} images`);
+            await this.notifyTerminalStatus(saved);
             return saved;
         } catch (generateError) {
             const rawMessage =
@@ -329,6 +368,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
             await this.generationRepository.save(saved);
             this.logger.warn(`Generation ${saved.id} failed: ${saved.errorMessage}`);
+            await this.notifyTerminalStatus(saved);
             return saved;
         }
     }
@@ -347,19 +387,10 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             );
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Queue image generation ${id} failed, using local fallback: ${message}`, error);
-            this.runGenerationInBackground(id);
+            this.logger.error(`Queue image generation ${id} failed: ${message}`, error);
+            await this.markGenerationCrashed(id, new Error("图片生成队列暂不可用，请稍后重试"));
+            throw HttpErrorFactory.badRequest("图片生成队列暂不可用，请稍后重试");
         }
-    }
-
-    private runGenerationInBackground(id: string) {
-        setTimeout(() => {
-            void this.executeGenerationJob(id).catch((error) => {
-                const message = error instanceof Error ? error.message : String(error);
-                this.logger.error(`Background generation ${id} crashed: ${message}`, error);
-                void this.markGenerationCrashed(id, error);
-            });
-        }, 0);
     }
 
     private normalizeCapabilities(capabilities?: ImageModelCapabilities): ImageModelCapabilities {
@@ -442,8 +473,37 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
                 this.logger.error(`Crash refund failed for generation ${saved.id}`, refundError);
             }
         }
+        if (saved.billingStatus === ImageGenerationBillingStatus.PENDING) {
+            saved.billingStatus = ImageGenerationBillingStatus.FAILED;
+        }
 
         await this.generationRepository.save(saved);
+        await this.notifyTerminalStatus(saved);
+    }
+
+    private async notifyTerminalStatus(record: ImageGeneration) {
+        if (![ImageGenerationStatus.SUCCEEDED, ImageGenerationStatus.FAILED].includes(record.status)) {
+            return;
+        }
+        const succeeded = record.status === ImageGenerationStatus.SUCCEEDED;
+        await this.notificationService.notifyUser({
+            extensionId: EXTENSION_ID,
+            userId: record.userId,
+            sceneCode: succeeded
+                ? `${EXTENSION_ID}.generation.succeeded`
+                : `${EXTENSION_ID}.generation.failed`,
+            level: succeeded ? "success" : "error",
+            linkUrl: `/extension/${EXTENSION_ID}/`,
+            sourceType: "generation",
+            sourceId: record.id,
+            data: {
+                taskName: record.modelName || record.modelId || "图片任务",
+                modelName: record.modelName || record.modelId,
+                reason: record.errorMessage || "请稍后重试或联系管理员",
+                billingStatus: record.billingStatus,
+                completedAt: record.completedAt?.toISOString(),
+            },
+        });
     }
 
     async list(query: QueryGenerationDto, userId: string) {
@@ -459,6 +519,14 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             where,
             order: { createdAt: "DESC" },
         });
+    }
+
+    async listForWeb(query: QueryGenerationDto, userId: string) {
+        const page = await this.list(query, userId);
+        return {
+            ...page,
+            items: page.items.map((item) => this.toPublicGeneration(item)),
+        };
     }
 
     async listAll(query: QueryGenerationDto) {
@@ -485,6 +553,10 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
 
         return generation;
+    }
+
+    async findOwnedPublicById(id: string, userId: string) {
+        return this.toPublicGeneration(await this.findOwnedById(id, userId));
     }
 
     async findById(id: string) {
@@ -518,6 +590,10 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         return this.retryFromSource(source, userId);
     }
 
+    async retryForWeb(id: string, userId: string) {
+        return this.toPublicGeneration(await this.retry(id, userId));
+    }
+
     async retryAsOwner(id: string) {
         const source = await this.findById(id);
         return this.retryFromSource(source, source.userId);
@@ -525,6 +601,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
     private async retryFromSource(source: ImageGeneration, userId: string) {
         await this.modelConfigService.findEnabledByModel(source.modelId);
+        const hasReferenceImage = Boolean(
+            source.sourceImages?.length || source.referenceImageUrl || source.referenceImageFileId,
+        );
 
         return this.createAndGenerate(
             {
@@ -541,7 +620,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
                 quality: source.quality,
                 style: source.style,
                 responseFormat: source.responseFormat,
-                mode: source.referenceImageUrl || source.referenceImageFileId ? ImageGenerationMode.IMAGE_TO_IMAGE : ImageGenerationMode.TEXT_TO_IMAGE,
+                mode: hasReferenceImage ? ImageGenerationMode.IMAGE_TO_IMAGE : ImageGenerationMode.TEXT_TO_IMAGE,
                 outputFormat: source.outputFormat,
                 background: source.background,
                 outputCompression: source.outputCompression,
@@ -551,6 +630,19 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             },
             userId,
         );
+    }
+
+    private toPublicGeneration(record: ImageGeneration) {
+        const {
+            userId: _userId,
+            rawRequest: _rawRequest,
+            rawResponse: _rawResponse,
+            rawEvents: _rawEvents,
+            baseURL: _baseURL,
+            deletedAt: _deletedAt,
+            ...publicRecord
+        } = record;
+        return publicRecord;
     }
 
     async listImageModels() {
@@ -567,7 +659,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         if (dto.modelId) {
             try {
                 const modelInfo = await this.aiModelService.getModelInfo(dto.modelId);
-                const providerConfig = this.flattenProviderConfig(
+                const providerConfig = normalizeProviderConfig(
                     await this.aiModelService.getProviderConfig(modelInfo.id),
                 );
                 if (!providerConfig.apiKey || !providerConfig.baseURL) {
@@ -759,6 +851,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             style: record.style,
             responseFormat: record.responseFormat,
             referenceImages,
+            maskImage,
             maxReferenceImageBytes: maxReferenceImageSizeMb * 1024 * 1024,
             requestContract: modelConfig.requestContract,
         });
@@ -959,27 +1052,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         if (message.includes("504") || message.includes("524") || message.includes("timeout") || message.includes("超时")) return "timeout";
         if (message.includes("policy") || message.includes("内容")) return "content_policy";
         return "upstream";
-    }
-
-    private flattenProviderConfig(config: Record<string, unknown>): Record<string, string> {
-        const normalized: Record<string, string> = {};
-
-        Object.entries(config).forEach(([key, item]) => {
-            if (typeof item === "string") {
-                normalized[key] = item;
-                return;
-            }
-
-            const value = (item as { value?: unknown } | undefined)?.value;
-            if (typeof value === "string") {
-                normalized[key] = value;
-            }
-        });
-
-        const apiKey = normalized.apiKey || normalized.api_key || normalized.API_KEY || "";
-        const baseURL = normalized.baseURL || normalized.baseUrl || normalized.base_url || "";
-
-        return { apiKey, baseURL };
     }
 
     private sanitizeBaseURL(raw?: string): string {
