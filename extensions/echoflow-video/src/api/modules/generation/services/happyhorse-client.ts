@@ -21,6 +21,18 @@ export const defaultHappyHorseClientOptions = {
     retryDelayMs: 1_000,
 } satisfies Required<HappyHorseClientOptions>;
 
+interface HappyHorseTaskResponse extends Record<string, unknown> {
+    status?: string;
+    state?: string;
+    video_url?: string;
+    output?: {
+        task_id?: string;
+        task_status?: string;
+        video_url?: string;
+        videoUrl?: string;
+    };
+}
+
 export class HappyHorseClient implements VideoProviderClient {
     readonly providerId = "happyhorse";
     private readonly apiKey: string;
@@ -135,7 +147,7 @@ export class HappyHorseClient implements VideoProviderClient {
     private async fetchWithRetry(
         url: string,
         options: { method: string; body?: string },
-    ): Promise<Record<string, unknown>> {
+    ): Promise<HappyHorseTaskResponse> {
         return requestVideoJson(
             url,
             { ...options, headers: this.headers() },

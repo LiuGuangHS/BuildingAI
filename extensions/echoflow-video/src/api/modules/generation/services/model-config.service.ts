@@ -166,7 +166,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         const resolved = this.toResolvedConfig(config);
         const [endpoint] = this.normalizeEndpointConfigs([endpointDto], config.endpoints ?? []);
         const credential = await this.resolveEndpointCredential(endpoint);
-        const { VideoGatewayClient } = await import("./video-gateway-client");
+        const { VideoGatewayClient } = await import("./video-gateway-client.js");
         await new VideoGatewayClient(resolved, endpoint, credential.apiKey, credential.baseUrl).testConnection();
         return { success: true, message: "接入点配置可用" };
     }

@@ -293,7 +293,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
     }
 
     async pollAnyAndUpdate(id: string, options: { scheduleNext?: boolean } = {}) {
-        const record = await this.findOne(id);
+        const record = await this.findGenerationById(id);
         return this.pollRecord(record, record.userId, options);
     }
 
@@ -478,7 +478,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
     }
 
     /** Admin: find any record by id (no user check). */
-    async findOne(id: string) {
+    async findGenerationById(id: string) {
         const generation = await this.generationRepository.findOne({ where: { id } as FindOptionsWhere<VideoGeneration> });
         if (!generation) {
             throw HttpErrorFactory.notFound("视频生成记录不存在");
@@ -488,14 +488,14 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
 
     /** Admin: delete any record by id (no user check). */
     async deleteOne(id: string) {
-        const record = await this.findOne(id);
+        const record = await this.findGenerationById(id);
         this.assertVideoCanBeDeleted(record);
         await this.delete(id);
         return { success: true, message: "删除成功" };
     }
 
     async updateAdminRemark(id: string, adminRemark: string) {
-        const record = await this.findOne(id);
+        const record = await this.findGenerationById(id);
         record.adminRemark = this.sanitizeText(adminRemark, 2000);
         await this.generationRepository.save(record);
         return record;
@@ -507,7 +507,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         message?: string,
         failureCategory?: string,
     ) {
-        const record = await this.findOne(id);
+        const record = await this.findGenerationById(id);
         record.status = status;
         if (status === VideoGenerationStatus.FAILED) {
             record.errorMessage = this.truncateText(message || record.errorMessage || "管理员标记失败", 2000);
@@ -562,7 +562,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
     }
 
     async cancelRecord(id: string, message = "管理员取消任务") {
-        const record = await this.findOne(id);
+        const record = await this.findGenerationById(id);
         if (isTerminalStatus(record.status)) {
             return record;
         }
@@ -591,7 +591,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
     }
 
     async retryRecord(id: string) {
-        const record = await this.findOne(id);
+        const record = await this.findGenerationById(id);
         if (record.status !== VideoGenerationStatus.FAILED) {
             throw HttpErrorFactory.badRequest("只有失败任务可以重试");
         }
@@ -644,7 +644,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         return this.toPublicGeneration(await this.findOwnedById(id, userId));
     }
 
-    private toPublicGeneration(record: VideoGeneration) {
+    private toPublicGeneration(record: VideoGeneration & { deletedAt?: Date | null }) {
         const {
             userId: _userId,
             taskId: _taskId,

@@ -44,7 +44,7 @@ export class GenerationController extends BaseController {
 
     @Get(":id")
     async findOne(@Param("id", UUIDValidationPipe) id: string) {
-        return this.generationService.findOne(id);
+        return this.generationService.findGenerationById(id);
     }
 
     @Post("batch/status")

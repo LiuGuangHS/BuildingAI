@@ -1,4 +1,4 @@
-import type { VideoMediaItem, VideoParameters } from "../../db/entities/video-generation.entity";
+import type { VideoMediaItem, VideoParameters } from "../../../db/entities/video-generation.entity";
 
 export interface SubmitTaskInput {
     model: string;

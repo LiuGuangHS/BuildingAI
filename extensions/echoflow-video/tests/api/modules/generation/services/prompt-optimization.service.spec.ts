@@ -142,6 +142,55 @@ describe("PromptOptimizationService", () => {
         expect(mockGenerateText).toHaveBeenCalledTimes(1);
     });
 
+    it("calls ai-sdk only through the main-system provider adapter and normalized provider config", async () => {
+        mockProviderConfigService.getConsoleConfig.mockResolvedValue({
+            promptOptimizerEnabled: true,
+            promptOptimizerModelId: "11111111-1111-4111-8111-111111111111",
+            promptOptimizerAllowedModelIds: [],
+        });
+        mockAiModelService.getModelInfo.mockResolvedValue({
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "Main LLM",
+            model: "main-llm",
+            modelType: "llm",
+            isActive: true,
+            provider: { provider: "openai", isActive: true },
+        });
+        mockAiModelService.getProviderConfig.mockResolvedValue({
+            api_key: { value: "sk-main" },
+            baseUrl: { value: "https://llm.example.test/v1" },
+        });
+        const providerAdapter = Object.assign(
+            jest.fn(() => ({ model: "adapter-model" })),
+            { supports: jest.fn(() => true) },
+        );
+        mockAiModelService.getProviderAdapter.mockResolvedValue(providerAdapter);
+        mockGenerateText.mockResolvedValue({
+            text: "optimized video prompt",
+            usage: { inputTokens: 10, outputTokens: 8, totalTokens: 18 },
+        });
+
+        await makeService().optimize({
+            prompt: "一只产品在桌面旋转展示",
+            style: "commercial",
+        });
+
+        expect(mockAiModelService.getProviderConfig).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111");
+        expect(mockAiModelService.getProviderAdapter).toHaveBeenCalledWith(
+            "11111111-1111-4111-8111-111111111111",
+            {
+                apiKey: "sk-main",
+                baseURL: "https://llm.example.test/v1",
+                webhookSecret: "",
+            },
+        );
+        expect(providerAdapter.supports).toHaveBeenCalledWith("language");
+        expect(providerAdapter).toHaveBeenCalledWith("main-llm");
+        expect(mockGenerateText).toHaveBeenCalledWith(expect.objectContaining({
+            model: "adapter-model",
+        }));
+    });
+
     it("does not fall back when the user explicitly selects an unusable optimizer model", async () => {
         mockProviderConfigService.getConsoleConfig.mockResolvedValue({
             promptOptimizerEnabled: true,
