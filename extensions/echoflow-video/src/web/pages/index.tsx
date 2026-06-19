@@ -1,4 +1,5 @@
 import { useDocumentHead } from "@buildingai/hooks";
+import { createRequestId } from "@buildingai/http";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent } from "@buildingai/ui/components/ui/card";
@@ -10,7 +11,6 @@ import { toast } from "sonner";
 import { GenerationForm } from "../components/generation-form";
 import { HistoryList } from "../components/history-list";
 import { VideoResult } from "../components/video-result";
-import { createRequestKey } from "../lib/request-key";
 import { readReuseParams } from "../lib/reuse-params-storage";
 import {
     useWebCreateVideoMutation,
@@ -51,7 +51,7 @@ export default function AIVideoIndexPage() {
 
     const handleSubmit = async (data: CreateVideoParams) => {
         try {
-            const requestKey = createRequestKey();
+            const requestKey = createRequestId();
             const gen = await createMutation.mutateAsync({ ...data, requestKey });
             setCurrentId(gen.id);
             toast.success("任务已提交，正在生成视频...");

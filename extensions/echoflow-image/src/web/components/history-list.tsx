@@ -7,14 +7,16 @@ import { CopyPlus, HistoryIcon, ImageIcon, RefreshCcw, Trash2 } from "lucide-rea
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import type { ConsoleImageGeneration, ImageGeneration } from "../services/types/generation";
+import type { ImageGeneration } from "../services/types/generation";
 import { ImageGenerationBillingStatus, ImageGenerationStatus } from "../services/types/generation";
 import { ConfirmDialog } from "./confirm-dialog";
 import { resolveImageSrc } from "./image-utils";
 import { HistorySkeleton } from "./skeleton-card";
 
+type HistoryListItem = ImageGeneration & { userId?: string };
+
 type HistoryListProps = {
-    items: ImageGeneration[];
+    items: HistoryListItem[];
     loading?: boolean;
     detailBasePath?: string;
     title?: string;
@@ -23,18 +25,7 @@ type HistoryListProps = {
     compact?: boolean;
     onDelete?: (id: string) => Promise<void> | void;
     onRetry?: (id: string) => Promise<void> | void;
-    onReuse?: (generation: ImageGeneration) => void;
-} | {
-    items: ConsoleImageGeneration[];
-    loading?: boolean;
-    detailBasePath?: string;
-    title?: string;
-    description?: string;
-    showUserId: true;
-    compact?: boolean;
-    onDelete?: (id: string) => Promise<void> | void;
-    onRetry?: (id: string) => Promise<void> | void;
-    onReuse?: (generation: ConsoleImageGeneration) => void;
+    onReuse?: (generation: HistoryListItem) => void;
 };
 
 const statusVariantMap: Record<string, "default" | "destructive" | "secondary" | "outline"> = {
