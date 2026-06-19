@@ -1,7 +1,7 @@
 import { BaseService } from "@buildingai/base";
 import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog, AiModel } from "@buildingai/db/entities";
+import { AccountLog, type AiModel } from "@buildingai/db/entities";
 import { Brackets, EntityManager, In, LessThan, Repository } from "@buildingai/db/typeorm";
 import {
     ExtensionBillingService,
@@ -64,8 +64,6 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
         private readonly profileRepo: Repository<AstrologyProfile>,
         @InjectRepository(AstrologyFortuneSetting)
         private readonly settingRepo: Repository<AstrologyFortuneSetting>,
-        @InjectRepository(AiModel)
-        private readonly modelRepo: Repository<AiModel>,
         @InjectRepository(AccountLog)
         private readonly accountLogRepo: Repository<AccountLog>,
         private readonly billingService: ExtensionBillingService,
@@ -623,11 +621,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
     }
 
     async listAvailableLlmModels() {
-        const models = await this.modelRepo.find({
-            where: { isActive: true, modelType: "llm" },
-            relations: { provider: true },
-            order: { sortOrder: "DESC", createdAt: "DESC" },
-        });
+        const models = await this.publicAiModelService.listActiveLlmModels();
         return models
             .filter((model) => model.provider?.isActive)
             .map((model) => ({

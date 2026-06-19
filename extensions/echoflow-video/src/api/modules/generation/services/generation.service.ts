@@ -3,10 +3,9 @@ import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants/shared/account-l
 import {
     ExtensionBillingService,
     ExtensionNotificationService,
-    PublicAiModelService,
 } from "@buildingai/extension-sdk";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog, AiModel, File } from "@buildingai/db/entities";
+import { AccountLog, File } from "@buildingai/db/entities";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThanOrEqual, Like, MoreThanOrEqual, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -1226,7 +1225,6 @@ export const generationModuleEntities = [
     VideoPromptOptimization,
     AccountLog,
     File,
-    AiModel,
 ];
 export const generationModuleProviders = [
     GenerationService,

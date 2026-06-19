@@ -1,6 +1,6 @@
 import { QueueModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog, AiModel } from "@buildingai/db/entities";
+import { AccountLog } from "@buildingai/db/entities";
 import {
     AiPublicModule,
     ExtensionBillingModule,
@@ -18,7 +18,7 @@ import { ASTROLOGY_REPORT_QUEUE } from "./services/astrology-queue.constants";
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([AstrologyFortuneSetting, AstrologyProfile, AstrologyReport, AiModel, AccountLog]),
+        TypeOrmModule.forFeature([AstrologyFortuneSetting, AstrologyProfile, AstrologyReport, AccountLog]),
         AiPublicModule,
         ExtensionBillingModule,
         ExtensionNotificationModule,

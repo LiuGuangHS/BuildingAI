@@ -6,6 +6,10 @@ const serviceSource = readFileSync(
     new URL("../src/api/modules/astrology-fortune/services/astrology-fortune.service.ts", import.meta.url),
     "utf8",
 );
+const moduleSource = readFileSync(
+    new URL("../src/api/modules/astrology-fortune/astrology-fortune.module.ts", import.meta.url),
+    "utf8",
+);
 
 test("astrology reports use ai-sdk only through main-system model resolution", () => {
     const resolverIndex = serviceSource.indexOf("private async resolveLanguageModel(model: AiModel)");
@@ -20,4 +24,11 @@ test("astrology reports use ai-sdk only through main-system model resolution", (
     assert.ok(adapterIndex > resolverIndex);
     assert.ok(generateCalls.length > 0);
     assert.equal(resolvedModelCalls.length, generateCalls.length);
+});
+
+test("astrology console model list uses the extension SDK instead of a direct AiModel repository", () => {
+    assert.ok(serviceSource.includes("this.publicAiModelService.listActiveLlmModels()"));
+    assert.equal(serviceSource.includes("@InjectRepository(AiModel)"), false);
+    assert.equal(serviceSource.includes("modelRepo"), false);
+    assert.equal(moduleSource.includes("AiModel"), false);
 });

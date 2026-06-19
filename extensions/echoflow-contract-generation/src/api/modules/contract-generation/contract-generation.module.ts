@@ -1,6 +1,6 @@
 import { QueueModule, UploadModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog, AiModel, File, StorageConfig } from "@buildingai/db/entities";
+import { AccountLog, File, StorageConfig } from "@buildingai/db/entities";
 import {
     AiPublicModule,
     ExtensionBillingModule,
@@ -18,7 +18,7 @@ import { CONTRACT_GENERATION_QUEUE } from "./services/contract-queue.constants";
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([ContractGenerationTask, ContractGenerationConfig, ContractGenerationVersion, ContractTemplateEntity, AiModel, AccountLog, File, StorageConfig]),
+        TypeOrmModule.forFeature([ContractGenerationTask, ContractGenerationConfig, ContractGenerationVersion, ContractTemplateEntity, AccountLog, File, StorageConfig]),
         AiPublicModule,
         ExtensionBillingModule,
         ExtensionNotificationModule,

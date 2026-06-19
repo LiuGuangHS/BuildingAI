@@ -66,5 +66,7 @@ test("video provider configuration does not import the low-level ai sdk for cons
     const source = await readFile(PROVIDER_CONFIG_SERVICE_FILE, "utf8");
 
     assert.doesNotMatch(source, /@buildingai\/ai-sdk/);
-    assert.match(source, /const\s+LLM_MODEL_TYPE\s*=\s*"llm"/);
+    assert.doesNotMatch(source, /InjectRepository\(AiModel\)/);
+    assert.doesNotMatch(source, /import\s+\{[^}]*\bAiModel\b[^}]*\}\s+from\s+"@buildingai\/db\/entities"/);
+    assert.match(source, /listActiveLlmModels/);
 });

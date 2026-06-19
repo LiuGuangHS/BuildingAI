@@ -36,6 +36,17 @@ export class PublicAiModelService {
         return model;
     }
 
+    async listActiveLlmModels(take = 100) {
+        const models = await this.aiModelRepository.find({
+            where: { modelType: "llm", isActive: true },
+            relations: ["provider"],
+            order: { sortOrder: "DESC", createdAt: "DESC" },
+            take: Math.min(Math.max(Number(take) || 100, 1), 200),
+        });
+
+        return models.filter((model) => model.provider?.isActive !== false);
+    }
+
     /**
      * Get provider config
      * @param modelId AI model identifier

@@ -16,12 +16,9 @@ const mockAuditRepo = {
     find: jest.fn(),
 };
 
-const mockAiModelRepo = {
-    find: jest.fn(),
-};
-
 const mockAiModelService = {
     getModelInfo: jest.fn(),
+    listActiveLlmModels: jest.fn(),
 };
 
 const mockSecretService = {
@@ -29,7 +26,7 @@ const mockSecretService = {
 };
 
 function makeService(): ProviderConfigService {
-    return new ProviderConfigService(mockConfigRepo as any, mockAuditRepo as any, mockAiModelRepo as any, mockAiModelService as any, mockSecretService as any);
+    return new ProviderConfigService(mockConfigRepo as any, mockAuditRepo as any, mockAiModelService as any, mockSecretService as any);
 }
 
 function makeConfig(overrides: Partial<VideoProviderConfig> = {}): VideoProviderConfig {
@@ -53,6 +50,24 @@ beforeEach(() => {
         isActive: true,
         provider: { isActive: true },
     });
+    mockAiModelService.listActiveLlmModels.mockResolvedValue([
+        {
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "主站 LLM",
+            model: "gpt-test",
+            modelType: "llm",
+            description: "测试模型",
+            features: ["text"],
+            isActive: true,
+            billingRule: { prompt: 1 },
+            provider: {
+                id: "provider-001",
+                name: "主站供应商",
+                provider: "openai",
+                isActive: true,
+            },
+        },
+    ]);
     mockSecretService.getConfigKeyValuePairs.mockResolvedValue({
         webhookSecret: { value: "secret-123", required: true },
     });
@@ -193,5 +208,18 @@ describe("ProviderConfigService", () => {
                 templates: [{ label: "开场", prompt: "一段电影感开场" }],
             }),
         );
+    });
+
+    it("lists prompt optimizer models through the public AI model service", async () => {
+        const result = await makeService().listPromptOptimizerModels();
+
+        expect(mockAiModelService.listActiveLlmModels).toHaveBeenCalledWith(100);
+        expect(result).toEqual([
+            expect.objectContaining({
+                id: "11111111-1111-4111-8111-111111111111",
+                modelType: "llm",
+                provider: expect.objectContaining({ provider: "openai" }),
+            }),
+        ]);
     });
 });

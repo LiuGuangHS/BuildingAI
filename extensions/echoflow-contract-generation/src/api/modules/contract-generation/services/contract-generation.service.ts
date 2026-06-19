@@ -2,7 +2,7 @@ import { BaseService } from "@buildingai/base";
 import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants";
 import { FileUploadService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog, AiModel, File } from "@buildingai/db/entities";
+import { AccountLog, File, type AiModel } from "@buildingai/db/entities";
 import { Brackets, EntityManager, In, LessThan, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import {
@@ -125,8 +125,6 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         private readonly versionRepo: Repository<ContractGenerationVersion>,
         @InjectRepository(ContractTemplateEntity)
         private readonly templateRepo: Repository<ContractTemplateEntity>,
-        @InjectRepository(AiModel)
-        private readonly modelRepo: Repository<AiModel>,
         @InjectRepository(AccountLog)
         private readonly accountLogRepo: Repository<AccountLog>,
         @InjectRepository(File)
@@ -1020,11 +1018,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     }
 
     async listAvailableLlmModels() {
-        const models = await this.modelRepo.find({
-            where: { isActive: true, modelType: "llm" },
-            relations: { provider: true },
-            order: { sortOrder: "DESC", createdAt: "DESC" },
-        });
+        const models = await this.publicAiModelService.listActiveLlmModels();
         return models
             .filter((model) => model.provider?.isActive)
             .map((model) => ({

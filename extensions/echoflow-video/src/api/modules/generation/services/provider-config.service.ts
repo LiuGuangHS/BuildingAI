@@ -3,7 +3,6 @@ import { SecretService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
-import { AiModel } from "@buildingai/db/entities";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { PublicAiModelService, normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
@@ -13,7 +12,6 @@ import { VideoConfigAudit } from "../../../db/entities/video-config-audit.entity
 import { UpdateProviderConfigDto } from "../dto";
 
 const HAPPYHORSE_PROVIDER = "happyhorse";
-const LLM_MODEL_TYPE = "llm";
 
 @Injectable()
 export class ProviderConfigService extends BaseService<VideoProviderConfig> {
@@ -22,8 +20,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         private readonly configRepository: Repository<VideoProviderConfig>,
         @InjectRepository(VideoConfigAudit)
         private readonly auditRepository: Repository<VideoConfigAudit>,
-        @InjectRepository(AiModel)
-        private readonly aiModelRepository: Repository<AiModel>,
         private readonly aiModelService: PublicAiModelService,
         private readonly secretService: SecretService,
     ) {
@@ -123,16 +119,9 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
     }
 
     async listPromptOptimizerModels() {
-        const models = await this.aiModelRepository.find({
-            where: { modelType: LLM_MODEL_TYPE, isActive: true } as FindOptionsWhere<AiModel>,
-            relations: ["provider"],
-            order: { sortOrder: "DESC", createdAt: "DESC" },
-            take: 100,
-        });
+        const models = await this.aiModelService.listActiveLlmModels(100);
 
-        return models
-            .filter((model) => model.provider?.isActive !== false)
-            .map((model) => ({
+        return models.map((model) => ({
                 id: model.id,
                 name: model.name,
                 model: model.model,
