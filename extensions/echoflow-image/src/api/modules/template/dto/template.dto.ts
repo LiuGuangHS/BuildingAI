@@ -60,10 +60,10 @@ export class UpdateTemplateDto extends CreateTemplateDto {
     @IsString()
     @Length(1, 120)
     @IsOptional()
-    title: string;
+    declare title: string;
 
     @IsString()
     @Length(1, 4000)
     @IsOptional()
-    prompt: string;
+    declare prompt: string;
 }

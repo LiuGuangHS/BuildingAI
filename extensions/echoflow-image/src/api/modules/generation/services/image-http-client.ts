@@ -122,7 +122,7 @@ export async function downloadReferenceImageFromUrl(url: string, maxBytes: numbe
         }
 
         return {
-            blob: new Blob([response.buffer], { type: mimeType }),
+            blob: new Blob([toArrayBuffer(response.buffer)], { type: mimeType }),
             filename: buildImageFilename(response.url.toString(), mimeType),
             mimeType,
             size: response.buffer.byteLength,
@@ -136,6 +136,10 @@ export async function downloadReferenceImageFromUrl(url: string, maxBytes: numbe
     } finally {
         clearTimeout(timeoutId);
     }
+}
+
+function toArrayBuffer(buffer: Buffer): ArrayBuffer {
+    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
 }
 
 export function normalizeImageMimeType(raw: string | null | undefined, url: string) {

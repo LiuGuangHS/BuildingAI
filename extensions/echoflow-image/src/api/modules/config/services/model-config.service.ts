@@ -12,6 +12,7 @@ import { ImageGeneration } from "../../../db/entities/image-generation.entity";
 import {
     ImageModelConfig,
     type ImageModelCapabilities,
+    type ImageModelAllowedParams,
     type ImageModelDefaultParams,
     type ImageModelEndpoint,
     type ImageRequestContract,
@@ -37,6 +38,7 @@ export interface ResolvedImageModelConfig {
     visibleToUser: boolean;
     capabilities: ImageModelCapabilities;
     defaultParams: ImageModelDefaultParams;
+    allowedParams: ImageModelAllowedParams;
     endpoints: ImageModelEndpoint[];
     sortOrder: number;
 }
@@ -421,6 +423,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             visibleToUser: config.visibleToUser,
             capabilities: this.enforceProtocolCapabilities(config.requestContract, config.capabilities),
             defaultParams: config.defaultParams,
+            allowedParams: config.allowedParams ?? {},
             endpoints: config.endpoints ?? [],
             sortOrder: config.sortOrder,
         };

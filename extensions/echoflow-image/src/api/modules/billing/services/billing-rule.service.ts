@@ -10,6 +10,8 @@ import { ImageBillingRule } from "../../../db/entities/image-billing-rule.entity
 import { ImageModelConfig } from "../../../db/entities/image-model-config.entity";
 import { CreateBillingRuleDto, EstimateBillingDto, QueryBillingRuleDto, UpdateBillingRuleDto } from "../dto";
 
+type ImageBillingMultipliers = Record<string, number | string | undefined>;
+
 @Injectable()
 export class BillingRuleService extends BaseService<ImageBillingRule> {
     constructor(

@@ -150,10 +150,10 @@ export class UpdateModelConfigDto extends CreateModelConfigDto {
     @IsString()
     @Length(1, 100)
     @IsOptional()
-    model: string;
+    declare model: string;
 
     @IsString()
     @Length(1, 120)
     @IsOptional()
-    displayName: string;
+    declare displayName: string;
 }

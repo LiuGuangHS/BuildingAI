@@ -33,6 +33,7 @@ import {
 import { ImageBillingRule } from "../../../db/entities/image-billing-rule.entity";
 import {
     ImageModelConfig,
+    type ImageModelAllowedParams,
     type ImageModelCapabilities,
     type ImageModelDefaultParams,
 } from "../../../db/entities/image-model-config.entity";
@@ -638,6 +639,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     }
 
     private toPublicGeneration(record: ImageGeneration) {
+        const recordWithSoftDelete = record as ImageGeneration & { deletedAt?: Date | null };
         const {
             userId: _userId,
             rawRequest: _rawRequest,
@@ -646,7 +648,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             baseURL: _baseURL,
             deletedAt: _deletedAt,
             ...publicRecord
-        } = record;
+        } = recordWithSoftDelete;
         return publicRecord;
     }
 
@@ -899,6 +901,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
         const file = await this.fileUploadService.findOneById(source.fileId);
         this.assertPluginUploadOwnedByUser(file, userId, label);
+        if (!file) {
+            throw HttpErrorFactory.badRequest(`${label}文件不存在或无权访问`);
+        }
         const mimeType = this.normalizeReferenceImageMimeType(file.mimeType, file.originalName);
         const maxBytes = maxReferenceImageSizeMb * 1024 * 1024;
 
@@ -917,7 +922,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
 
         return {
-            blob: new Blob([buffer], { type: mimeType }),
+            blob: new Blob([this.toArrayBuffer(buffer)], { type: mimeType }),
             filename: file.originalName || `reference.${this.extensionForMimeType(mimeType)}`,
             mimeType,
             size: buffer.byteLength,
@@ -941,7 +946,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
     }
 
-    private normalizeGenerationRequest(dto: CreateGenerationDto, modelConfig: ImageModelConfig) {
+    private normalizeGenerationRequest(dto: CreateGenerationDto, modelConfig: Pick<ImageModelConfig, "capabilities" | "defaultParams" | "requestContract">) {
         const sourceImages = this.normalizeSourceImages(dto);
         const primarySourceImage = sourceImages[0];
         const referenceImageUrl = primarySourceImage?.url;
@@ -977,7 +982,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         };
     }
 
-    private validateAllowedParams(dto: CreateGenerationDto, modelConfig: ImageModelConfig) {
+    private validateAllowedParams(dto: CreateGenerationDto, modelConfig: Pick<ImageModelConfig, "allowedParams" | "capabilities" | "defaultParams" | "requestContract">) {
         const allowed = modelConfig.allowedParams ?? {};
         const capabilities = modelConfig.capabilities ?? {};
         const size = dto.size ?? modelConfig.defaultParams?.size;
@@ -1083,8 +1088,8 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         generationId: string,
         images: Array<{ url?: string; b64Json?: string; mimeType?: string; revisedPrompt?: string }>,
     ) {
-        const storageFiles = [];
-        const storedImages = [];
+        const storageFiles: Array<{ url: string; mimeType: string; path: string; size: number }> = [];
+        const storedImages: Array<{ url?: string; mimeType?: string; revisedPrompt?: string }> = [];
 
         for (const [index, img] of images.entries()) {
             if (img.url) {
@@ -1133,6 +1138,10 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
 
         return { images: storedImages, storageFiles };
+    }
+
+    private toArrayBuffer(buffer: Buffer): ArrayBuffer {
+        return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
     }
 
     private normalizeResultImageUrl(raw: string): string {

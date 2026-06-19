@@ -31,6 +31,7 @@ export interface ImageModelDefaultParams {
 export interface ImageModelAllowedParams {
     sizes?: string[];
     qualities?: string[];
+    styles?: string[];
     outputFormats?: string[];
     maxImages?: number;
 }
