@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { consoleHttpClient } from "../base";
-import type { AdminContractGenerationConfig, AiModelOption, ContractGenerationTask, ContractTemplate, PaginatedResponse, QueryContractTasksParams, UpsertContractTemplateParams } from "../types";
+import type { AdminContractGenerationConfig, AdminContractGenerationTask, AiModelOption, ContractTemplate, PaginatedResponse, QueryContractTasksParams, UpsertContractTemplateParams } from "../types";
 
 const CONTRACT_CONFIG_QUERY_KEY = ["echoflow-contract-generation", "console", "config"] as const;
 const AI_MODELS_QUERY_KEY = ["echoflow-contract-generation", "console", "models"] as const;
@@ -41,11 +41,11 @@ export function resetBuiltinContractTemplates() {
 }
 
 export function listAdminContractTasks(params?: QueryContractTasksParams) {
-    return consoleHttpClient.get<PaginatedResponse<ContractGenerationTask>>("/contract-generation/tasks", { params });
+    return consoleHttpClient.get<PaginatedResponse<AdminContractGenerationTask>>("/contract-generation/tasks", { params });
 }
 
 export function getAdminContractTaskDetail(taskId: string) {
-    return consoleHttpClient.get<ContractGenerationTask>(`/contract-generation/tasks/${taskId}`);
+    return consoleHttpClient.get<AdminContractGenerationTask>(`/contract-generation/tasks/${taskId}`);
 }
 
 export function deleteAdminContractTask(taskId: string) {

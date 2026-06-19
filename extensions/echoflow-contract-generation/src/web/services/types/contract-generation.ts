@@ -135,11 +135,18 @@ export type RewriteContractClauseResult = {
     reason: string;
 };
 
+export type PublicContractTaskMetadata = {
+    templateName?: unknown;
+    language?: unknown;
+    stance?: unknown;
+    exportedAt?: unknown;
+    exportType?: unknown;
+    billingStatus?: unknown;
+    refundedAt?: unknown;
+};
+
 export type ContractGenerationTask = {
     id: string;
-    userId: string;
-    modelId?: string;
-    providerId?: string;
     title: string;
     contractType: string;
     industry?: string | null;
@@ -157,10 +164,17 @@ export type ContractGenerationTask = {
     resultUrl?: string | null;
     errorMessage?: string | null;
     costCredits: number;
-    providerMetadata?: Record<string, unknown>;
-    requestPayload?: Record<string, unknown> | null;
+    providerMetadata?: PublicContractTaskMetadata;
     createdAt: string;
     updatedAt: string;
+};
+
+export type AdminContractGenerationTask = ContractGenerationTask & {
+    userId: string;
+    modelId?: string;
+    providerId?: string;
+    requestPayload?: Record<string, unknown> | null;
+    providerMetadata?: Record<string, unknown>;
 };
 
 export type ContractGenerationVersion = {
