@@ -37,6 +37,7 @@
         "i18n:translate": "node ../../scripts/translate-i18n.mjs"
     },
     "dependencies": {
+        "@buildingai/ai-sdk": "workspace:*",
         "@buildingai/base": "workspace:*",
         "@buildingai/constants": "workspace:*",
         "@buildingai/core": "workspace:*",
