@@ -10,6 +10,7 @@ export const FIELD_LIMITS = {
     sourceType: 64,
     sourceId: 96,
     dedupeKey: 160,
+    content: 4000,
     level: 16,
     linkUrl: 512,
     sceneName: 64,
@@ -61,6 +62,14 @@ export function normalizeNullableText(value: string | null | undefined, maxLengt
         throw HttpErrorFactory.badRequest(`${label}不能超过 ${maxLength} 个字符`);
     }
     return normalized;
+}
+
+export function normalizePositiveInteger(value: unknown, fallback: number, max: number) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return fallback;
+    const integer = Math.floor(numeric);
+    if (integer < 1) return fallback;
+    return Math.min(integer, max);
 }
 
 export function normalizeDedupeKey(value?: string | null) {

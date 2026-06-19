@@ -3,7 +3,10 @@ import {
     normalizeNotificationData,
     normalizeNotificationLinkTemplate,
     normalizeNotificationLinkUrl,
+    normalizeNullableText,
+    normalizePositiveInteger,
     normalizeWechatTemplateConfig,
+    FIELD_LIMITS,
 } from "./notification-normalize.util";
 
 jest.mock("@buildingai/errors", () => ({
@@ -49,6 +52,15 @@ describe("notification normalization helpers", () => {
         expect(() => normalizeNotificationData(circular)).toThrow();
         expect(() => normalizeNotificationData({ value: "x".repeat(20 * 1024) })).toThrow();
         expect(normalizeNotificationData({ ok: true })).toEqual({ ok: true });
+    });
+
+    it("limits notification content and normalizes pagination numbers", () => {
+        expect(normalizeNullableText("  hello  ", FIELD_LIMITS.content, "通知内容")).toBe("hello");
+        expect(() => normalizeNullableText("x".repeat(FIELD_LIMITS.content + 1), FIELD_LIMITS.content, "通知内容")).toThrow();
+        expect(normalizePositiveInteger(undefined, 1, 50)).toBe(1);
+        expect(normalizePositiveInteger(-10, 1, 50)).toBe(1);
+        expect(normalizePositiveInteger(2.8, 1, 50)).toBe(2);
+        expect(normalizePositiveInteger(500, 1, 50)).toBe(50);
     });
 
     it("normalizes wechat template config", () => {

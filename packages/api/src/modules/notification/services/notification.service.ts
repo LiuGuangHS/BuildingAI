@@ -32,6 +32,7 @@ import {
     normalizeNotificationData,
     normalizeNotificationLinkTemplate,
     normalizeNotificationLinkUrl,
+    normalizePositiveInteger,
     normalizeSceneChannels,
     normalizeStringField,
     normalizeWechatTemplateConfig,
@@ -232,7 +233,11 @@ export class NotificationService implements ExtensionNotificationPort {
             FIELD_LIMITS.title,
             "通知标题",
         ) || `${siteName} 通知`;
-        const content = dto.content || renderTemplate(scene?.contentTemplate, data) || null;
+        const content = normalizeNullableText(
+            dto.content || renderTemplate(scene?.contentTemplate, data),
+            FIELD_LIMITS.content,
+            "通知内容",
+        );
         const linkUrl = normalizeNotificationLinkUrl(
             dto.linkUrl || renderTemplate(scene?.linkUrlTemplate, data),
         );
@@ -367,8 +372,8 @@ export class NotificationService implements ExtensionNotificationPort {
     }
 
     async list(userId: string, query: QueryNotificationDto) {
-        const page = Number(query.page || 1);
-        const pageSize = Math.min(Number(query.pageSize || 15), 50);
+        const page = normalizePositiveInteger(query.page, 1, Number.MAX_SAFE_INTEGER);
+        const pageSize = normalizePositiveInteger(query.pageSize, 15, 50);
         const where: Record<string, unknown> = { userId };
 
         if (query.type) {
@@ -524,8 +529,8 @@ export class NotificationService implements ExtensionNotificationPort {
     }
 
     async listDeliveries(query: QueryNotificationDeliveryDto) {
-        const page = Number(query.page || 1);
-        const pageSize = Math.min(Number(query.pageSize || 15), 100);
+        const page = normalizePositiveInteger(query.page, 1, Number.MAX_SAFE_INTEGER);
+        const pageSize = normalizePositiveInteger(query.pageSize, 15, 100);
         const where: FindOptionsWhere<NotificationDelivery> = {};
 
         if (query.sceneCode) where.sceneCode = ILike(`%${query.sceneCode}%`);
