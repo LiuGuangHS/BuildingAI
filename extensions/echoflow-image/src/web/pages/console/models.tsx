@@ -4,7 +4,7 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
+import { SecretReferenceSelect, type SecretReferenceOption } from "@buildingai/ui/components/secret-reference-select";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
@@ -42,12 +42,11 @@ const capabilityLabels: Record<string, string> = {
     inputFidelity: "输入保真度",
 };
 
-const EMPTY_SECRET_VALUE = "__empty_secret__";
-
 export default function ConsoleModelsPage() {
     useDocumentHead({ title: "绘画模型配置" });
     const { data, isLoading, refetch } = useConsoleModelConfigsQuery({ page: 1, pageSize: 100 });
     const { data: billingData, refetch: refetchBilling } = useConsoleBillingRulesQuery({ page: 1, pageSize: 200 });
+    const { data: secretsData, isLoading: secretsLoading } = useSecretsListQuery({ page: 1, pageSize: 100, status: 1 });
     const updateMutation = useUpdateModelConfigMutation();
     const createBillingMutation = useCreateBillingRuleMutation();
     const updateBillingMutation = useUpdateBillingRuleMutation();
@@ -56,6 +55,7 @@ export default function ConsoleModelsPage() {
         onError: (error) => toast.error(error.message || "测试失败"),
     });
     const items = data?.items ?? [];
+    const secretOptions = secretsData?.items ?? [];
     const [selectedId, setSelectedId] = useState<string>();
     const selected = useMemo(
         () => items.find((item) => item.id === selectedId) ?? items[0],
@@ -157,6 +157,8 @@ export default function ConsoleModelsPage() {
                     billingRule={selectedBillingRule}
                     saving={updateMutation.isPending}
                     testing={testEndpointMutation.isPending}
+                    secretsLoading={secretsLoading}
+                    secretOptions={secretOptions}
                     onSave={handleSave}
                     onTestEndpoint={(id, endpoint) => testEndpointMutation.mutateAsync({ id, data: serializeEndpoint(endpoint, 0) })}
                 />
@@ -170,6 +172,8 @@ function ModelOperationsEditor({
     billingRule,
     saving,
     testing,
+    secretsLoading,
+    secretOptions,
     onSave,
     onTestEndpoint,
 }: {
@@ -177,6 +181,8 @@ function ModelOperationsEditor({
     billingRule?: ImageBillingRule;
     saving: boolean;
     testing: boolean;
+    secretsLoading: boolean;
+    secretOptions: SecretReferenceOption[];
     onSave: (id: string, data: SaveModelConfigParams, billing?: SaveBillingRuleParams) => void;
     onTestEndpoint: (id: string, data: ImageModelEndpoint) => Promise<unknown>;
 }) {
@@ -306,6 +312,8 @@ function ModelOperationsEditor({
                             value={endpoint}
                             canRemove={endpoints.length > 1}
                             testing={testing}
+                            secretsLoading={secretsLoading}
+                            secretOptions={secretOptions}
                             onChange={(next) => setEndpoints((items) => items.map((item, itemIndex) => itemIndex === index ? next : item))}
                             onRemove={() => setEndpoints((items) => items.filter((_, itemIndex) => itemIndex !== index))}
                             onTest={() => onTestEndpoint(value.id, endpoint)}
@@ -370,6 +378,8 @@ function EndpointEditor({
     value,
     canRemove,
     testing,
+    secretsLoading,
+    secretOptions,
     onChange,
     onRemove,
     onTest,
@@ -377,13 +387,13 @@ function EndpointEditor({
     value: ImageModelEndpoint;
     canRemove: boolean;
     testing: boolean;
+    secretsLoading: boolean;
+    secretOptions: SecretReferenceOption[];
     onChange: (value: ImageModelEndpoint) => void;
     onRemove: () => void;
     onTest: () => void;
 }) {
     const patch = (data: Partial<ImageModelEndpoint>) => onChange({ ...value, ...data });
-    const { data: secretsData, isLoading: secretsLoading } = useSecretsListQuery({ page: 1, pageSize: 100, status: 1 });
-    const secretOptions = secretsData?.items ?? [];
     return (
         <div className="space-y-3 rounded-md border p-3">
             <div className="flex items-center justify-between gap-2">
@@ -403,7 +413,7 @@ function EndpointEditor({
                 <Field label="名称" value={value.name} onChange={(next) => patch({ name: next })} />
                 <Field label="优先级" type="number" value={String(value.priority ?? 100)} onChange={(next) => patch({ priority: Number(next) })} />
             </div>
-            <SecretSelect
+            <SecretReferenceSelect
                 value={value.secretId ?? ""}
                 secretName={value.secretName}
                 loading={secretsLoading}
@@ -422,54 +432,6 @@ function EndpointEditor({
                 <Zap className="size-4" />
                 测试接入点
             </Button>
-        </div>
-    );
-}
-
-function SecretSelect({
-    value,
-    secretName,
-    loading,
-    options,
-    onChange,
-}: {
-    value: string;
-    secretName?: string;
-    loading: boolean;
-    options: Array<{ id: string; name: string; remark?: string }>;
-    onChange: (secretId: string | undefined, secretName: string | undefined) => void;
-}) {
-    const selectedExists = options.some((item) => item.id === value);
-    return (
-        <div className="space-y-2">
-            <Label>主站密钥</Label>
-            <Select
-                value={value || EMPTY_SECRET_VALUE}
-                onValueChange={(next) => {
-                    if (next === EMPTY_SECRET_VALUE) {
-                        onChange(undefined, undefined);
-                        return;
-                    }
-                    const selected = options.find((item) => item.id === next);
-                    onChange(next, selected?.name ?? secretName ?? next);
-                }}
-            >
-                <SelectTrigger className="w-full">
-                    <SelectValue placeholder={loading ? "加载主站密钥..." : "选择主站密钥"} />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value={EMPTY_SECRET_VALUE}>未选择主站密钥</SelectItem>
-                    {options.map((secret) => (
-                        <SelectItem key={secret.id} value={secret.id}>
-                            {secret.name}
-                        </SelectItem>
-                    ))}
-                    {value && !selectedExists ? (
-                        <SelectItem value={value}>{secretName || value}</SelectItem>
-                    ) : null}
-                </SelectContent>
-            </Select>
-            <p className="text-muted-foreground text-xs">从主站密钥管理选择；插件只保存 Secret 引用，不保存密钥值。</p>
         </div>
     );
 }

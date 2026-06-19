@@ -4,6 +4,7 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
+import { SecretReferenceSelect } from "@buildingai/ui/components/secret-reference-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { useSecretsListQuery } from "@buildingai/services/console";
@@ -19,8 +20,6 @@ import {
     usePromptOptimizerModelsQuery,
     useUpdateProviderConfigMutation,
 } from "../../services";
-
-const EMPTY_SECRET_VALUE = "__empty_secret__";
 
 export default function ProviderConfigPage() {
     useDocumentHead({ title: "AI视频工作台 LLM 与回调" });
@@ -130,36 +129,21 @@ export default function ProviderConfigPage() {
                     <form className="space-y-5" onSubmit={handleSubmit}>
                         <div className="grid gap-4 md:grid-cols-[1fr_220px]">
                             <div className="space-y-2">
-                                <Label htmlFor="happyhorse-webhook-secret-id">Webhook Secret</Label>
-                                <Select
-                                    value={webhookSecretId || EMPTY_SECRET_VALUE}
-                                    onValueChange={(value) => {
-                                        if (value === EMPTY_SECRET_VALUE) {
-                                            setWebhookSecretId("");
-                                            setWebhookSecretName("");
-                                            return;
-                                        }
-                                        const selected = secretOptions.find((item) => item.id === value);
-                                        setWebhookSecretId(value);
-                                        setWebhookSecretName(selected?.name ?? value);
+                                <SecretReferenceSelect
+                                    id="happyhorse-webhook-secret-id"
+                                    label="Webhook Secret"
+                                    value={webhookSecretId}
+                                    secretName={webhookSecretName}
+                                    loading={secretsLoading}
+                                    options={secretOptions}
+                                    emptyLabel="未选择 Webhook Secret"
+                                    helperText=""
+                                    onChange={(secretId, secretName) => {
+                                        setWebhookSecretId(secretId ?? "");
+                                        setWebhookSecretName(secretName ?? "");
                                         setClearWebhookSecret(false);
                                     }}
-                                >
-                                    <SelectTrigger id="happyhorse-webhook-secret-id">
-                                        <SelectValue placeholder={secretsLoading ? "加载主站密钥..." : "选择主站密钥"} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value={EMPTY_SECRET_VALUE}>未选择 Webhook Secret</SelectItem>
-                                        {secretOptions.map((secret) => (
-                                            <SelectItem key={secret.id} value={secret.id}>
-                                                {secret.name}
-                                            </SelectItem>
-                                        ))}
-                                        {webhookSecretId && !secretOptions.some((item) => item.id === webhookSecretId) ? (
-                                            <SelectItem value={webhookSecretId}>{webhookSecretName || webhookSecretId}</SelectItem>
-                                        ) : null}
-                                    </SelectContent>
-                                </Select>
+                                />
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="happyhorse-webhook-secret-name">显示名称</Label>
