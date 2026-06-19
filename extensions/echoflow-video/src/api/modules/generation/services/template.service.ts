@@ -3,11 +3,18 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Like, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { buildWhere } from "@buildingai/utils";
 import { Injectable } from "@nestjs/common";
 
 import { VideoPromptTemplate } from "../../../db/entities/video-prompt-template.entity";
 import { CreateVideoTemplateDto, QueryVideoTemplateDto, UpdateVideoTemplateDto } from "../dto";
+
+function buildTemplateWhere(
+    value: FindOptionsWhere<VideoPromptTemplate>,
+): FindOptionsWhere<VideoPromptTemplate> {
+    return Object.fromEntries(
+        Object.entries(value).filter(([, item]) => item !== undefined),
+    ) as FindOptionsWhere<VideoPromptTemplate>;
+}
 
 @Injectable()
 export class TemplateService extends BaseService<VideoPromptTemplate> {
@@ -19,7 +26,7 @@ export class TemplateService extends BaseService<VideoPromptTemplate> {
     }
 
     async list(query: QueryVideoTemplateDto, webOnly = false) {
-        const where = buildWhere<VideoPromptTemplate>({
+        const where = buildTemplateWhere({
             title: query.keyword ? Like(`%${query.keyword}%`) : undefined,
             category: query.category,
             modelConfigId: query.modelConfigId,
