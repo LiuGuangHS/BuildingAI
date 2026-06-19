@@ -18,6 +18,7 @@ export type SaveModelEndpointParams = ImageModelEndpoint;
 
 export interface ImageModelConfig {
     id: string;
+    aiModelId?: string | null;
     provider: string;
     model: string;
     externalModelId: string;

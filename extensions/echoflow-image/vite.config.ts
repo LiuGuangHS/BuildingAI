@@ -36,6 +36,20 @@ export default defineExtensionViteConfig(packageJson, {
                 ),
             },
             {
+                find: /^tldraw$/,
+                replacement: resolve(
+                    __dirname,
+                    "../../node_modules/.pnpm/node_modules/tldraw/dist-esm/index.mjs",
+                ),
+            },
+            {
+                find: /^tldraw\/tldraw.css$/,
+                replacement: resolve(
+                    __dirname,
+                    "../../node_modules/.pnpm/node_modules/tldraw/tldraw.css",
+                ),
+            },
+            {
                 find: /^zustand\/(.+)$/,
                 replacement: resolve(
                     __dirname,

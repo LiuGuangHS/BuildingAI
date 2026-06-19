@@ -43,6 +43,11 @@ import { ModelConfigService, type ResolvedImageModelConfig } from "../../config/
 import { PolicyService } from "../../policy/services/policy.service";
 import { CreateGenerationDto, PromptEnhanceDto, QueryGenerationDto } from "../dto";
 import { IMAGE_GENERATION_JOB, IMAGE_GENERATION_QUEUE } from "./generation-queue.constants";
+import {
+    IMAGE_PENDING_RESUME_AFTER_MS,
+    IMAGE_PROCESSING_TIMEOUT_MS,
+    getResumedImageProgress,
+} from "./image-generation-recovery-rules";
 import { OpenAIImageClient } from "./openai-image-client";
 
 const EXTENSION_ID = "echoflow-image";
@@ -237,8 +242,8 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
     async recoverJobs() {
         const now = Date.now();
-        const staleProcessingDate = new Date(now - 30 * 60 * 1000);
-        const resumableDate = new Date(now - 2 * 60 * 1000);
+        const staleProcessingDate = new Date(now - IMAGE_PROCESSING_TIMEOUT_MS);
+        const resumableDate = new Date(now - IMAGE_PENDING_RESUME_AFTER_MS);
 
         const staleProcessing = await this.generationRepository.find({
             where: {
@@ -263,7 +268,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         let resumed = 0;
         for (const item of resumable) {
             item.status = ImageGenerationStatus.PENDING;
-            item.progress = Math.min(item.progress ?? 0, 10);
+            item.progress = getResumedImageProgress(item.progress);
             await this.generationRepository.save(item);
             await this.enqueueGenerationJob(item.id);
             resumed += 1;

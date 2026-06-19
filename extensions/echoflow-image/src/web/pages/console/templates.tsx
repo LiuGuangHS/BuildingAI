@@ -1,8 +1,20 @@
 import { useDocumentHead } from "@buildingai/hooks";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@buildingai/ui/components/ui/alert-dialog";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
+import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -55,11 +67,30 @@ export default function ConsoleTemplatesPage() {
                                         setEditing(item);
                                         setEditorNonce((value) => value + 1);
                                     }}>编辑</Button>
-                                    <Button variant="destructive" size="sm" onClick={async () => {
-                                        await deleteMutation.mutateAsync(item.id);
-                                        toast.success("已删除");
-                                        refetch();
-                                    }}><Trash2 className="size-4" /></Button>
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="destructive" size="sm"><Trash2 className="size-4" /></Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>删除模板</AlertDialogTitle>
+                                                <AlertDialogDescription>确认删除模板“{item.title}”？</AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                                <AlertDialogAction
+                                                    variant="destructive"
+                                                    onClick={async () => {
+                                                        await deleteMutation.mutateAsync(item.id);
+                                                        toast.success("已删除");
+                                                        refetch();
+                                                    }}
+                                                >
+                                                    确认删除
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
                                 </div>
                             </div>
                         ))}
@@ -95,10 +126,10 @@ function TemplateEditor({ value, onSave, onCancel }: { value?: ImagePromptTempla
                 <div className="space-y-2"><Label>Prompt</Label><Textarea className="min-h-28" value={prompt} onChange={(e) => setPrompt(e.target.value)} /></div>
                 <div className="space-y-2"><Label>反向提示词</Label><Textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} /></div>
                 <div className="space-y-2"><Label>默认参数 JSON</Label><Textarea className="min-h-28 font-mono text-xs" value={defaultParams} onChange={(e) => setDefaultParams(e.target.value)} /></div>
-                <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                    <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-                    启用
-                </label>
+                <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                    <span>启用</span>
+                    <Switch checked={enabled} onCheckedChange={setEnabled} />
+                </div>
                 <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={onCancel}>取消</Button>
                     <Button onClick={() => {

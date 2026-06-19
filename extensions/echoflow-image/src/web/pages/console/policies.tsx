@@ -3,6 +3,7 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
+import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -54,14 +55,13 @@ export default function ConsolePoliciesPage() {
                     <Field label="参考图大小 MB" value={form.maxReferenceImageSizeMb} onChange={(v) => setNumber("maxReferenceImageSizeMb", v)} />
                     <Field label="用户并发任务" value={form.maxConcurrentJobsPerUser} onChange={(v) => setNumber("maxConcurrentJobsPerUser", v)} />
                     <Field label="每日任务数" value={form.dailyJobsPerUser} onChange={(v) => setNumber("dailyJobsPerUser", v)} />
-                    <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                        <input
-                            type="checkbox"
+                    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                        <span>允许外部参考图 URL</span>
+                        <Switch
                             checked={form.allowPublicUrlReference === true}
-                            onChange={(event) => setForm((prev) => ({ ...prev, allowPublicUrlReference: event.target.checked }))}
+                            onCheckedChange={(checked) => setForm((prev) => ({ ...prev, allowPublicUrlReference: checked }))}
                         />
-                        允许外部参考图 URL
-                    </label>
+                    </div>
                     <div className="sm:col-span-2 flex justify-end">
                         <Button onClick={async () => {
                             await mutation.mutateAsync(form);

@@ -27,12 +27,13 @@
         "dev:api": "cross-env NODE_ENV=development tsup --watch src/api",
         "dev": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
         "build:api": "cross-env NODE_ENV=production tsup",
-        "build:web": "vite build",
+        "build:web": "node scripts/build-web.mjs",
         "build:publish": "pnpm build:clean && pnpm run build:web && pnpm run build:api",
         "format": "prettier --write src",
         "lint": "eslint src --quiet",
         "lint:fix": "eslint src --fix",
         "check-types": "vue-tsc --noEmit",
+        "test": "node --experimental-strip-types --test tests/*.test.mjs",
         "i18n:translate": "node ../../scripts/translate-i18n.mjs"
     },
     "dependencies": {
@@ -56,11 +57,13 @@
         "@nestjs/bullmq": "catalog:api",
         "@tanstack/react-query": "^5.90.21",
         "bullmq": "catalog:api",
+        "babel-plugin-react-compiler": "^1.0.0",
         "lucide-react": "catalog:web",
         "react": "catalog:web",
         "react-dom": "catalog:web",
         "react-router-dom": "catalog:web",
         "sonner": "^2.0.7",
+        "tldraw": "^5.1.1",
         "vite-tsconfig-paths": "catalog:web"
     },
     "devDependencies": {

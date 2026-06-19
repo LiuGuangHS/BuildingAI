@@ -5,7 +5,7 @@ import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
-import { ChevronDown, Eraser, Lightbulb, Plus, Sparkles, Trash2, WandSparkles, Zap } from "lucide-react";
+import { ChevronDown, Lightbulb, Plus, Sparkles, Trash2, WandSparkles, Zap } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
@@ -16,7 +16,7 @@ import {
     type ImageSourceRecord,
 } from "../services/types/generation";
 import type { ImagePromptTemplate } from "../services/types/template";
-import { MaskCanvas } from "./mask-canvas";
+import { createRequestKey } from "../lib/request-key";
 import { ReferenceImageUpload } from "./reference-image-upload";
 
 interface GenerationFormProps {
@@ -37,11 +37,6 @@ const promptTemplates = [
     { label: "动漫角色", prompt: "精美的动漫风格角色插画，柔和色彩，精致线条，日系动画风格" },
     { label: "产品渲染", prompt: "专业产品摄影，极简白色背景，柔和工作室灯光，商业级质感" },
 ];
-
-function generateRequestKey(): string {
-    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-}
 
 function normalizeOptionalString(value?: string) {
     const trimmed = value?.trim();
@@ -64,8 +59,6 @@ export function GenerationForm({
     const [referenceImageUrl, setReferenceImageUrl] = useState<string | undefined>();
     const [referenceImageFileId, setReferenceImageFileId] = useState<string | undefined>();
     const [additionalReferenceImages, setAdditionalReferenceImages] = useState<ImageSourceRecord[]>([]);
-    const [maskImageUrl, setMaskImageUrl] = useState<string | undefined>();
-    const [maskImageFileId, setMaskImageFileId] = useState<string | undefined>();
     const [modelId, setModelId] = useState("");
     const [size, setSize] = useState("1024x1024");
     const [n, setN] = useState("1");
@@ -81,8 +74,6 @@ export function GenerationForm({
         setReferenceImageUrl(initialValues.referenceImageUrl);
         setReferenceImageFileId(initialValues.referenceImageFileId);
         setAdditionalReferenceImages((initialValues.sourceImages ?? []).slice(1));
-        setMaskImageUrl(initialValues.maskImageUrl);
-        setMaskImageFileId(initialValues.maskImageFileId);
         setModelId(initialValues.modelId ?? "");
         setSize(initialValues.size ?? "1024x1024");
         setN(String(initialValues.n ?? 1));
@@ -106,7 +97,6 @@ export function GenerationForm({
 
     const canUseImageToImage = selectedModel?.capabilities?.imageToImage === true;
     const canUseMultiReference = selectedModel?.capabilities?.multiReference === true;
-    const canUseMask = selectedModel?.capabilities?.mask === true;
     const canUseNegativePrompt = selectedModel?.capabilities?.negativePrompt !== false;
     const sizeOptions = selectedModel?.allowedParams?.sizes?.length
         ? selectedModel.allowedParams.sizes
@@ -127,7 +117,6 @@ export function GenerationForm({
     const promptColor =
         promptRatio > 0.9 ? "text-red-500" : promptRatio > 0.5 ? "text-amber-500" : "text-muted-foreground";
     const hasReferenceImage = Boolean(referenceImageUrl || referenceImageFileId);
-    const hasMaskImage = Boolean(maskImageUrl || maskImageFileId);
     const sourceImages = useMemo(
         () => [
             ...(hasReferenceImage ? [{ url: referenceImageUrl, fileId: referenceImageFileId }] : []),
@@ -150,8 +139,6 @@ export function GenerationForm({
     );
     const primarySourceImage = usableSourceImages[0];
     const effectiveHasReferenceImage = usableSourceImages.length > 0;
-    const effectiveMaskImageUrl = canUseMask && effectiveHasReferenceImage ? normalizeOptionalString(maskImageUrl) : undefined;
-    const effectiveMaskImageFileId = canUseMask && effectiveHasReferenceImage ? normalizeOptionalString(maskImageFileId) : undefined;
     const effectiveMode = effectiveHasReferenceImage ? ImageGenerationMode.IMAGE_TO_IMAGE : ImageGenerationMode.TEXT_TO_IMAGE;
 
     const buildGenerationPayload = (includeRequestKey = false, includeClientMetadata = false): CreateGenerationParams => ({
@@ -160,8 +147,6 @@ export function GenerationForm({
         referenceImageUrl: primarySourceImage?.url,
         referenceImageFileId: primarySourceImage?.fileId,
         sourceImages: usableSourceImages,
-        maskImageUrl: effectiveMaskImageUrl,
-        maskImageFileId: effectiveMaskImageFileId,
         modelId,
         size,
         n: imageCount,
@@ -169,7 +154,7 @@ export function GenerationForm({
         style,
         responseFormat,
         mode: effectiveMode,
-        requestKey: includeRequestKey ? generateRequestKey() : undefined,
+        requestKey: includeRequestKey ? createRequestKey() : undefined,
         source: includeClientMetadata ? selectedModel?.source : undefined,
         pluginConfigId: includeClientMetadata ? selectedModel?.pluginConfigId : undefined,
     });
@@ -211,11 +196,7 @@ export function GenerationForm({
         referenceImageFileId,
         sourceImages,
         usableSourceImages,
-        maskImageUrl,
-        maskImageFileId,
         effectiveHasReferenceImage,
-        effectiveMaskImageUrl,
-        effectiveMaskImageFileId,
         effectiveMode,
         canUseNegativePrompt,
         selectedModel?.source,
@@ -227,17 +208,8 @@ export function GenerationForm({
             setReferenceImageUrl(undefined);
             setReferenceImageFileId(undefined);
             setAdditionalReferenceImages([]);
-            setMaskImageUrl(undefined);
-            setMaskImageFileId(undefined);
         }
     }, [selectedModel, canUseImageToImage, hasReferenceImage]);
-
-    useEffect(() => {
-        if (selectedModel && !canUseMask && hasMaskImage) {
-            setMaskImageUrl(undefined);
-            setMaskImageFileId(undefined);
-        }
-    }, [selectedModel, canUseMask, hasMaskImage]);
 
     const clearAll = () => {
         setPrompt("");
@@ -245,11 +217,9 @@ export function GenerationForm({
         setReferenceImageUrl(undefined);
         setReferenceImageFileId(undefined);
         setAdditionalReferenceImages([]);
-        setMaskImageUrl(undefined);
-        setMaskImageFileId(undefined);
     };
 
-    const hasContent = !!(prompt || negativePrompt || hasReferenceImage || hasMaskImage);
+    const hasContent = !!(prompt || negativePrompt || hasReferenceImage);
 
     return (
         <Card className="gap-0 overflow-hidden rounded-md py-0 shadow-sm">
@@ -274,7 +244,7 @@ export function GenerationForm({
                                 onClick={clearAll}
                                 className="text-muted-foreground hover:text-destructive h-8"
                             >
-                                <Eraser className="size-3.5" />
+                                <Trash2 className="size-3.5" />
                                 <span className="ml-1.5 hidden sm:inline">清空</span>
                             </Button>
                         )}
@@ -306,31 +276,33 @@ export function GenerationForm({
                     <div className="mt-3 flex flex-wrap items-center gap-1.5">
                         <Lightbulb className="text-amber-500 size-3.5 shrink-0" />
                         <span className="text-muted-foreground mr-1 text-xs">灵感：</span>
-                        <button
+                        <Button
                             type="button"
                             disabled={loading || !prompt.trim()}
                             onClick={handleEnhancePrompt}
+                            variant="outline"
                             className={cn(
-                                "rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary transition-all",
+                                "h-auto rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary transition-all",
                                 "hover:bg-primary/10 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50",
                             )}
                         >
                             润色当前提示词
-                        </button>
+                        </Button>
                         {[...templates.map((template) => ({ label: template.title, prompt: template.prompt })), ...promptTemplates].slice(0, 6).map((template) => (
-                            <button
+                            <Button
                                 key={template.label}
                                 type="button"
+                                variant="outline"
                                 disabled={loading}
                                 onClick={() => setPrompt(template.prompt)}
                                 className={cn(
-                                    "rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs font-medium transition-all",
+                                    "h-auto rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs font-medium transition-all",
                                     "hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
                                     "active:scale-95",
                                 )}
                             >
                                 {template.label}
-                            </button>
+                            </Button>
                         ))}
                     </div>
 
@@ -388,10 +360,6 @@ export function GenerationForm({
                                     onChange={(url, fileId) => {
                                         setReferenceImageUrl(url);
                                         setReferenceImageFileId(fileId);
-                                        if (!url && !fileId) {
-                                            setMaskImageUrl(undefined);
-                                            setMaskImageFileId(undefined);
-                                        }
                                     }}
                                 />
                                 {canUseMultiReference && (
@@ -438,44 +406,18 @@ export function GenerationForm({
                                         </Button>
                                     </div>
                                 )}
-                                {canUseMask && (
-                                    <ReferenceImageUpload
-                                        value={maskImageUrl}
-                                        label="上传遮罩图"
-                                        description="Echoflow Image mask image"
-                                        disabled={loading || !hasReferenceImage}
-                                        helperText={hasReferenceImage ? "黑白或透明遮罩用于局部重绘。" : "先上传参考图后可添加遮罩。"}
-                                        onChange={(url, fileId) => {
-                                            setMaskImageUrl(url);
-                                            setMaskImageFileId(fileId);
-                                        }}
-                                    />
-                                )}
                             </div>
                         )}
                     </div>
 
-                    {canUseMask && (
-                        <div className="mt-3">
-                            <MaskCanvas
-                                referenceImageUrl={referenceImageUrl}
-                                disabled={loading || !hasReferenceImage}
-                                onMaskGenerated={(url, fileId) => {
-                                    setMaskImageUrl(url);
-                                    setMaskImageFileId(fileId);
-                                }}
-                            />
-                        </div>
-                    )}
-
                     {/* ── Collapsible advanced settings ── */}
                     <div className="mt-3 rounded-md border border-border/60">
-                        <button
+                        <Button
                             type="button"
                             disabled={loading}
                             onClick={() => setShowAdvanced(!showAdvanced)}
                             className={cn(
-                                "flex w-full items-center justify-between px-4 py-2.5 text-sm font-medium transition-colors",
+                                "flex h-auto w-full items-center justify-between px-4 py-2.5 text-sm font-medium transition-colors",
                                 "hover:bg-muted/30",
                             )}
                         >
@@ -491,7 +433,7 @@ export function GenerationForm({
                             <span className="text-muted-foreground text-xs font-normal">
                                 {size} · {quality === "hd" ? "HD" : "标准"} · {style === "vivid" ? "生动" : "自然"}
                             </span>
-                        </button>
+                        </Button>
                         <div
                             className={cn(
                                 "grid transition-all duration-200 ease-in-out",

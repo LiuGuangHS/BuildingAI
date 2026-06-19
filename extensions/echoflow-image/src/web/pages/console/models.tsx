@@ -4,9 +4,11 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
+import { useSecretsListQuery } from "@buildingai/services/console";
 import { CheckCircle2, KeyRound, Plus, Save, SlidersHorizontal, Trash2, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -39,6 +41,8 @@ const capabilityLabels: Record<string, string> = {
     moderation: "安全等级",
     inputFidelity: "输入保真度",
 };
+
+const EMPTY_SECRET_VALUE = "__empty_secret__";
 
 export default function ConsoleModelsPage() {
     useDocumentHead({ title: "绘画模型配置" });
@@ -107,12 +111,13 @@ export default function ConsoleModelsPage() {
                         {items.map((item) => {
                             const ready = (item.endpoints ?? []).some((endpoint) => endpoint.enabled && endpoint.secretId);
                             return (
-                                <button
+                                <Button
                                     key={item.id}
                                     type="button"
+                                    variant="outline"
                                     onClick={() => setSelectedId(item.id)}
                                     className={cn(
-                                        "flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors",
+                                        "flex h-auto w-full items-center justify-between gap-3 rounded-lg p-3 text-left transition-colors",
                                         selected?.id === item.id ? "border-primary bg-primary/5" : "hover:border-primary/40 hover:bg-muted/40",
                                     )}
                                 >
@@ -136,7 +141,7 @@ export default function ConsoleModelsPage() {
                                         </div>
                                     </div>
                                     {selected?.id === item.id ? <CheckCircle2 className="text-primary size-5 shrink-0" /> : null}
-                                </button>
+                                </Button>
                             );
                         })}
                         {!isLoading && items.length === 0 ? (
@@ -377,6 +382,8 @@ function EndpointEditor({
     onTest: () => void;
 }) {
     const patch = (data: Partial<ImageModelEndpoint>) => onChange({ ...value, ...data });
+    const { data: secretsData, isLoading: secretsLoading } = useSecretsListQuery({ page: 1, pageSize: 100, status: 1 });
+    const secretOptions = secretsData?.items ?? [];
     return (
         <div className="space-y-3 rounded-md border p-3">
             <div className="flex items-center justify-between gap-2">
@@ -396,7 +403,13 @@ function EndpointEditor({
                 <Field label="名称" value={value.name} onChange={(next) => patch({ name: next })} />
                 <Field label="优先级" type="number" value={String(value.priority ?? 100)} onChange={(next) => patch({ priority: Number(next) })} />
             </div>
-            <Field label="主站密钥 ID" value={value.secretId ?? ""} placeholder="在主站密钥管理中复制 Secret ID" onChange={(next) => patch({ secretId: next })} />
+            <SecretSelect
+                value={value.secretId ?? ""}
+                secretName={value.secretName}
+                loading={secretsLoading}
+                options={secretOptions}
+                onChange={(secretId, secretName) => patch({ secretId, secretName })}
+            />
             <Field label="密钥名称备注" value={value.secretName ?? ""} placeholder="可选，仅用于页面识别" onChange={(next) => patch({ secretName: next })} />
             <Field label="Base URL 覆盖" value={value.baseUrlOverride ?? ""} placeholder="可选；留空读取主站密钥中的 baseURL/baseUrl/base_url" onChange={(next) => patch({ baseUrlOverride: next })} />
             <div className="grid gap-3 md:grid-cols-4">
@@ -409,6 +422,54 @@ function EndpointEditor({
                 <Zap className="size-4" />
                 测试接入点
             </Button>
+        </div>
+    );
+}
+
+function SecretSelect({
+    value,
+    secretName,
+    loading,
+    options,
+    onChange,
+}: {
+    value: string;
+    secretName?: string;
+    loading: boolean;
+    options: Array<{ id: string; name: string; remark?: string }>;
+    onChange: (secretId: string | undefined, secretName: string | undefined) => void;
+}) {
+    const selectedExists = options.some((item) => item.id === value);
+    return (
+        <div className="space-y-2">
+            <Label>主站密钥</Label>
+            <Select
+                value={value || EMPTY_SECRET_VALUE}
+                onValueChange={(next) => {
+                    if (next === EMPTY_SECRET_VALUE) {
+                        onChange(undefined, undefined);
+                        return;
+                    }
+                    const selected = options.find((item) => item.id === next);
+                    onChange(next, selected?.name ?? secretName ?? next);
+                }}
+            >
+                <SelectTrigger className="w-full">
+                    <SelectValue placeholder={loading ? "加载主站密钥..." : "选择主站密钥"} />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value={EMPTY_SECRET_VALUE}>未选择主站密钥</SelectItem>
+                    {options.map((secret) => (
+                        <SelectItem key={secret.id} value={secret.id}>
+                            {secret.name}
+                        </SelectItem>
+                    ))}
+                    {value && !selectedExists ? (
+                        <SelectItem value={value}>{secretName || value}</SelectItem>
+                    ) : null}
+                </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">从主站密钥管理选择；插件只保存 Secret 引用，不保存密钥值。</p>
         </div>
     );
 }

@@ -56,8 +56,8 @@ export default function EchoflowImageConsolePage() {
                 </Card>
                 <Card>
                     <CardHeader>
-                        <CardTitle>下一步配置</CardTitle>
-                        <CardDescription>建议按顺序完成首期配置闭环。</CardDescription>
+                        <CardTitle>配置清单</CardTitle>
+                        <CardDescription>模型接入、风控、模板和任务审计集中维护。</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
                         <QuickAction label="模型配置" onClick={() => navigate("/console/models")} />

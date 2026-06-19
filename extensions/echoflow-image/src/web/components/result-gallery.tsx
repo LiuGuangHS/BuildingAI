@@ -2,7 +2,7 @@ import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { cn } from "@buildingai/ui/lib/utils";
-import { Copy, Download, ExternalLink, ImageIcon, Images, Sparkles } from "lucide-react";
+import { Copy, Download, ExternalLink, ImageIcon, Images, LayoutPanelTop, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import type { GeneratedImageRecord, ImageGeneration } from "../services/types/generation";
@@ -14,9 +14,10 @@ interface ResultGalleryProps {
     generation?: ImageGeneration;
     images?: GeneratedImageRecord[];
     isLoading?: boolean;
+    onOpenCanvas?: () => void;
 }
 
-export function ResultGallery({ generation, images, isLoading }: ResultGalleryProps) {
+export function ResultGallery({ generation, images, isLoading, onOpenCanvas }: ResultGalleryProps) {
     const resolvedImages = images ?? generation?.resultImages ?? [];
 
     const copyText = async (text?: string) => {
@@ -63,6 +64,12 @@ export function ResultGallery({ generation, images, isLoading }: ResultGalleryPr
                         </CardDescription>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
+                        {resolvedImages.length > 0 && onOpenCanvas && (
+                            <Button variant="default" size="sm" className="hidden sm:flex" onClick={onOpenCanvas}>
+                                <LayoutPanelTop className="size-3.5" />
+                                整理到画布
+                            </Button>
+                        )}
                         {generation?.prompt && (
                             <Button variant="outline" size="sm" className="hidden sm:flex" onClick={() => copyText(generation.prompt)}>
                                 <Copy className="size-3.5" />
@@ -131,72 +138,89 @@ export function ResultGallery({ generation, images, isLoading }: ResultGalleryPr
                         </div>
                     </div>
                 ) : (
-                    <div className={cn(
-                        "grid gap-3",
-                        resolvedImages.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2",
-                    )}>
-                        {resolvedImages.map((image, index) => {
-                            const src = resolveImageSrc(image);
-                            return (
-                                <div key={index} className="group relative overflow-hidden rounded-xl border bg-background shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
-                                    {src ? (
-                                        <>
-                                            <div className="relative aspect-square overflow-hidden">
-                                                <img
-                                                    src={src}
-                                                    alt={`生成图片 ${index + 1}`}
-                                                    className="size-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                                                    loading="lazy"
-                                                />
-                                                {/* Mobile: always-visible actions, Desktop: hover */}
-                                                <div className="absolute inset-x-0 bottom-0 flex items-end justify-end gap-1.5 bg-gradient-to-t from-black/50 via-black/20 to-transparent p-3 md:opacity-0 md:transition-opacity md:group-hover:opacity-100">
-                                                    <Button
-                                                        size="icon-sm"
-                                                        variant="secondary"
-                                                        className="size-8 bg-white/90 hover:bg-white"
-                                                        onClick={() => window.open(src, "_blank", "noopener,noreferrer")}
-                                                    >
-                                                        <ExternalLink className="size-3.5" />
-                                                    </Button>
-                                                    <Button
-                                                        size="icon-sm"
-                                                        variant="secondary"
-                                                        className="size-8 bg-white/90 hover:bg-white"
-                                                        onClick={() => downloadImage(src, `echoflow-image-${generation?.id || "result"}-${index + 1}.png`)}
-                                                    >
-                                                        <Download className="size-3.5" />
-                                                    </Button>
+                    <div className="space-y-3">
+                        {onOpenCanvas && (
+                            <Button className="w-full gap-2 sm:hidden" onClick={onOpenCanvas}>
+                                <LayoutPanelTop className="size-4" />
+                                整理到画布
+                            </Button>
+                        )}
+                        <div className={cn(
+                            "grid gap-3",
+                            resolvedImages.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2",
+                        )}>
+                            {resolvedImages.map((image, index) => {
+                                const src = resolveImageSrc(image);
+                                return (
+                                    <div key={index} className="group relative overflow-hidden rounded-xl border bg-background shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
+                                        {src ? (
+                                            <>
+                                                <div className="relative aspect-square overflow-hidden">
+                                                    <img
+                                                        src={src}
+                                                        alt={`生成图片 ${index + 1}`}
+                                                        className="size-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                                                        loading="lazy"
+                                                    />
+                                                    <div className="absolute inset-x-0 bottom-0 flex items-end justify-end gap-1.5 bg-gradient-to-t from-black/50 via-black/20 to-transparent p-3 md:opacity-0 md:transition-opacity md:group-hover:opacity-100">
+                                                        {onOpenCanvas && (
+                                                            <Button
+                                                                size="icon-sm"
+                                                                variant="secondary"
+                                                                className="size-8 bg-white/90 hover:bg-white"
+                                                                onClick={onOpenCanvas}
+                                                            >
+                                                                <LayoutPanelTop className="size-3.5" />
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            size="icon-sm"
+                                                            variant="secondary"
+                                                            className="size-8 bg-white/90 hover:bg-white"
+                                                            onClick={() => window.open(src, "_blank", "noopener,noreferrer")}
+                                                        >
+                                                            <ExternalLink className="size-3.5" />
+                                                        </Button>
+                                                        <Button
+                                                            size="icon-sm"
+                                                            variant="secondary"
+                                                            className="size-8 bg-white/90 hover:bg-white"
+                                                            onClick={() => downloadImage(src, `echoflow-image-${generation?.id || "result"}-${index + 1}.png`)}
+                                                        >
+                                                            <Download className="size-3.5" />
+                                                        </Button>
+                                                    </div>
                                                 </div>
+                                                <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {resolvedImages.length > 1 ? `结果 ${index + 1}` : "生成结果"}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="flex aspect-square items-center justify-center bg-muted">
+                                                <ImageIcon className="size-10 text-muted-foreground" />
                                             </div>
-                                            <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-                                                <span className="text-xs text-muted-foreground">
-                                                    {resolvedImages.length > 1 ? `结果 ${index + 1}` : "生成结果"}
-                                                </span>
+                                        )}
+                                        {image.revisedPrompt && (
+                                            <div className="flex items-start gap-2 border-t px-3 py-2.5">
+                                                <p className="line-clamp-2 flex-1 text-xs italic text-muted-foreground">
+                                                    &ldquo;{image.revisedPrompt}&rdquo;
+                                                </p>
+                                                <Button
+                                                    size="icon-sm"
+                                                    variant="ghost"
+                                                    className="-mr-1 shrink-0"
+                                                    onClick={() => copyText(image.revisedPrompt)}
+                                                >
+                                                    <Copy className="size-3" />
+                                                </Button>
                                             </div>
-                                        </>
-                                    ) : (
-                                        <div className="flex aspect-square items-center justify-center bg-muted">
-                                            <ImageIcon className="size-10 text-muted-foreground" />
-                                        </div>
-                                    )}
-                                    {image.revisedPrompt && (
-                                        <div className="flex items-start gap-2 border-t px-3 py-2.5">
-                                            <p className="line-clamp-2 flex-1 text-xs italic text-muted-foreground">
-                                                &ldquo;{image.revisedPrompt}&rdquo;
-                                            </p>
-                                            <Button
-                                                size="icon-sm"
-                                                variant="ghost"
-                                                className="-mr-1 shrink-0"
-                                                onClick={() => copyText(image.revisedPrompt)}
-                                            >
-                                                <Copy className="size-3" />
-                                            </Button>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
             </CardContent>
