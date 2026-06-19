@@ -6,6 +6,12 @@ import {
     normalizeWechatTemplateConfig,
 } from "./notification-normalize.util";
 
+jest.mock("@buildingai/errors", () => ({
+    HttpErrorFactory: {
+        badRequest: (message: string) => new Error(message),
+    },
+}));
+
 describe("notification normalization helpers", () => {
     it("allows relative and http notification links", () => {
         expect(normalizeNotificationLinkUrl("/extension/echoflow-video/?tab=history")).toBe(
