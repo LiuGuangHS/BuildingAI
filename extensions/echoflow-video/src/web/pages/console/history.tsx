@@ -19,7 +19,7 @@ import {
     useDeleteVideoMutation,
     useVideoListQuery,
 } from "../../services";
-import type { VideoGeneration, VideoGenerationBillingStatus, VideoGenerationStatus } from "../../services/types/generation";
+import type { ConsoleVideoGeneration, VideoGenerationBillingStatus, VideoGenerationStatus } from "../../services/types/generation";
 
 const statusLabel: Record<string, string> = {
     pending: "排队中",
@@ -253,7 +253,7 @@ export default function HistoryPage() {
                     ) : (
                         <>
                             <div className="space-y-2">
-                                {data.items.map((item: VideoGeneration) => (
+                                {data.items.map((item: ConsoleVideoGeneration) => (
                                     <div
                                         key={item.id}
                                         className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors cursor-pointer"

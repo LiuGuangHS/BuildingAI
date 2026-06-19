@@ -8,8 +8,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { consoleHttpClient } from "../base";
 import type {
+    ConsoleImageGeneration,
     CreateGenerationParams,
-    ImageGeneration,
     ImageModelOption,
     PromptEnhanceParams,
     PromptEnhanceResult,
@@ -34,32 +34,32 @@ export function useImageModelOptionsQuery(options?: QueryOptionsUtil<ImageModelO
 
 export function useGenerationListQuery(
     params?: QueryGenerationParams,
-    options?: PaginatedQueryOptionsUtil<ImageGeneration>,
+    options?: PaginatedQueryOptionsUtil<ConsoleImageGeneration>,
 ) {
     return useQuery({
         ...queryDefaults,
         queryKey: ["echoflow-image", "generations", params],
         queryFn: () =>
-            consoleHttpClient.get<PaginatedResponse<ImageGeneration>>("/generation", { params }),
+            consoleHttpClient.get<PaginatedResponse<ConsoleImageGeneration>>("/generation", { params }),
         ...options,
     });
 }
 
-export function useGenerationDetailQuery(id: string, options?: QueryOptionsUtil<ImageGeneration>) {
-    return useQuery<ImageGeneration>({
+export function useGenerationDetailQuery(id: string, options?: QueryOptionsUtil<ConsoleImageGeneration>) {
+    return useQuery<ConsoleImageGeneration>({
         ...queryDefaults,
         queryKey: ["echoflow-image", "generation", id],
-        queryFn: () => consoleHttpClient.get<ImageGeneration>(`/generation/${id}`),
+        queryFn: () => consoleHttpClient.get<ConsoleImageGeneration>(`/generation/${id}`),
         enabled: !!id && options?.enabled !== false,
         ...options,
     });
 }
 
 export function useCreateGenerationMutation(
-    options?: MutationOptionsUtil<ImageGeneration, CreateGenerationParams>,
+    options?: MutationOptionsUtil<ConsoleImageGeneration, CreateGenerationParams>,
 ) {
-    return useMutation<ImageGeneration, Error, CreateGenerationParams>({
-        mutationFn: (data) => consoleHttpClient.post<ImageGeneration>("/generation", data),
+    return useMutation<ConsoleImageGeneration, Error, CreateGenerationParams>({
+        mutationFn: (data) => consoleHttpClient.post<ConsoleImageGeneration>("/generation", data),
         ...options,
     });
 }
@@ -71,9 +71,9 @@ export function useDeleteGenerationMutation(options?: MutationOptionsUtil<Operat
     });
 }
 
-export function useRetryGenerationMutation(options?: MutationOptionsUtil<ImageGeneration, string>) {
-    return useMutation<ImageGeneration, Error, string>({
-        mutationFn: (id) => consoleHttpClient.post<ImageGeneration>(`/generation/${id}/retry`),
+export function useRetryGenerationMutation(options?: MutationOptionsUtil<ConsoleImageGeneration, string>) {
+    return useMutation<ConsoleImageGeneration, Error, string>({
+        mutationFn: (id) => consoleHttpClient.post<ConsoleImageGeneration>(`/generation/${id}/retry`),
         ...options,
     });
 }

@@ -18,7 +18,7 @@ import {
     useUpdateVideoRemarkMutation,
     useVideoDetailQuery,
 } from "../../services";
-import type { VideoGeneration } from "../../services/types/generation";
+import type { ConsoleVideoGeneration } from "../../services/types/generation";
 
 const statusLabel: Record<string, string> = {
     pending: "排队中",
@@ -68,9 +68,10 @@ function JsonPanel({ title, data }: { title: string; data?: Record<string, unkno
 
     return (
         <div className="border rounded-lg">
-            <button
+            <Button
                 type="button"
-                className="flex w-full items-center justify-between p-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+                variant="ghost"
+                className="flex h-auto w-full items-center justify-between p-3 text-sm font-medium"
                 onClick={() => setOpen(!open)}
             >
                 <span className="flex items-center gap-2">
@@ -78,7 +79,7 @@ function JsonPanel({ title, data }: { title: string; data?: Record<string, unkno
                     {title}
                     {truncated && <Badge variant="secondary" className="text-xs">已截断</Badge>}
                 </span>
-            </button>
+            </Button>
             {open && (
                 <pre className="border-t p-3 text-xs overflow-auto max-h-96 bg-muted/30 whitespace-pre-wrap break-all">
                     {formatted}

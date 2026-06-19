@@ -47,7 +47,6 @@ export interface ImageSourceRecord {
 
 export interface ImageGeneration {
     id: string;
-    userId: string;
     mode: ImageGenerationMode;
     status: ImageGenerationStatus;
     billingStatus: ImageGenerationBillingStatus;
@@ -62,7 +61,6 @@ export interface ImageGeneration {
     modelId: string;
     modelName?: string;
     provider?: string;
-    baseURL?: string;
     size: string;
     n: number;
     quality?: string;
@@ -75,6 +73,11 @@ export interface ImageGeneration {
     completedAt?: string;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface ConsoleImageGeneration extends ImageGeneration {
+    userId: string;
+    baseURL?: string;
 }
 
 export interface ImageModelOption {

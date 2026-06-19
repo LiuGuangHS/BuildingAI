@@ -8,8 +8,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { consoleHttpClient } from "../base";
 import type {
+    ConsoleVideoGeneration,
     QueryVideoParams,
-    VideoGeneration,
     VideoModelOption,
 } from "../types/generation";
 
@@ -48,20 +48,20 @@ export function useVideoModelOptionsQuery(options?: QueryOptionsUtil<VideoModelO
 
 export function useVideoListQuery(
     params?: QueryVideoParams,
-    options?: PaginatedQueryOptionsUtil<VideoGeneration>,
+    options?: PaginatedQueryOptionsUtil<ConsoleVideoGeneration>,
 ) {
     return useQuery({
         queryKey: ["echoflow-video", "generations", params],
         queryFn: () =>
-            consoleHttpClient.get<PaginatedResponse<VideoGeneration>>("/generation", { params }),
+            consoleHttpClient.get<PaginatedResponse<ConsoleVideoGeneration>>("/generation", { params }),
         ...options,
     });
 }
 
-export function useVideoDetailQuery(id: string, options?: QueryOptionsUtil<VideoGeneration>) {
-    return useQuery<VideoGeneration>({
+export function useVideoDetailQuery(id: string, options?: QueryOptionsUtil<ConsoleVideoGeneration>) {
+    return useQuery<ConsoleVideoGeneration>({
         queryKey: ["echoflow-video", "generation", id],
-        queryFn: () => consoleHttpClient.get<VideoGeneration>(`/generation/${id}`),
+        queryFn: () => consoleHttpClient.get<ConsoleVideoGeneration>(`/generation/${id}`),
         enabled: !!id && options?.enabled !== false,
         ...options,
     });
@@ -79,9 +79,9 @@ export function useVideoHealthQuery(options?: QueryOptionsUtil<VideoHealthStatus
 
 // ---- Mutations ----
 
-export function useRefreshVideoStatusMutation(options?: MutationOptionsUtil<VideoGeneration, string>) {
-    return useMutation<VideoGeneration, Error, string>({
-        mutationFn: (id) => consoleHttpClient.post<VideoGeneration>(`/generation/${id}/status`, {}),
+export function useRefreshVideoStatusMutation(options?: MutationOptionsUtil<ConsoleVideoGeneration, string>) {
+    return useMutation<ConsoleVideoGeneration, Error, string>({
+        mutationFn: (id) => consoleHttpClient.post<ConsoleVideoGeneration>(`/generation/${id}/status`, {}),
         ...options,
     });
 }
@@ -94,52 +94,52 @@ export function useDeleteVideoMutation(options?: MutationOptionsUtil<{ success: 
 }
 
 export function useUpdateVideoRemarkMutation(
-    options?: MutationOptionsUtil<VideoGeneration, { id: string; adminRemark: string }>,
+    options?: MutationOptionsUtil<ConsoleVideoGeneration, { id: string; adminRemark: string }>,
 ) {
-    return useMutation<VideoGeneration, Error, { id: string; adminRemark: string }>({
+    return useMutation<ConsoleVideoGeneration, Error, { id: string; adminRemark: string }>({
         mutationFn: ({ id, adminRemark }) =>
-            consoleHttpClient.post<VideoGeneration>(`/generation/${id}/remark`, { adminRemark }),
+            consoleHttpClient.post<ConsoleVideoGeneration>(`/generation/${id}/remark`, { adminRemark }),
         ...options,
     });
 }
 
 export function useMarkVideoStatusMutation(
     options?: MutationOptionsUtil<
-        VideoGeneration,
+        ConsoleVideoGeneration,
         { id: string; status: string; message?: string; failureCategory?: string }
     >,
 ) {
     return useMutation<
-        VideoGeneration,
+        ConsoleVideoGeneration,
         Error,
         { id: string; status: string; message?: string; failureCategory?: string }
     >({
         mutationFn: ({ id, ...data }) =>
-            consoleHttpClient.post<VideoGeneration>(`/generation/${id}/mark-status`, data),
+            consoleHttpClient.post<ConsoleVideoGeneration>(`/generation/${id}/mark-status`, data),
         ...options,
     });
 }
 
-export function useCancelVideoMutation(options?: MutationOptionsUtil<VideoGeneration, string>) {
-    return useMutation<VideoGeneration, Error, string>({
-        mutationFn: (id) => consoleHttpClient.post<VideoGeneration>(`/generation/${id}/cancel`, {}),
+export function useCancelVideoMutation(options?: MutationOptionsUtil<ConsoleVideoGeneration, string>) {
+    return useMutation<ConsoleVideoGeneration, Error, string>({
+        mutationFn: (id) => consoleHttpClient.post<ConsoleVideoGeneration>(`/generation/${id}/cancel`, {}),
         ...options,
     });
 }
 
-export function useRetryVideoMutation(options?: MutationOptionsUtil<VideoGeneration, string>) {
-    return useMutation<VideoGeneration, Error, string>({
-        mutationFn: (id) => consoleHttpClient.post<VideoGeneration>(`/generation/${id}/retry`, {}),
+export function useRetryVideoMutation(options?: MutationOptionsUtil<ConsoleVideoGeneration, string>) {
+    return useMutation<ConsoleVideoGeneration, Error, string>({
+        mutationFn: (id) => consoleHttpClient.post<ConsoleVideoGeneration>(`/generation/${id}/retry`, {}),
         ...options,
     });
 }
 
 export function useBatchMarkFailedMutation(
-    options?: MutationOptionsUtil<{ total: number; updated: number; items: VideoGeneration[] }, string[]>,
+    options?: MutationOptionsUtil<{ total: number; updated: number; items: ConsoleVideoGeneration[] }, string[]>,
 ) {
-    return useMutation<{ total: number; updated: number; items: VideoGeneration[] }, Error, string[]>({
+    return useMutation<{ total: number; updated: number; items: ConsoleVideoGeneration[] }, Error, string[]>({
         mutationFn: (ids) =>
-            consoleHttpClient.post<{ total: number; updated: number; items: VideoGeneration[] }>(
+            consoleHttpClient.post<{ total: number; updated: number; items: ConsoleVideoGeneration[] }>(
                 "/generation/batch/mark-failed",
                 { ids },
             ),
@@ -148,11 +148,11 @@ export function useBatchMarkFailedMutation(
 }
 
 export function useBatchCancelVideoMutation(
-    options?: MutationOptionsUtil<{ total: number; updated: number; items: VideoGeneration[] }, string[]>,
+    options?: MutationOptionsUtil<{ total: number; updated: number; items: ConsoleVideoGeneration[] }, string[]>,
 ) {
-    return useMutation<{ total: number; updated: number; items: VideoGeneration[] }, Error, string[]>({
+    return useMutation<{ total: number; updated: number; items: ConsoleVideoGeneration[] }, Error, string[]>({
         mutationFn: (ids) =>
-            consoleHttpClient.post<{ total: number; updated: number; items: VideoGeneration[] }>(
+            consoleHttpClient.post<{ total: number; updated: number; items: ConsoleVideoGeneration[] }>(
                 "/generation/batch/cancel",
                 { ids },
             ),
@@ -161,11 +161,11 @@ export function useBatchCancelVideoMutation(
 }
 
 export function useBatchRetryVideoMutation(
-    options?: MutationOptionsUtil<{ total: number; created: number; items: VideoGeneration[] }, string[]>,
+    options?: MutationOptionsUtil<{ total: number; created: number; items: ConsoleVideoGeneration[] }, string[]>,
 ) {
-    return useMutation<{ total: number; created: number; items: VideoGeneration[] }, Error, string[]>({
+    return useMutation<{ total: number; created: number; items: ConsoleVideoGeneration[] }, Error, string[]>({
         mutationFn: (ids) =>
-            consoleHttpClient.post<{ total: number; created: number; items: VideoGeneration[] }>(
+            consoleHttpClient.post<{ total: number; created: number; items: ConsoleVideoGeneration[] }>(
                 "/generation/batch/retry",
                 { ids },
             ),
@@ -174,11 +174,11 @@ export function useBatchRetryVideoMutation(
 }
 
 export function useScanStaleVideoMutation(
-    options?: MutationOptionsUtil<{ total: number; updated: VideoGeneration[] }, void>,
+    options?: MutationOptionsUtil<{ total: number; updated: ConsoleVideoGeneration[] }, void>,
 ) {
-    return useMutation<{ total: number; updated: VideoGeneration[] }, Error, void>({
+    return useMutation<{ total: number; updated: ConsoleVideoGeneration[] }, Error, void>({
         mutationFn: () =>
-            consoleHttpClient.post<{ total: number; updated: VideoGeneration[] }>(
+            consoleHttpClient.post<{ total: number; updated: ConsoleVideoGeneration[] }>(
                 "/generation/batch/stale",
                 {},
             ),

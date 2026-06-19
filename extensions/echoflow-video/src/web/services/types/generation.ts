@@ -46,7 +46,6 @@ export interface VideoParameters {
 
 export interface VideoGeneration {
     id: string;
-    userId: string;
     model: string;
     modelConfigId?: string;
     provider?: string;
@@ -54,7 +53,6 @@ export interface VideoGeneration {
     status: VideoGenerationStatus;
     billingStatus: VideoGenerationBillingStatus;
     requestKey?: string;
-    taskId?: string;
     prompt: string;
     originalPrompt?: string;
     promptOptimizationSource?: "ai" | "local";
@@ -65,10 +63,6 @@ export interface VideoGeneration {
     videoUrl?: string;
     errorMessage?: string;
     failureCategory?: string;
-    adminRemark?: string;
-    rawRequest?: Record<string, unknown>;
-    rawResponse?: Record<string, unknown>;
-    billingRuleSnapshot?: Record<string, unknown>;
     statusEvents?: Array<{
         status: VideoGenerationStatus;
         at: string;
@@ -81,6 +75,15 @@ export interface VideoGeneration {
     completedAt?: string;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface ConsoleVideoGeneration extends VideoGeneration {
+    userId: string;
+    taskId?: string;
+    adminRemark?: string;
+    rawRequest?: Record<string, unknown>;
+    rawResponse?: Record<string, unknown>;
+    billingRuleSnapshot?: Record<string, unknown>;
 }
 
 export interface OperationResult {
