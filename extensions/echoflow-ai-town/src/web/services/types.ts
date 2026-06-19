@@ -26,7 +26,24 @@ export type TownWorldState = {
         maintenance: number;
         reputation: number;
         summary: string;
+        breakdown?: Array<{ label: string; value: number; detail: string }>;
     } | null;
+    retention?: TownRetentionState;
+};
+
+export type TownRetentionState = {
+    streak: number;
+    lastQualifiedDay: number;
+    todayQualified: boolean;
+    nextHook: {
+        day: number;
+        title: string;
+        desc: string;
+        action: "operate" | "visit" | "decorate" | "explore" | "upgrade" | "chat" | "rest";
+        target?: string;
+        targetLabel: string;
+        reason: string;
+    };
 };
 
 export type TownFestivalState = {
@@ -84,6 +101,9 @@ export type TownCharacter = {
         relationshipLevel?: string;
         lastEventTitle?: string;
         mood?: string;
+        preferences?: string[];
+        promises?: string[];
+        keyMoments?: Array<{ day: number; title: string; summary: string }>;
         recentMessages?: Array<{ user: string; reply: string; at: string }>;
     } | null;
 };
@@ -100,6 +120,56 @@ export type TownEvent = {
         reputation?: number;
         relationship?: Record<string, number>;
         bonuses?: string[];
+        audit?: {
+            before: {
+                coins: number;
+                stamina: number;
+                reputation: number;
+                level: number;
+            };
+            after: {
+                coins: number;
+                stamina: number;
+                reputation: number;
+                level: number;
+            };
+            deltas: {
+                coins: number;
+                stamina: number;
+                reputation: number;
+                level: number;
+            };
+            ruleRefs: string[];
+            source: "rules" | "model-assisted" | "settlement";
+            action: {
+                type: string;
+                label: string;
+                day: number;
+                choiceId?: string;
+                choiceLabel?: string;
+                buildingId?: string;
+                buildingName?: string;
+                relationshipTargetId?: string;
+                relationshipTargetName?: string;
+            };
+            budget?: {
+                maxPerDay: number;
+                usedBefore: number;
+                usedAfter: number;
+                consumed: boolean;
+                remaining: number;
+            };
+            resourceBreakdown?: Array<{
+                label: string;
+                value: number;
+                detail: string;
+            }>;
+            model?: {
+                assisted: boolean;
+                fallbackUsed: boolean;
+            };
+            notes: string[];
+        };
         strategy?: TownStrategyAdvice;
         fallbackUsed?: boolean;
     } | null;

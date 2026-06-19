@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import type { TownSave, TownWorldState } from "../../../db/entities";
+import { TOWN_FESTIVAL_CATALOG, createTownFestivalState, type TownFestivalTemplate } from "../catalog";
 
 type TownSettlement = NonNullable<TownWorldState["lastSettlement"]>;
 export type TownFestivalState = NonNullable<TownWorldState["activeFestival"]>;
@@ -42,6 +43,12 @@ export class TownWorldRulesService {
             maintenance,
             reputation,
             summary: `小镇迎来了第 ${save.day + 1} 天。建筑带来 ${income} 金币收入，维护花费 ${maintenance} 金币，广场让声望提升 ${reputation}。今天的天气是${weather}。`,
+            breakdown: [
+                { label: "餐馆收入", value: restaurantLevel * 22, detail: `暖光餐馆 Lv.${restaurantLevel}` },
+                { label: "花店收入", value: floristLevel * 8, detail: `街角花店 Lv.${floristLevel}` },
+                { label: "建筑维护", value: -maintenance, detail: `${worldState.buildings.length} 个建筑日常维护` },
+                { label: "广场声望", value: reputation, detail: `中心广场 Lv.${squareLevel}` },
+            ],
         };
     }
 
@@ -104,61 +111,16 @@ export class TownWorldRulesService {
     private createFestivalCandidate(worldState: TownWorldState, save: TownSave): TownFestivalState | null {
         const completed = worldState.flags?.completedFestivals;
         const completedFestivals = Array.isArray(completed) ? completed : [];
-        const candidates: TownFestivalState[] = [
-            {
-                key: "festival-lantern",
-                title: "暖光灯会",
-                desc: "居民正在筹备夜晚灯会，继续拜访居民可以收集愿望纸条。",
-                status: "announced",
-                progress: 0,
-                target: 2,
-                daysLeft: 3,
-                action: "visit",
-                reward: { coins: 48, reputation: 10 },
-            },
-            {
-                key: "restaurant-new-menu",
-                title: "餐馆新品日",
-                desc: "小满想试做一份新品套餐，连续经营餐馆可以完成试吃会。",
-                status: "announced",
-                progress: 0,
-                target: 2,
-                daysLeft: 3,
-                action: "operate",
-                reward: { coins: 72, reputation: 5 },
-            },
-            {
-                key: "florist-show",
-                title: "花店街角展",
-                desc: "花音准备把街角布置成花展，继续布置小镇可以完成展台。",
-                status: "announced",
-                progress: 0,
-                target: 2,
-                daysLeft: 3,
-                action: "decorate",
-                reward: { coins: 36, reputation: 12 },
-            },
-            {
-                key: "fountain-repair",
-                title: "旧喷泉修复日",
-                desc: "旧喷泉传来新的水声，继续探索广场可以找到修复线索。",
-                status: "announced",
-                progress: 0,
-                target: 2,
-                daysLeft: 3,
-                action: "explore",
-                reward: { coins: 40, reputation: 8, unlockArea: "喷泉夜话" },
-            },
-        ];
-        return candidates.find((candidate) => !completedFestivals.includes(candidate.key) && this.isFestivalUnlocked(candidate.key, worldState, save)) ?? null;
+        const candidate = TOWN_FESTIVAL_CATALOG.find((item) => !completedFestivals.includes(item.key) && this.isFestivalUnlocked(item, worldState, save));
+        return candidate ? createTownFestivalState(candidate) : null;
     }
 
-    private isFestivalUnlocked(key: string, worldState: TownWorldState, save: TownSave) {
-        if (key === "festival-lantern") return save.day >= 5 && worldState.reputation >= 45;
-        if (key === "restaurant-new-menu") return this.getBuildingLevel(worldState, "restaurant") >= 3;
-        if (key === "florist-show") return this.getBuildingLevel(worldState, "florist") >= 3;
-        if (key === "fountain-repair") return this.getBuildingLevel(worldState, "square") >= 3;
-        return false;
+    private isFestivalUnlocked(template: TownFestivalTemplate, worldState: TownWorldState, save: TownSave) {
+        const { unlock } = template;
+        if (unlock.day && save.day < unlock.day) return false;
+        if (unlock.reputation && worldState.reputation < unlock.reputation) return false;
+        if (unlock.building && this.getBuildingLevel(worldState, unlock.building) < (unlock.buildingLevel ?? 1)) return false;
+        return true;
     }
 
     private applyFestivalCompletion(worldState: TownWorldState, festival?: TownFestivalState): TownWorldState {

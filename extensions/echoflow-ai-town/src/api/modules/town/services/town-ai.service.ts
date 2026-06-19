@@ -1,14 +1,19 @@
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { AiModel } from "@buildingai/db/entities";
 import { MoreThanOrEqual, Repository } from "@buildingai/db/typeorm";
-import { PublicAiModelService } from "@buildingai/extension-sdk";
+import { PublicAiModelService, normalizeProviderConfig } from "@buildingai/extension-sdk";
+import { generateText } from "@buildingai/ai-sdk";
 import { Injectable, Logger } from "@nestjs/common";
-import { generateText } from "ai";
 
 import { TownAiCallLog, TownAiConfig, TownCharacter, TownEvent, TownSave } from "../../../db/entities";
 import { type UpdateTownAiConfigDto } from "../dto";
-
-const TOWN_AI_CONFIG_KEY = "default";
+import {
+    TOWN_AI_CONFIG_KEY,
+    TOWN_AI_DEFAULT_CONFIG,
+    getTownAiDayStart,
+    hasTownAiDailyLimitReached,
+    shouldUseTownAiDailyLimit,
+} from "./town-ai-rules.mjs";
 
 type GenerateContext = {
     userId?: string;
@@ -201,14 +206,12 @@ export class TownAiService {
     }
 
     async testGenerate(prompt: string) {
-        return this.generateTextWithFallback("test", {}, prompt || "请用一句话介绍 AI 乐园小镇。", "AI 配置可用，小镇故事即将开始。", false);
+        return this.generateTextWithFallback("test", {}, prompt || "请用一句话介绍乐园小镇的今日计划。", "模型配置可用，小镇故事即将开始。", false);
     }
 
     private async generateTextWithFallback(type: TownAiCallLog["type"], context: GenerateContext, prompt: string, fallback: string, allowFallback = true) {
         const startedAt = Date.now();
         const config = await this.getConfig();
-
-        await this.ensureDailyLimit(context.userId, config.dailyLimitPerUser);
 
         if (!config.enabled || !config.defaultModelId) {
             await this.logCall({
@@ -225,9 +228,13 @@ export class TownAiService {
             throw new Error("AI 未启用或未配置模型");
         }
 
+        if (shouldUseTownAiDailyLimit(config)) {
+            await this.ensureDailyLimit(context.userId, config.dailyLimitPerUser);
+        }
+
         try {
             const modelInfo = await this.loadLlmModel(config.defaultModelId);
-            const providerConfig = this.flattenProviderConfig(await this.aiModelService.getProviderConfig(modelInfo.id));
+            const providerConfig = normalizeProviderConfig(await this.aiModelService.getProviderConfig(modelInfo.id));
             const provider = await this.aiModelService.getProviderAdapter(modelInfo.id, providerConfig);
 
             const result = await generateText({
@@ -268,16 +275,11 @@ export class TownAiService {
         }
     }
 
-    private createDefaultConfig() {
+    private createDefaultConfig(): TownAiConfig {
         return this.configRepo.create({
             key: TOWN_AI_CONFIG_KEY,
-            enabled: false,
-            defaultModelId: null,
-            temperature: 0.8,
-            maxTokens: 1200,
-            fallbackToRules: true,
-            dailyLimitPerUser: 100,
-        });
+            ...(TOWN_AI_DEFAULT_CONFIG as Partial<TownAiConfig>),
+        }) as TownAiConfig;
     }
 
     private async loadLlmModel(modelId: string) {
@@ -290,12 +292,11 @@ export class TownAiService {
 
     private async ensureDailyLimit(userId: string | undefined, limit: number) {
         if (!userId || limit <= 0) return;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = getTownAiDayStart();
         const count = await this.callLogRepo.count({
             where: { userId, createdAt: MoreThanOrEqual(today) },
         });
-        if (count >= limit) {
+        if (hasTownAiDailyLimitReached(count, limit)) {
             throw new Error("今日 AI 调用次数已达上限");
         }
     }
@@ -346,17 +347,18 @@ export class TownAiService {
             "所有字段必须是中文短句，不能提模型、fallback、本地规则、默认模型。",
             `小镇状态：${JSON.stringify(this.pickSaveState(context.save))}`,
             `经营目标：${JSON.stringify(this.pickProgressState(context.save))}`,
-            `居民：${JSON.stringify((context.characters ?? []).map((item) => ({ name: item.name, role: item.role, relationship: item.relationship, status: item.status, memory: item.memory })))}`,
-            `最近事件：${JSON.stringify((context.events ?? []).slice(0, 5).map((item) => ({ type: item.type, title: item.title, content: item.content, result: item.result })))}`,
+            `居民：${JSON.stringify((context.characters ?? []).map((item) => ({ name: item.name, role: item.role, relationship: item.relationship, status: item.status, memory: this.pickCharacterMemory(item) })))}`,
+            `最近事件：${JSON.stringify((context.events ?? []).slice(0, 5).map((item) => ({ type: item.type, title: item.title, content: item.content, audit: this.pickEventAudit(item) })))}`,
             `安全策略参考：${JSON.stringify(fallback)}`,
         ].join("\n");
     }
 
     private buildNpcPrompt(character: TownCharacter, message: string, context: GenerateContext) {
         return [
-            "你正在扮演治愈系小镇经营游戏中的 NPC。",
+            "你正在扮演治愈系小镇经营游戏中的居民角色。",
             "请用中文回复玩家，语气温暖自然，有角色性格，不要超过 100 字。",
-            `NPC：${character.name}，身份：${character.role}，性格：${character.personality}，关系值：${character.relationship}，状态：${character.status}，记忆：${JSON.stringify(character.memory ?? {})}`,
+            `居民：${character.name}，身份：${character.role}，性格：${character.personality}，关系值：${character.relationship}，状态：${character.status}`,
+            `长期记忆：${JSON.stringify(this.pickCharacterMemory(character))}`,
             `小镇状态：${JSON.stringify(this.pickSaveState(context.save))}`,
             `经营目标：${JSON.stringify(this.pickProgressState(context.save))}`,
             `玩家说：${message}`,
@@ -390,6 +392,35 @@ export class TownAiService {
             `最近事件：${JSON.stringify((context.events ?? []).slice(0, 5).map((item) => ({ type: item.type, title: item.title, content: item.content })))}`,
             `安全事件参考：${fallback}`,
         ].filter(Boolean).join("\n");
+    }
+
+    private pickCharacterMemory(character: TownCharacter) {
+        const memory = character.memory ?? {};
+        return {
+            summary: memory.summary,
+            relationshipLevel: memory.relationshipLevel,
+            mood: memory.mood,
+            preferences: Array.isArray(memory.preferences) ? memory.preferences.slice(-4) : [],
+            promises: Array.isArray(memory.promises) ? memory.promises.slice(-3) : [],
+            keyMoments: Array.isArray(memory.keyMoments) ? memory.keyMoments.slice(-3) : [],
+            recentMessages: Array.isArray(memory.recentMessages) ? memory.recentMessages.slice(-3) : [],
+        };
+    }
+
+    private pickEventAudit(event: TownEvent) {
+        const audit = event.result?.audit;
+        if (!audit) return null;
+        return {
+            source: audit.source,
+            action: audit.action ? {
+                type: audit.action.type,
+                label: audit.action.label,
+                day: audit.action.day,
+            } : null,
+            deltas: audit.deltas,
+            ruleRefs: Array.isArray(audit.ruleRefs) ? audit.ruleRefs.slice(0, 6) : [],
+            notes: Array.isArray(audit.notes) ? audit.notes.slice(0, 4) : [],
+        };
     }
 
     private createFallbackEventDraft(fallback: string): AiTownEventDraft {
@@ -446,7 +477,7 @@ export class TownAiService {
         const action = save && save.stamina < 30 ? "休息一天" : task?.type === "earnCoins" ? "经营餐馆" : activeFestival ? this.formatStrategyAction(activeFestival.action) : "拜访居民";
         const target = activeFestival?.title ?? topRelationship?.name ?? task?.title ?? "小镇地图";
         return {
-            summary: this.trimText(fallback.replace(/^AI 建议：/, ""), 80) || "今天先稳住资源，再推进居民关系和小镇活动。",
+            summary: this.trimText(fallback.replace(/^AI 建议：/, "").replace(/^今日计划：/, ""), 80) || "今天先稳住资源，再推进居民关系和小镇活动。",
             action,
             target,
             reason: task ? `优先完成“${task.title}”，可以稳定获得奖励。` : activeFestival ? `当前活动“${activeFestival.title}”正在推进，适合围绕目标行动安排。` : "当前资源适合推进居民关系，为后续活动积累线索。",
@@ -520,22 +551,6 @@ export class TownAiService {
         } catch {
             return null;
         }
-    }
-
-    private flattenProviderConfig(config: Record<string, unknown>): Record<string, string> {
-        const normalized: Record<string, string> = {};
-        Object.entries(config).forEach(([key, item]) => {
-            if (typeof item === "string") {
-                normalized[key] = item;
-                return;
-            }
-            const value = (item as { value?: unknown } | undefined)?.value;
-            if (typeof value === "string") normalized[key] = value;
-        });
-        return {
-            apiKey: normalized.apiKey || normalized.api_key || normalized.API_KEY || "",
-            baseURL: normalized.baseURL || normalized.baseUrl || normalized.base_url || "",
-        };
     }
 
     private pickSaveState(save?: TownSave) {

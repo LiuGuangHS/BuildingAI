@@ -1,5 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Badge } from "@buildingai/ui/components/ui/badge";
+import { Button } from "@buildingai/ui/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@buildingai/ui/components/ui/select";
+import { Switch } from "@buildingai/ui/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@buildingai/ui/components/ui/table";
+import { Textarea } from "@buildingai/ui/components/ui/textarea";
+import { Input } from "@buildingai/ui/components/ui/input";
 
 import { getTownAiConfig, getTownAiLogs, listTownAiModels, testTownAi, updateTownAiConfig } from "../../services/console/town";
 import type { TownAiConfig } from "../../services/types";
@@ -32,6 +46,10 @@ export default function TownAiConfigPage() {
             saveId: logFilters.saveId.trim() || undefined,
         }),
     });
+    const modelSelectValue = form.defaultModelId ?? "__none__";
+    const typeFilterValue = logFilters.type || "__all__";
+    const successFilterValue = logFilters.success || "__all__";
+    const fallbackFilterValue = logFilters.fallbackUsed || "__all__";
 
     useEffect(() => {
         if (configQuery.data) {
@@ -60,118 +78,247 @@ export default function TownAiConfigPage() {
 
     return (
         <main className="town-console ai-config-page">
-            <h1>AI 配置</h1>
-            <p className="console-muted">管理员统一指定模型。用户侧不暴露模型选择，只提示 AI 生成可能消耗额度；实际计费由平台和模型配置决定。</p>
+            <div className="console-section-header">
+                <div>
+                    <h1>AI 配置</h1>
+                    <p className="console-muted">管理员统一指定模型。用户侧不暴露模型选择，只提示 AI 生成可能消耗额度；实际计费由平台和模型配置决定。</p>
+                </div>
+                <Button
+                    variant="outline"
+                    onClick={() => {
+                        void configQuery.refetch();
+                        void modelsQuery.refetch();
+                        void logsQuery.refetch();
+                    }}
+                >
+                    刷新数据
+                </Button>
+            </div>
 
             <section className="ai-config-grid">
-                <div className="console-table config-card">
-                    <h2>模型设置</h2>
-                    <label className="config-row toggle-row">
-                        <span>启用 AI</span>
-                        <input checked={form.enabled} type="checkbox" onChange={(event) => setForm({ ...form, enabled: event.target.checked })} />
-                    </label>
-                    <label className="config-row">
-                        <span>默认模型</span>
-                        <select value={form.defaultModelId ?? ""} onChange={(event) => setForm({ ...form, defaultModelId: event.target.value || null })}>
-                            <option value="">未选择模型</option>
-                            {modelsQuery.data?.map((model) => (
-                                <option key={model.id} value={model.id}>
-                                    {model.providerName} / {model.name} ({model.model})
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-                    <label className="config-row">
-                        <span>温度</span>
-                        <input max={2} min={0} step={0.1} type="number" value={form.temperature} onChange={(event) => setForm({ ...form, temperature: Number(event.target.value) })} />
-                    </label>
-                    <label className="config-row">
-                        <span>最大输出 tokens</span>
-                        <input max={4000} min={200} step={100} type="number" value={form.maxTokens} onChange={(event) => setForm({ ...form, maxTokens: Number(event.target.value) })} />
-                    </label>
-                    <label className="config-row toggle-row">
-                        <span>失败降级本地规则</span>
-                        <input checked={form.fallbackToRules} type="checkbox" onChange={(event) => setForm({ ...form, fallbackToRules: event.target.checked })} />
-                    </label>
-                    <label className="config-row">
-                        <span>每用户每日调用上限</span>
-                        <input min={0} step={10} type="number" value={form.dailyLimitPerUser} onChange={(event) => setForm({ ...form, dailyLimitPerUser: Number(event.target.value) })} />
-                    </label>
-                    <button className="console-primary" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-                        保存配置
-                    </button>
-                    {message ? <p className="console-message">{message}</p> : null}
-                </div>
+                <Card className="config-card">
+                    <CardHeader>
+                        <CardTitle>模型设置</CardTitle>
+                        <CardDescription>配置小镇 AI 的默认模型、响应长度和降级策略。</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-4">
+                        <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium">启用 AI</p>
+                                <p className="text-muted-foreground text-sm">关闭后将只走本地规则。</p>
+                            </div>
+                            <Switch checked={form.enabled} onCheckedChange={(checked) => setForm({ ...form, enabled: checked })} />
+                        </div>
+                        <label className="grid gap-2">
+                            <span className="text-sm font-medium">默认模型</span>
+                            <Select value={modelSelectValue} onValueChange={(value) => setForm({ ...form, defaultModelId: value === "__none__" ? null : value })}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="未选择模型" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__none__">未选择模型</SelectItem>
+                                    {modelsQuery.data?.map((model) => (
+                                        <SelectItem key={model.id} value={model.id}>
+                                            {model.providerName} / {model.name} ({model.model})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </label>
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <label className="grid gap-2">
+                                <span className="text-sm font-medium">温度</span>
+                                <Input
+                                    max={2}
+                                    min={0}
+                                    step={0.1}
+                                    type="number"
+                                    value={form.temperature}
+                                    onChange={(event) => setForm({ ...form, temperature: Number(event.target.value) })}
+                                />
+                            </label>
+                            <label className="grid gap-2">
+                                <span className="text-sm font-medium">最大输出 tokens</span>
+                                <Input
+                                    max={4000}
+                                    min={200}
+                                    step={100}
+                                    type="number"
+                                    value={form.maxTokens}
+                                    onChange={(event) => setForm({ ...form, maxTokens: Number(event.target.value) })}
+                                />
+                            </label>
+                        </div>
+                        <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium">失败时降级本地规则</p>
+                                <p className="text-muted-foreground text-sm">模型异常时自动切回规则引擎。</p>
+                            </div>
+                            <Switch checked={form.fallbackToRules} onCheckedChange={(checked) => setForm({ ...form, fallbackToRules: checked })} />
+                        </div>
+                        <label className="grid gap-2">
+                            <span className="text-sm font-medium">每用户每日调用上限</span>
+                            <Input
+                                min={0}
+                                step={10}
+                                type="number"
+                                value={form.dailyLimitPerUser}
+                                onChange={(event) => setForm({ ...form, dailyLimitPerUser: Number(event.target.value) })}
+                            />
+                        </label>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                                保存配置
+                            </Button>
+                            {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+                        </div>
+                    </CardContent>
+                </Card>
 
-                <div className="console-table config-card">
-                    <h2>测试生成</h2>
-                    <textarea value={testPrompt} onChange={(event) => setTestPrompt(event.target.value)} />
-                    <button className="console-primary" disabled={testMutation.isPending} onClick={() => testMutation.mutate()}>
-                        测试模型
-                    </button>
-                    <div className="test-result">{testResult || "保存模型配置后，可在这里测试 AI 是否能正常生成。"}</div>
-                </div>
+                <Card className="config-card">
+                    <CardHeader>
+                        <CardTitle>测试生成</CardTitle>
+                        <CardDescription>保存模型配置后，可在这里直接验证 AI 是否能正常生成。</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-4">
+                        <Textarea
+                            value={testPrompt}
+                            onChange={(event) => setTestPrompt(event.target.value)}
+                            className="min-h-32"
+                        />
+                        <div className="flex flex-wrap items-center gap-3">
+                            <Button loading={testMutation.isPending} onClick={() => testMutation.mutate()}>
+                                测试模型
+                            </Button>
+                            {testResult ? <Badge variant="outline">已生成结果</Badge> : null}
+                        </div>
+                        <div className="rounded-md border bg-muted/30 p-3 text-sm leading-6">
+                            {testResult || "保存模型配置后，可在这里测试 AI 是否能正常生成。"}
+                        </div>
+                    </CardContent>
+                </Card>
             </section>
 
-            <section className="console-table ai-log-section">
-                <div className="console-section-header">
-                    <div>
-                        <h2>调用统计</h2>
-                        <p className="console-muted">统计和日志会按调用类型、状态、降级和存档同步过滤。</p>
+            <Card className="ai-log-section">
+                <CardHeader>
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="space-y-1">
+                            <CardTitle>调用统计</CardTitle>
+                            <CardDescription>统计和日志按调用类型、状态、降级和存档同步过滤。</CardDescription>
+                        </div>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                void logsQuery.refetch();
+                            }}
+                        >
+                            刷新日志
+                        </Button>
                     </div>
-                    <div className="console-actions ai-log-filters">
-                        <select value={logFilters.type} onChange={(event) => setLogFilters({ ...logFilters, type: event.target.value })}>
-                            <option value="">全部类型</option>
-                            <option value="advice">建议</option>
-                            <option value="chat">聊天</option>
-                            <option value="event">事件</option>
-                            <option value="structured_event">结构化事件</option>
-                            <option value="test">测试</option>
-                        </select>
-                        <select value={logFilters.success} onChange={(event) => setLogFilters({ ...logFilters, success: event.target.value })}>
-                            <option value="">全部状态</option>
-                            <option value="true">成功</option>
-                            <option value="false">失败</option>
-                        </select>
-                        <select value={logFilters.fallbackUsed} onChange={(event) => setLogFilters({ ...logFilters, fallbackUsed: event.target.value })}>
-                            <option value="">全部降级</option>
-                            <option value="true">已降级</option>
-                            <option value="false">未降级</option>
-                        </select>
-                        <input placeholder="存档 ID" value={logFilters.saveId} onChange={(event) => setLogFilters({ ...logFilters, saveId: event.target.value })} />
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-md border p-3">
+                            <p className="text-muted-foreground text-sm">总调用</p>
+                            <p className="text-2xl font-semibold">{logsQuery.data?.stats.total ?? "-"}</p>
+                        </div>
+                        <div className="rounded-md border p-3">
+                            <p className="text-muted-foreground text-sm">今日调用</p>
+                            <p className="text-2xl font-semibold">{logsQuery.data?.stats.todayCount ?? "-"}</p>
+                        </div>
+                        <div className="rounded-md border p-3">
+                            <p className="text-muted-foreground text-sm">失败</p>
+                            <p className="text-2xl font-semibold">{logsQuery.data?.stats.failed ?? "-"}</p>
+                        </div>
+                        <div className="rounded-md border p-3">
+                            <p className="text-muted-foreground text-sm">降级</p>
+                            <p className="text-2xl font-semibold">{logsQuery.data?.stats.fallback ?? "-"}</p>
+                        </div>
                     </div>
-                </div>
-                <div className="console-stats compact">
-                    <div><span>总调用</span><strong>{logsQuery.data?.stats.total ?? "-"}</strong></div>
-                    <div><span>今日调用</span><strong>{logsQuery.data?.stats.todayCount ?? "-"}</strong></div>
-                    <div><span>失败</span><strong>{logsQuery.data?.stats.failed ?? "-"}</strong></div>
-                    <div><span>降级</span><strong>{logsQuery.data?.stats.fallback ?? "-"}</strong></div>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>类型</th>
-                            <th>存档</th>
-                            <th>状态</th>
-                            <th>耗时</th>
-                            <th>错误</th>
-                            <th>时间</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {logsQuery.data?.logs.map((log) => (
-                            <tr key={log.id}>
-                                <td>{log.type}</td>
-                                <td>{log.saveId?.slice(0, 8) ?? "-"}</td>
-                                <td>{log.success ? "成功" : log.fallbackUsed ? "降级" : "失败"}</td>
-                                <td>{log.latencyMs}ms</td>
-                                <td>{log.errorMessage || "-"}</td>
-                                <td>{new Date(log.createdAt).toLocaleString()}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </section>
+
+                    <div className="flex flex-wrap gap-3">
+                        <Select value={typeFilterValue} onValueChange={(value) => setLogFilters({ ...logFilters, type: value === "__all__" ? "" : value })}>
+                            <SelectTrigger className="min-w-40">
+                                <SelectValue placeholder="全部类型" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">全部类型</SelectItem>
+                                <SelectItem value="advice">建议</SelectItem>
+                                <SelectItem value="chat">聊天</SelectItem>
+                                <SelectItem value="event">事件</SelectItem>
+                                <SelectItem value="structured_event">结构化事件</SelectItem>
+                                <SelectItem value="test">测试</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select value={successFilterValue} onValueChange={(value) => setLogFilters({ ...logFilters, success: value === "__all__" ? "" : value })}>
+                            <SelectTrigger className="min-w-36">
+                                <SelectValue placeholder="全部状态" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">全部状态</SelectItem>
+                                <SelectItem value="true">成功</SelectItem>
+                                <SelectItem value="false">失败</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select value={fallbackFilterValue} onValueChange={(value) => setLogFilters({ ...logFilters, fallbackUsed: value === "__all__" ? "" : value })}>
+                            <SelectTrigger className="min-w-40">
+                                <SelectValue placeholder="全部降级" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">全部降级</SelectItem>
+                                <SelectItem value="true">已降级</SelectItem>
+                                <SelectItem value="false">未降级</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Input
+                            placeholder="存档 ID"
+                            value={logFilters.saveId}
+                            onChange={(event) => setLogFilters({ ...logFilters, saveId: event.target.value })}
+                            className="min-w-48 flex-1"
+                        />
+                    </div>
+
+                    <div className="overflow-hidden rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>类型</TableHead>
+                                    <TableHead>存档</TableHead>
+                                    <TableHead>状态</TableHead>
+                                    <TableHead>耗时</TableHead>
+                                    <TableHead>错误</TableHead>
+                                    <TableHead>时间</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {logsQuery.data?.logs.map((log) => (
+                                    <TableRow key={log.id}>
+                                        <TableCell>{log.type}</TableCell>
+                                        <TableCell>{log.saveId?.slice(0, 8) ?? "-"}</TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={log.success ? "default" : log.fallbackUsed ? "secondary" : "destructive"}
+                                            >
+                                                {log.success ? "成功" : log.fallbackUsed ? "降级" : "失败"}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>{log.latencyMs}ms</TableCell>
+                                        <TableCell>{log.errorMessage || "-"}</TableCell>
+                                        <TableCell>{new Date(log.createdAt).toLocaleString()}</TableCell>
+                                    </TableRow>
+                                ))}
+                                {!logsQuery.data?.logs.length ? (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-muted-foreground">
+                                            暂无日志
+                                        </TableCell>
+                                    </TableRow>
+                                ) : null}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
         </main>
     );
 }

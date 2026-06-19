@@ -11,7 +11,7 @@ export const ASSETS = {
         nightEvent: asset("/assets/screenshot-night-event.png"),
     },
     backgrounds: {
-        town: asset("/assets/game-bg-town.png"),
+        town: asset("/assets/screenshot-town.png"),
         kitchen: asset("/assets/game-bg-kitchen.png"),
         dashboard: asset("/assets/ui-dashboard-bg.png"),
     },

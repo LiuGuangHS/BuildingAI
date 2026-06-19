@@ -74,7 +74,22 @@ export type TownWorldState = {
         maintenance: number;
         reputation: number;
         summary: string;
+        breakdown?: Array<{ label: string; value: number; detail: string }>;
     } | null;
+    retention?: {
+        streak: number;
+        lastQualifiedDay: number;
+        todayQualified: boolean;
+        nextHook: {
+            day: number;
+            title: string;
+            desc: string;
+            action: "operate" | "visit" | "decorate" | "explore" | "upgrade" | "chat" | "rest";
+            target?: string;
+            targetLabel: string;
+            reason: string;
+        };
+    };
 };
 
 @ExtensionEntity({ name: "town_saves", comment: "AI town save slots" })

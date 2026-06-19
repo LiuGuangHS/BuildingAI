@@ -1,18 +1,19 @@
+import { Button } from "@buildingai/ui/components/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 
 import { ASSETS } from "../assets";
 import { AssetImage } from "../components/asset-image";
-import { AdvicePanel, AiCompanion, AiUsageConfirmCard, BuildingPanel, EventCard, EventPanel, GameIcon, GameModalShell, GoalBoard, NpcHotspotAvatar, NpcPanel, ResourceMeter, ResourcePill, ResultBar, SavePicker, SettlementPanel, TaskPanel, getModalTitle, type GameModal } from "../components/game-panels";
-import { findPrimaryEvent, getActionAffordability, getActionTask, getBuildingStatus, getNextReputationTarget, getRecommendedAction, getRecommendedTarget, getRelationshipLevel, isBuildingUpgradeable, resolveActionModal, resolveEventScene, townActions } from "../lib/game-rules";
+import { AdvicePanel, AiCompanion, AiUsageConfirmCard, BuildingPanel, CommandSummary, CompactGoalBoard, EventCard, EventPanel, GameModalShell, NpcHotspotAvatar, NpcPanel, ResourceMeter, ResourcePill, ResultBar, SavePicker, SettlementPanel, TaskPanel, getModalTitle, type GameModal } from "../components/game-panels";
+import { readAiUsageAcknowledged, writeAiUsageAcknowledged } from "../lib/ai-usage-storage";
+import { findPrimaryEvent, resolveActionModal, resolveEventScene } from "../lib/game-rules";
+import { createTownViewModel, getActionState } from "../lib/town-view-model";
 import { chatWithTownCharacter, createTownSave, deleteTownSave, getTownSave, listTownSaves, runTownAction } from "../services/web/town";
 import type { TownBuilding, TownCharacter, TownSave } from "../services/types";
 
 type ChatResult = { reply: string; save: TownSave };
 type PendingAiAction = { type: "advice" } | { type: "chat" } | null;
-
-const AI_USAGE_NOTICE_KEY = "echoflow-ai-town-ai-usage-ack";
 
 export default function TownIndexPage() {
     const queryClient = useQueryClient();
@@ -27,14 +28,12 @@ export default function TownIndexPage() {
     const [resultEventId, setResultEventId] = useState<string | null>(null);
     const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
     const [pendingAiAction, setPendingAiAction] = useState<PendingAiAction>(null);
-    const [aiUsageAcknowledged, setAiUsageAcknowledged] = useState(() => {
-        if (typeof window === "undefined") return false;
-        return window.localStorage.getItem(AI_USAGE_NOTICE_KEY) === "true";
-    });
+    const [aiUsageAcknowledged, setAiUsageAcknowledged] = useState(readAiUsageAcknowledged);
 
     const savesQuery = useQuery({
         queryKey: ["town-saves"],
         queryFn: listTownSaves,
+        retry: false,
     });
 
     const createMutation = useMutation<TownSave, Error, void>({
@@ -116,12 +115,11 @@ export default function TownIndexPage() {
     });
 
     const save = activeSave;
+    const viewModel = save ? createTownViewModel(save) : null;
     const selectedBuilding = save?.worldState.buildings.find((building) => building.id === selectedBuildingId) ?? save?.worldState.buildings[0] ?? null;
     const latestEvent = save?.events[0] ?? null;
     const focusedEvent = save?.events.find((event) => event.id === focusedEventId) ?? latestEvent;
     const visibleResultEvent = latestEvent?.id === resultEventId ? latestEvent : null;
-    const recommendedTarget = getRecommendedTarget(save);
-    const recommendedAction = getRecommendedAction(save, recommendedTarget);
 
     useEffect(() => {
         if (!errorMessage) return;
@@ -146,12 +144,10 @@ export default function TownIndexPage() {
     }
 
     function runAction(action: string, params?: { choiceId?: string; buildingId?: string }) {
-        if (save) {
-            const affordability = getActionAffordability(save, action, params?.buildingId);
-            if (!affordability.canRun) {
-                setErrorMessage(affordability.reason);
-                return;
-            }
+        const actionState = save ? getActionState(save, action, params?.buildingId) : null;
+        if (actionState && !actionState.canRun) {
+            setErrorMessage(actionState.disabledReason);
+            return;
         }
         if (action === "advice" && !confirmAiUsage({ type: "advice" })) return;
         actionMutation.mutate({ action, ...params });
@@ -170,7 +166,7 @@ export default function TownIndexPage() {
     }
 
     function acceptAiUsage() {
-        window.localStorage.setItem(AI_USAGE_NOTICE_KEY, "true");
+        writeAiUsageAcknowledged();
         setAiUsageAcknowledged(true);
         const action = pendingAiAction;
         setPendingAiAction(null);
@@ -182,26 +178,44 @@ export default function TownIndexPage() {
     return (
         <main className="town-game-shell">
             {!save ? (
-                <section className="game-title-screen">
-                    <AssetImage src={ASSETS.cover} alt="AI乐园小镇封面" className="title-bg" fallback={<div className="pixel-town" />} />
-                    <div className="title-vignette" />
-                    <div className="title-content">
-                        <div className="title-brand">
-                            <AssetImage src={ASSETS.icon} alt="AI乐园小镇图标" className="game-icon" fallback={<span className="game-icon icon-fallback">镇</span>} />
-                            <div>
-                                <p className="game-eyebrow">EchoflowAI H5 Game</p>
-                                <h1>AI乐园小镇</h1>
-                                <p>经营餐馆、结识居民、探索夜晚事件，让每一天都在小镇里留下新的故事。</p>
-                            </div>
+                <section className="game-stage onboarding-stage">
+                    <AssetImage src={ASSETS.backgrounds.town} alt="乐园小镇地图" className="stage-bg" fallback={<div className="map-fallback" />} />
+                    <div className="stage-weather stage-weather-晴朗" />
+                    <div className="top-hud onboarding-hud">
+                        <div className="save-title">
+                            <span>Day 1</span>
+                            <strong>乐园小镇</strong>
                         </div>
-                        <div className="title-actions">
-                            <button className="game-primary" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
-                                {createMutation.isPending ? "创建中..." : "开始经营"}
-                            </button>
-                            {errorMessage ? <p className="game-error">{errorMessage}</p> : null}
-                        </div>
+                        <ResourcePill label="天气" value="晴朗" />
+                        <ResourcePill label="金币" value="120" />
+                        <ResourceMeter label="体力" value={100} max={100} />
+                        <ResourcePill label="心情" value="期待" />
                     </div>
-                    <div className="save-dock">
+                    <div className="onboarding-hotspots" aria-hidden="true">
+                        <span className="building-hotspot hotspot-restaurant preview-hotspot"><strong>暖光餐馆</strong><small>可经营</small></span>
+                        <span className="building-hotspot hotspot-florist preview-hotspot"><strong>风铃花店</strong><small>可拜访</small></span>
+                        <span className="building-hotspot hotspot-square preview-hotspot"><strong>中央广场</strong><small>可探索</small></span>
+                        <span className="npc-hotspot npc-hotspot-0 preview-hotspot"><i className="npc-preview-avatar" aria-hidden="true">小</i><span>小满 · 熟悉</span></span>
+                        <span className="npc-hotspot npc-hotspot-2 preview-hotspot"><i className="npc-preview-avatar" aria-hidden="true">花</i><span>花音 · 熟悉</span></span>
+                    </div>
+                    <div className="onboarding-panel">
+                        <div>
+                            <p className="game-eyebrow">晨间开张</p>
+                            <h1>乐园小镇</h1>
+                            <p>第一天已经亮起来。餐馆、花店和广场都在等你安排，居民会把今天的选择记进之后的故事。</p>
+                        </div>
+                        <div className="onboarding-actions">
+                            <Button type="button" variant="default" className="game-primary" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
+                                {createMutation.isPending ? "创建中..." : "创建小镇"}
+                            </Button>
+                            <span>进入后直接开始经营、拜访和探索。</span>
+                        </div>
+                        {errorMessage ? <p className="game-error">{errorMessage}</p> : null}
+                    </div>
+                    <div className="onboarding-command-preview">
+                        {["经营", "拜访", "布置", "探索", "休息"].map((label) => <span key={label}>{label}</span>)}
+                    </div>
+                    <div className="save-dock onboarding-save-dock">
                         {savesQuery.isLoading ? <p>正在读取旧存档...</p> : null}
                         {savesQuery.isError ? <p className="game-error">旧存档加载失败，请刷新后重试。</p> : null}
                         {savesQuery.data?.list?.length ? <SavePicker saves={savesQuery.data.list} pendingId={loadSaveMutation.variables} onDelete={(saveId) => deleteSaveMutation.mutate(saveId)} onLoad={(saveId) => loadSaveMutation.mutate(saveId)} /> : null}
@@ -213,47 +227,34 @@ export default function TownIndexPage() {
                     <div className={`stage-weather stage-weather-${save.worldState.weather}`} />
                     <div className="top-hud">
                         <div className="save-title">
-                            <span>Day {save.day}</span>
-                            <strong>{save.name}</strong>
+                            <span>Day {viewModel?.hud.day ?? save.day}</span>
+                            <strong>{viewModel?.hud.name ?? save.name}</strong>
                         </div>
-                        <ResourcePill label="天气" value={save.worldState.weather} />
-                        <ResourcePill label="金币" value={save.coins} />
-                        <ResourceMeter label="体力" value={save.stamina} max={100} />
-                        <ResourceMeter label="声望" value={save.worldState.reputation} max={getNextReputationTarget(save)} />
-                        <ResourcePill label="心情" value={save.mood} />
+                        <ResourcePill label="天气" value={viewModel?.hud.weather ?? save.worldState.weather} />
+                        <ResourcePill label="金币" value={viewModel?.hud.coins ?? save.coins} />
+                        <ResourceMeter label="体力" value={viewModel?.hud.stamina ?? save.stamina} max={100} />
+                        <ResourceMeter label="声望" value={viewModel?.hud.reputation.value ?? save.worldState.reputation} max={viewModel?.hud.reputation.target ?? save.worldState.reputation} />
+                        <ResourcePill label="心情" value={viewModel?.hud.mood ?? save.mood} />
                     </div>
-                    <GoalBoard save={save} onOpenEvents={() => setModal("events")} onOpenSettlement={() => setModal("settlement")} onOpenTasks={() => setModal("tasks")} />
+                    {viewModel ? <CompactGoalBoard goal={viewModel.goal} onOpenEvents={() => setModal("events")} onOpenSettlement={() => setModal("settlement")} onOpenTasks={() => setModal("tasks")} /> : null}
                     <div className="map-hotspots">
-                        {save.worldState.buildings.map((building) => (
-                            <button className={`building-hotspot hotspot-${building.id}${recommendedTarget === building.id ? " recommended" : ""}${isBuildingUpgradeable(save, building) ? " upgradeable" : ""}`} key={building.id} onClick={() => openBuilding(building)}>
+                        {viewModel?.buildings.map((building) => (
+                            <Button type="button" variant="ghost" className={`building-hotspot hotspot-${building.id}${building.recommended ? " recommended" : ""}${building.upgradeable ? " upgradeable" : ""}`} key={building.id} onClick={() => openBuilding(building.building)}>
                                 <span>{building.name}</span>
                                 <strong>Lv.{building.level}</strong>
-                                <small>{getBuildingStatus(save, building)}</small>
-                            </button>
+                                <small>{building.status}</small>
+                            </Button>
                         ))}
-                        {save.characters.slice(0, 4).map((character, index) => (
-                            <button className={`npc-hotspot npc-hotspot-${index}${recommendedTarget === character.id ? " recommended" : ""}`} key={character.id} onClick={() => openNpc(character)}>
+                        {viewModel?.characters.slice(0, 4).map((character, index) => (
+                            <Button type="button" variant="ghost" className={`npc-hotspot npc-hotspot-${index}${character.recommended ? " recommended" : ""}${character.pendingPromiseCount ? " has-memory-promise" : ""}`} key={character.id} title={character.pendingPromise ? `记着：${character.pendingPromise}` : character.memorySummary} onClick={() => openNpc(character.character)}>
                                 <NpcHotspotAvatar character={character} />
-                                <span>{character.name} · {getRelationshipLevel(character.relationship)}</span>
-                            </button>
+                                <span>{character.name} · {character.relationshipLevel}</span>
+                                {character.pendingPromiseCount ? <em>约定</em> : null}
+                            </Button>
                         ))}
                     </div>
                     <AiCompanion save={save} pending={actionMutation.isPending || chatMutation.isPending} onOpenAdvice={() => setModal("advice")} />
-                    <div className="bottom-command-bar">
-                        {townActions.map((action) => {
-                            const affordability = save ? getActionAffordability(save, action.id) : { canRun: true, reason: "" };
-                            const task = save ? getActionTask(save, action.id) : null;
-                            return (
-                                <button className={`${recommendedAction === action.id ? "recommended" : ""}${task ? " task-linked" : ""}`} key={action.id} disabled={actionMutation.isPending || !affordability.canRun} title={affordability.reason} onClick={() => runAction(action.id)}>
-                                    {task ? <span className="action-badge">任务</span> : null}
-                                    <GameIcon label={action.icon} />
-                                    <strong>{action.title}</strong>
-                                    <small>{affordability.canRun ? action.desc : affordability.reason}</small>
-                                    <em>{action.hint}</em>
-                                </button>
-                            );
-                        })}
-                    </div>
+                    {viewModel ? <CommandSummary commands={viewModel.commands} pending={actionMutation.isPending} onRun={runAction} /> : null}
                     {visibleResultEvent?.result ? <div className="floating-result"><ResultBar event={visibleResultEvent} /></div> : null}
                     {errorMessage ? <div className="game-toast error">{errorMessage}</div> : null}
                     <AnimatePresence>
@@ -267,7 +268,7 @@ export default function TownIndexPage() {
                             ) : null}
                             {modal === "event" && focusedEvent ? <EventCard event={focusedEvent} pending={actionMutation.isPending} save={save} onBack={() => setModal(null)} onChoice={(choiceId) => runAction(choiceId, { choiceId })} /> : null}
                             {modal === "events" ? <EventPanel events={save.events} pending={actionMutation.isPending} save={save} onChoice={(choiceId) => runAction(choiceId, { choiceId })} /> : null}
-                            {modal === "advice" ? <AdvicePanel save={save} latestEvent={latestEvent} /> : null}
+                            {modal === "advice" ? <AdvicePanel save={save} latestEvent={latestEvent} onRunRecommendedAction={(action) => runAction(action)} /> : null}
                             {modal === "settlement" ? <SettlementPanel save={save} /> : null}
                             {modal === "tasks" ? <TaskPanel save={save} /> : null}
                             {modal === "ai-confirm" ? <AiUsageConfirmCard onAccept={acceptAiUsage} onCancel={() => { setPendingAiAction(null); setModal(null); }} /> : null}

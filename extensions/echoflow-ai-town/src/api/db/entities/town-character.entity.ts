@@ -4,6 +4,19 @@ import { Column, CreateDateColumn, DeleteDateColumn, Index, JoinColumn, ManyToOn
 
 import { TownSave } from "./town-save.entity";
 
+export type TownCharacterMemory = {
+    summary?: string;
+    relationshipLevel?: string;
+    mood?: string;
+    preferences?: string[];
+    promises?: string[];
+    keyMoments?: Array<{ day: number; title: string; summary: string }>;
+    recentMessages?: Array<{ user: string; reply: string; at: string }>;
+    lastMessage?: string;
+    lastReply?: string;
+    lastEventTitle?: string;
+};
+
 @ExtensionEntity({ name: "town_characters", comment: "AI town NPCs" })
 export class TownCharacter {
     @PrimaryGeneratedColumn("uuid")
@@ -34,7 +47,7 @@ export class TownCharacter {
     status!: string;
 
     @Column({ type: "jsonb", nullable: true, comment: "NPC memories" })
-    memory?: Record<string, unknown> | null;
+    memory?: TownCharacterMemory | null;
 
     @ManyToOne(
         () => TownSave,

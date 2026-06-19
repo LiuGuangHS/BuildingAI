@@ -16,6 +16,56 @@ export type TownEventResult = {
     reputation?: number;
     relationship?: Record<string, number>;
     bonuses?: string[];
+    audit?: {
+        before: {
+            coins: number;
+            stamina: number;
+            reputation: number;
+            level: number;
+        };
+        after: {
+            coins: number;
+            stamina: number;
+            reputation: number;
+            level: number;
+        };
+        deltas: {
+            coins: number;
+            stamina: number;
+            reputation: number;
+            level: number;
+        };
+        ruleRefs: string[];
+        source: "rules" | "model-assisted" | "settlement";
+        action: {
+            type: string;
+            label: string;
+            day: number;
+            choiceId?: string;
+            choiceLabel?: string;
+            buildingId?: string;
+            buildingName?: string;
+            relationshipTargetId?: string;
+            relationshipTargetName?: string;
+        };
+        budget?: {
+            maxPerDay: number;
+            usedBefore: number;
+            usedAfter: number;
+            consumed: boolean;
+            remaining: number;
+        };
+        resourceBreakdown?: Array<{
+            label: string;
+            value: number;
+            detail: string;
+        }>;
+        model?: {
+            assisted: boolean;
+            fallbackUsed: boolean;
+        };
+        notes: string[];
+    };
     strategy?: {
         summary: string;
         action: string;

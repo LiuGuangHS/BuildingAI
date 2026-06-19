@@ -19,7 +19,7 @@
 | 存档 | ready | 支持创建、读取、软删除；删除时同步软删除角色和事件。 |
 | 行动循环 | ready | 经营、拜访、布置、探索、升级和休息都会经过服务端规则结算。 |
 | 行动预算 | ready | 每日行动预算、同日重复动作拦截和 `rest` 重置已在服务端和前端联动。 |
-| 资源审计 | ready | 行动结果和日结展示金币、体力、声望、关系和等级 delta。 |
+| 资源审计 | ready | 行动结果和日结展示金币、体力、声望、关系和等级 delta，并记录行动、选择、建筑、居民目标、预算、规则来源和模型/fallback 状态。 |
 | 居民对话 | ready | 支持主站 LLM 调用、本地 fallback、日志记录和关系推进。 |
 | 居民记忆 | ready | 保存摘要、心情、偏好、约定、关键时刻和有限最近消息；prompt 只取白名单记忆片段。 |
 | 记忆闭环 | ready | 待回应约定会影响推荐目标、行动预览、地图热点、镇务参谋和 Console 诊断。 |
@@ -114,7 +114,6 @@ pnpm --filter echoflow-ai-town build:publish
 | AI 上下文与写回分阶段 | 并发行动时 AI 文案可能基于稍早状态，资源结算仍以锁内最新状态为准。 | 如需强一致叙事，引入 action revision 或处理中状态。 |
 | 内容包仍未 seed 化 | 运行内容已从规则服务迁入 catalog，但还没有后台内容包、赛季或 seed 初始化能力。 | 后续把可运营内容扩展为 catalog + seed/config，并保持 service 只做事务、校验和编排。 |
 | 未接正式计费 | 无法对今日计划、聊天或深度事件做余额预检、扣费和失败退款。 | 接入 `ExtensionBillingModule` 前先确定免费额度、订阅权益和内容包边界。 |
-| 普通行动审计不完整 | 线上排查资源变化仍依赖事件文本和当前存档。 | 为行动结算补规则快照或审计字段。 |
 | Web 包体偏大 | `lucide` 等共享 chunk 超过 Vite 默认 500KB 提醒。 | 结合真实首屏指标拆分 Console、图标和低频面板。 |
 | Phaser 仅预留 | 目前还不是 Canvas/Phaser 游戏内核。 | 先保持 React 可发布路径，再做只读场景评估。 |
 
@@ -124,7 +123,6 @@ pnpm --filter echoflow-ai-town build:publish
 |---|---|
 | P1 | 完成 5 分钟闭环 smoke：创建存档 -> 早晨目标 -> 2 到 3 次行动 -> 事件 -> 日结 -> 第二天变化。 |
 | P1 | 为 catalog 内容补充内容包版本号、赛季分组和安装/升级 seed 策略。 |
-| P1 | 补行动结算审计字段，记录 before/after、delta、规则来源和 AI/fallback 状态。 |
 | P1 | 基于真实首屏性能拆分 Console、低频面板和图标 chunk。 |
 | P2 | 设计正式计费模型，再接 `ExtensionBillingModule`。 |
 | P2 | 评估 Phaser 只读 TownScene，与 React HUD/抽屉通过 bridge 通信。 |

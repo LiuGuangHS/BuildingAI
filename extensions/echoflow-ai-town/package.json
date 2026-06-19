@@ -23,11 +23,11 @@
     },
     "scripts": {
         "build:clean": "rimraf build .nuxt .output .temp",
-        "dev:web": "vite",
+        "dev:web": "vite --config vite.config.mjs",
         "dev:api": "cross-env NODE_ENV=development tsup --watch src/api",
         "dev": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
         "build:api": "cross-env NODE_ENV=production tsup",
-        "build:web": "vite build",
+        "build:web": "vite build --config vite.config.mjs",
         "build:publish": "pnpm build:clean && pnpm run build:web && pnpm run build:api",
         "format": "prettier --write src",
         "lint": "eslint src --quiet --no-error-on-unmatched-pattern",
@@ -36,6 +36,7 @@
         "check-types": "tsc -p tsconfig.api.json --noEmit"
     },
     "dependencies": {
+        "@buildingai/ai-sdk": "workspace:*",
         "@buildingai/core": "workspace:*",
         "@buildingai/db": "workspace:*",
         "@buildingai/decorators": "workspace:*",
@@ -48,7 +49,6 @@
         "@buildingai/web-core": "workspace:*",
         "@nestjs/common": "catalog:api",
         "@tanstack/react-query": "^5.90.21",
-        "ai": "^6.0.138",
         "class-transformer": "catalog:api",
         "class-validator": "catalog:api",
         "framer-motion": "^12.23.26",

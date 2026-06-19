@@ -1,8 +1,13 @@
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@buildingai/ui/components/ui/alert-dialog";
+import { Button } from "@buildingai/ui/components/ui/button";
+import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { motion } from "framer-motion";
 
 import { ASSETS, getNpcAsset } from "../assets";
-import { createCompanionMessage, formatEventType, formatFestivalAction, formatFestivalStatus, formatRequirement, getActionAffordability, getBuildingActionCopy, getChoicePreview, getChoiceTone, getNextUnlockGoal, getRelationshipBenefit, getRelationshipLevel, getResultSummary, getStrategyPlan, getUpgradeCost, groupEvents, isAiEventType } from "../lib/game-rules";
+import { createCompanionMessage, formatEventType, formatFestivalAction, formatFestivalStatus, formatRequirement, getBuildingActionCopy, getChoicePreview, getChoiceTone, getNextUnlockGoal, getRelationshipBenefit, getRelationshipLevel, getResultSummary, getStrategyPlan, getUpgradeCost, groupEvents, isAiEventType } from "../lib/game-rules";
 import type { TownBuilding, TownCharacter, TownEvent, TownSave, TownSaveListResult } from "../services/types";
+import type { TownCommandViewModel, TownGoalViewModel } from "../lib/town-view-model";
+import { getActionState } from "../lib/town-view-model";
 import { AssetImage } from "./asset-image";
 
 type SaveSummary = TownSaveListResult["list"][number];
@@ -23,17 +28,24 @@ export function SavePicker({ saves, pendingId, onDelete, onLoad }: { saves: Save
                             <small>Day {save.day} · Lv.{save.level} · 金币 {save.coins} · 体力 {save.stamina}</small>
                         </div>
                         <div className="save-actions">
-                            <button className="ghost-button" disabled={pendingId === save.id} onClick={() => onLoad(save.id)}>
+                            <Button type="button" variant="outline" className="ghost-button" disabled={pendingId === save.id} onClick={() => onLoad(save.id)}>
                                 {pendingId === save.id ? "载入中" : "继续"}
-                            </button>
-                            <button
-                                className="danger-button"
-                                onClick={() => {
-                                    if (window.confirm(`确认删除「${save.name}」吗？此操作不可恢复。`)) onDelete(save.id);
-                                }}
-                            >
-                                删除
-                            </button>
+                            </Button>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button type="button" variant="destructive" className="danger-button">删除</Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>删除存档</AlertDialogTitle>
+                                        <AlertDialogDescription>确认删除「{save.name}」吗？此操作不可恢复。</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>取消</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => onDelete(save.id)}>删除</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
                         </div>
                     </article>
                 ))}
@@ -47,9 +59,9 @@ export function BuildingPanel({ building, pending, save, onAction }: { building:
     const isMaxLevel = building.level >= (building.maxLevel ?? 5);
     const buildingAction = building.id === "restaurant" ? "operate" : building.id === "florist" ? "visit" : "explore";
     const secondaryAction = building.id === "florist" ? "decorate" : building.id === "square" ? "decorate" : null;
-    const actionAffordability = getActionAffordability(save, buildingAction);
-    const secondaryAffordability = secondaryAction ? getActionAffordability(save, secondaryAction) : null;
-    const upgradeAffordability = getActionAffordability(save, "upgrade", building.id);
+    const actionState = getActionState(save, buildingAction);
+    const secondaryState = secondaryAction ? getActionState(save, secondaryAction) : null;
+    const upgradeState = getActionState(save, "upgrade", building.id);
     const copy = getBuildingActionCopy(building.id);
     return (
         <div className="game-panel-grid">
@@ -63,18 +75,23 @@ export function BuildingPanel({ building, pending, save, onAction }: { building:
                     <span>升级费用：{isMaxLevel ? "满级" : `${cost} 金币`}</span>
                 </div>
                 <div className="panel-actions">
-                    <button className="game-primary" disabled={pending || !actionAffordability.canRun} title={actionAffordability.reason} onClick={() => onAction(buildingAction)}>
-                        {actionAffordability.canRun ? copy.primary : actionAffordability.reason}
-                    </button>
-                    {secondaryAction && secondaryAffordability ? (
-                        <button className="game-secondary" disabled={pending || !secondaryAffordability.canRun} title={secondaryAffordability.reason} onClick={() => onAction(secondaryAction)}>
-                            {secondaryAffordability.canRun ? copy.secondary : secondaryAffordability.reason}
-                        </button>
+                    <Button type="button" variant="default" className="game-primary" disabled={pending || !actionState.canRun} title={actionState.disabledReason} onClick={() => onAction(buildingAction)}>
+                        {actionState.canRun ? copy.primary : actionState.disabledReason}
+                    </Button>
+                    {secondaryAction && secondaryState ? (
+                        <Button type="button" variant="outline" className="game-secondary" disabled={pending || !secondaryState.canRun} title={secondaryState.disabledReason} onClick={() => onAction(secondaryAction)}>
+                            {secondaryState.canRun ? copy.secondary : secondaryState.disabledReason}
+                        </Button>
                     ) : null}
-                    <button className="game-secondary" disabled={pending || isMaxLevel || !upgradeAffordability.canRun} title={upgradeAffordability.reason} onClick={() => onAction("upgrade", { buildingId: building.id })}>
-                        {isMaxLevel ? "已满级" : upgradeAffordability.canRun ? `${copy.upgrade} ${cost}` : upgradeAffordability.reason}
-                    </button>
+                    <Button type="button" variant="outline" className="game-secondary" disabled={pending || isMaxLevel || !upgradeState.canRun} title={upgradeState.disabledReason} onClick={() => onAction("upgrade", { buildingId: building.id })}>
+                        {isMaxLevel ? "已满级" : upgradeState.canRun ? `${copy.upgrade} ${cost}` : upgradeState.disabledReason}
+                    </Button>
                 </div>
+                <ActionPreviewList items={[
+                    { title: copy.primary, state: actionState },
+                    secondaryAction && secondaryState ? { title: copy.secondary, state: secondaryState } : null,
+                    { title: copy.upgrade, state: upgradeState },
+                ]} />
                 <p className="building-action-tip">{copy.tip}</p>
             </div>
         </div>
@@ -86,14 +103,14 @@ export function NpcPanel({ activeCharacter, chatText, lastReply, pending, save, 
         <div className="npc-dialogue-layout">
             <div className="npc-roster">
                 {save.characters.map((character) => (
-                    <button className={activeCharacter?.id === character.id ? "active" : ""} key={character.id} onClick={() => setActiveCharacter(character)}>
+                    <Button type="button" variant="ghost" className={activeCharacter?.id === character.id ? "active" : ""} key={character.id} onClick={() => setActiveCharacter(character)}>
                         <AssetImage src={getNpcAsset(character.role)} alt={character.name} className="avatar-image" fallback={<span className="avatar">{character.name.slice(0, 1)}</span>} />
                         <span>
                             <strong>{character.name}</strong>
                             <small>{character.role} · {getRelationshipLevel(character.relationship)} · 关系 {character.relationship}</small>
                             <RelationshipBar value={character.relationship} compact />
                         </span>
-                    </button>
+                    </Button>
                 ))}
             </div>
             <div className="chat-box game-chat-box">
@@ -109,9 +126,25 @@ export function NpcPanel({ activeCharacter, chatText, lastReply, pending, save, 
                         </div>
                         <RelationshipBar value={activeCharacter.relationship} />
                         <div className="npc-memory-card">
-                            <strong>记忆片段</strong>
+                            <strong>长期记忆</strong>
                             <p>{activeCharacter.memory?.summary ?? "还没有形成新的聊天记忆。"}</p>
                         </div>
+                        <div className="npc-memory-tags">
+                            {activeCharacter.memory?.mood ? <span>心情：{activeCharacter.memory.mood}</span> : null}
+                            {(activeCharacter.memory?.preferences ?? []).slice(-3).map((item) => <span key={item}>偏好：{item}</span>)}
+                            {(activeCharacter.memory?.promises ?? []).slice(-2).map((item) => <span key={item}>约定：{item}</span>)}
+                        </div>
+                        {activeCharacter.memory?.keyMoments?.length ? (
+                            <div className="npc-key-moments">
+                                <strong>关键时刻</strong>
+                                {activeCharacter.memory.keyMoments.slice(-2).map((moment) => (
+                                    <article key={`${moment.day}-${moment.title}`}>
+                                        <span>{moment.title}</span>
+                                        <p>{moment.summary}</p>
+                                    </article>
+                                ))}
+                            </div>
+                        ) : null}
                         <div className="npc-benefit-card">
                             <strong>关系收益</strong>
                             <p>{getRelationshipBenefit(activeCharacter)}</p>
@@ -126,10 +159,10 @@ export function NpcPanel({ activeCharacter, chatText, lastReply, pending, save, 
                         </div>
                     </div>
                 ) : null}
-                <p className="ai-usage-note">AI 回复会调用管理员配置的模型生成，可能消耗额度。</p>
-                <textarea value={chatText} onChange={(event) => setChatText(event.target.value)} />
-                <button disabled={!activeCharacter || pending} onClick={onChat}>{pending ? "交流中..." : "和居民聊天"}</button>
-                {lastReply ? <p>{lastReply}</p> : <p>选择一个居民，输入想聊的话题。AI 开启后会以角色身份回复。</p>}
+                <p className="ai-usage-note">居民回复会调用管理员配置的模型生成，可能消耗额度。</p>
+                <Textarea value={chatText} onChange={(event) => setChatText(event.target.value)} />
+                <Button type="button" disabled={!activeCharacter || pending} onClick={onChat}>{pending ? "交流中..." : "和居民聊天"}</Button>
+                {lastReply ? <p>{lastReply}</p> : <p>选择一个居民，输入想聊的话题。启用后会以角色身份回复。</p>}
             </div>
         </div>
     );
@@ -177,7 +210,7 @@ export function EventCard({ event, pending, save, onBack, onChoice }: { event: T
         <article className="event-card-main">
             <EventImage eventType={event.type} />
             <div className="event-card-header-row">
-                <div className="event-card-badge">{isAiEventType(event.type) ? "AI 事件" : formatEventType(event.type)}</div>
+                <div className="event-card-badge">{isAiEventType(event.type) ? "参谋事件" : formatEventType(event.type)}</div>
                 <span className="event-phase-badge">{event.result ? "行动结果" : hasChoices ? "选择分支" : "小镇记录"}</span>
             </div>
             <h3>{event.title}</h3>
@@ -191,7 +224,7 @@ export function EventCard({ event, pending, save, onBack, onChoice }: { event: T
                 </div>
             ) : null}
             <div className="event-card-footer">
-                <button className="game-secondary" onClick={onBack}>返回地图</button>
+                <Button type="button" variant="outline" className="game-secondary" onClick={onBack}>返回地图</Button>
                 {event.result ? <small>{getResultSummary(event)}</small> : <small>选择会消耗资源并推进小镇状态。</small>}
             </div>
         </article>
@@ -199,18 +232,18 @@ export function EventCard({ event, pending, save, onBack, onChoice }: { event: T
 }
 
 function ChoiceButton({ choice, disabled, save, onChoice }: { choice: NonNullable<TownEvent["choices"]>[number]; disabled: boolean; save: TownSave; onChoice: (choiceId: string) => void }) {
-    const affordability = getActionAffordability(save, choice.id);
-    const preview = getChoicePreview(save, choice.id);
+    const actionState = getActionState(save, choice.id);
     return (
-        <button className={`choice-${getChoiceTone(choice.id)}`} disabled={disabled || !affordability.canRun} title={affordability.reason} onClick={() => onChoice(choice.id)}>
+        <Button type="button" variant="ghost" className={`choice-${getChoiceTone(choice.id)}`} disabled={disabled || !actionState.canRun} title={actionState.disabledReason} onClick={() => onChoice(choice.id)}>
             <strong>{choice.label}</strong>
-            <small>{affordability.canRun ? choice.hint : affordability.reason}</small>
-            {preview.length ? <span className="choice-preview">{preview.join(" · ")}</span> : null}
-        </button>
+            <small>{actionState.canRun ? choice.hint : actionState.disabledReason}</small>
+            {actionState.preview.length ? <span className="choice-preview">{actionState.preview.join(" · ")}</span> : null}
+        </Button>
     );
 }
 
 function EventResultCard({ event }: { event: TownEvent }) {
+    const audit = event.result?.audit;
     return (
         <div className="event-result-card">
             <div>
@@ -218,53 +251,103 @@ function EventResultCard({ event }: { event: TownEvent }) {
                 <small>{getResultSummary(event)}</small>
             </div>
             <ResultBar event={event} />
+            {audit ? (
+                <div className="result-audit-panel">
+                    <div className="result-audit-meta">
+                        <span>{audit.action?.label ?? formatActionRef(event.type)}</span>
+                        <span>{formatAuditSource(audit.source)}</span>
+                        {audit.action?.choiceLabel ? <span>选择：{audit.action.choiceLabel}</span> : null}
+                        {audit.action?.buildingName ? <span>建筑：{audit.action.buildingName}</span> : null}
+                        {audit.action?.relationshipTargetName ? <span>居民：{audit.action.relationshipTargetName}</span> : null}
+                        {audit.budget ? <span>行动 {audit.budget.usedAfter}/{audit.budget.maxPerDay}</span> : null}
+                        {audit.model?.fallbackUsed ? <span>规则补位</span> : audit.model?.assisted ? <span>参谋生成</span> : null}
+                    </div>
+                    <div className="result-audit-grid">
+                        <AuditDelta label="金币" after={audit.after.coins} before={audit.before.coins} />
+                        <AuditDelta label="体力" after={audit.after.stamina} before={audit.before.stamina} />
+                        <AuditDelta label="声望" after={audit.after.reputation} before={audit.before.reputation} />
+                        <AuditDelta label="等级" after={audit.after.level} before={audit.before.level} />
+                    </div>
+                    {audit.resourceBreakdown?.length ? (
+                        <div className="result-breakdown-list">
+                            {audit.resourceBreakdown.slice(0, 5).map((item, index) => (
+                                <span className={item.value < 0 ? "negative" : item.value > 0 ? "positive" : ""} key={`${item.label}-${index}`}>
+                                    {item.label} {item.value ? `${item.value > 0 ? "+" : ""}${item.value}` : ""}<small>{item.detail}</small>
+                                </span>
+                            ))}
+                        </div>
+                    ) : null}
+                    <div className="result-rule-list">
+                        {audit.ruleRefs.map((rule) => <span key={rule}>{formatRuleRef(rule)}</span>)}
+                    </div>
+                    {audit.notes.length ? <p>{audit.notes.join(" · ")}</p> : null}
+                </div>
+            ) : null}
         </div>
     );
 }
 
+function AuditDelta({ after, before, label }: { after: number; before: number; label: string }) {
+    return <span>{label} <strong>{before} {"->"} {after}</strong></span>;
+}
+
 export function AiCompanion({ save, pending, onOpenAdvice }: { save: TownSave; pending: boolean; onOpenAdvice: () => void }) {
     return (
-        <button className={pending ? "ai-companion thinking" : "ai-companion"} onClick={onOpenAdvice}>
-            <AssetImage src={ASSETS.npcs.cat} alt="AI 小镇助手" className="ai-companion-avatar" fallback={<span>AI</span>} />
+        <Button type="button" variant="ghost" className={pending ? "ai-companion thinking" : "ai-companion"} onClick={onOpenAdvice}>
+            <AssetImage src={ASSETS.npcs.cat} alt="小镇参谋" className="ai-companion-avatar" fallback={<span>参谋</span>} />
             <span>
-                <strong>{pending ? "思考中..." : "小镇助手"}</strong>
+                <strong>{pending ? "思考中..." : "镇务参谋"}</strong>
                 <small>{createCompanionMessage(save)}</small>
             </span>
-        </button>
+        </Button>
     );
 }
 
 export function AiUsageConfirmCard({ onAccept, onCancel }: { onAccept: () => void; onCancel: () => void }) {
     return (
         <div className="ai-confirm-card">
-            <AssetImage src={ASSETS.npcs.cat} alt="AI 小镇助手" className="ai-confirm-avatar" fallback={<span>AI</span>} />
+            <AssetImage src={ASSETS.npcs.cat} alt="小镇参谋" className="ai-confirm-avatar" fallback={<span>参谋</span>} />
             <div>
-                <p className="game-eyebrow">小镇助手提示</p>
-                <h3>使用 AI 生成内容</h3>
-                <p>AI 内容会调用管理员配置的模型生成，可能消耗你的 AI 额度。</p>
+                <p className="game-eyebrow">镇务参谋提示</p>
+                <h3>生成今日计划</h3>
+                <p>镇务参谋会调用管理员配置的模型生成计划，可能消耗你的额度。</p>
                 <div className="panel-actions">
-                    <button className="game-primary" onClick={onAccept}>继续使用 AI</button>
-                    <button className="game-secondary" onClick={onCancel}>暂不使用</button>
+                    <Button type="button" variant="default" className="game-primary" onClick={onAccept}>继续</Button>
+                    <Button type="button" variant="outline" className="game-secondary" onClick={onCancel}>暂不使用</Button>
                 </div>
             </div>
         </div>
     );
 }
 
-export function AdvicePanel({ save, latestEvent }: { save: TownSave; latestEvent: TownEvent | null }) {
+export function AdvicePanel({ save, latestEvent, onRunRecommendedAction }: { save: TownSave; latestEvent: TownEvent | null; onRunRecommendedAction?: (action: string) => void }) {
     const plan = getStrategyPlan(save);
     const strategy = latestEvent?.type === "advice" ? latestEvent.result?.strategy : null;
     const advice = strategy?.summary ?? (latestEvent?.type === "advice" ? latestEvent.content : save.suggestion);
+    const recommendedAction = strategy?.action ? mapStrategyAction(strategy.action) : mapPlanAction(plan.actionLabel);
+    const recommendedActionState = recommendedAction ? getActionState(save, recommendedAction) : null;
+    const canRunRecommendedAction = Boolean(onRunRecommendedAction && recommendedActionState?.canRun);
+    const preview = recommendedActionState?.preview.length ? recommendedActionState.preview.join(" · ") : "查看当前目标后再行动";
     return (
         <div className="strategy-panel">
             <section className="strategy-hero">
-                <AssetImage src={ASSETS.npcs.cat} alt="AI 小镇助手" className="strategy-avatar" fallback={<span>AI</span>} />
+                <AssetImage src={ASSETS.npcs.cat} alt="小镇参谋" className="strategy-avatar" fallback={<span>参谋</span>} />
                 <div>
-                    <p className="game-eyebrow">AI 小镇助手</p>
-                    <h3>今日经营策略</h3>
+                    <p className="game-eyebrow">镇务参谋</p>
+                    <h3>今日计划</h3>
                     <p>{advice}</p>
-                    <p className="ai-usage-note">AI 建议会调用管理员配置的模型生成，可能消耗额度。</p>
+                    <p className="ai-usage-note">智能建议会调用管理员配置的模型生成，可能消耗额度。</p>
                 </div>
+            </section>
+            <section className={recommendedActionState?.canRun ? "strategy-action-card ready" : "strategy-action-card blocked"}>
+                <div>
+                    <span>推荐执行</span>
+                    <strong>{strategy?.action ?? plan.actionLabel}</strong>
+                    <p>{recommendedActionState?.canRun ? preview : recommendedActionState?.disabledReason ?? "当前没有可映射的推荐行动"}</p>
+                </div>
+                <Button type="button" variant="default" className="game-primary" disabled={!canRunRecommendedAction} title={recommendedActionState?.disabledReason ?? ""} onClick={() => {
+                    if (recommendedAction && recommendedActionState?.canRun) onRunRecommendedAction?.(recommendedAction);
+                }}>{recommendedActionState?.canRun ? "执行推荐行动" : "暂不可执行"}</Button>
             </section>
             {strategy ? (
                 <section className="strategy-detail-card">
@@ -308,6 +391,7 @@ export function TaskPanel({ save }: { save: TownSave }) {
     const weeklyGoal = worldState.weeklyGoal;
     const quest = worldState.mainQuest;
     const achievements = worldState.achievements ?? [];
+    const retention = worldState.retention;
     return (
         <div className="task-panel">
             <section className="task-section quest-section town-roadmap">
@@ -319,6 +403,17 @@ export function TaskPanel({ save }: { save: TownSave }) {
                     <Stat label="成就徽章" value={achievements.length} />
                 </div>
             </section>
+            {retention ? (
+                <section className="task-section quest-section retention-plan">
+                    <div className="section-title"><GameIcon label="灯" /><h3>下次开张</h3></div>
+                    <div className="retention-plan-card">
+                        <span>连续开张 {retention.streak ? `${retention.streak} 天` : "未开始"} · {retention.todayQualified ? "今日已形成有效日程" : "今日还缺一次有效行动"}</span>
+                        <strong>Day {retention.nextHook.day} · {retention.nextHook.title}</strong>
+                        <p>{retention.nextHook.desc}</p>
+                        <small>{retention.nextHook.targetLabel} · {retention.nextHook.reason}</small>
+                    </div>
+                </section>
+            ) : null}
             <section className="task-section quest-section">
                 <div className="section-title"><GameIcon label="冠" /><h3>主线目标</h3></div>
                 {quest ? (
@@ -367,6 +462,95 @@ export function TaskPanel({ save }: { save: TownSave }) {
     );
 }
 
+export function CompactGoalBoard({ goal, onOpenEvents, onOpenSettlement, onOpenTasks }: { goal: TownGoalViewModel; onOpenEvents: () => void; onOpenSettlement: () => void; onOpenTasks: () => void }) {
+    return (
+        <div className="compact-goal-board">
+            <div className="goal-chip primary">
+                <span>推荐目标</span>
+                <strong>{goal.primary.title}</strong>
+                <small>{goal.primary.desc}</small>
+            </div>
+            <div className="goal-chip-strip">
+                <div className="goal-chip mini">
+                    <span>任务</span>
+                    <strong>{goal.dailyOpen}/{goal.dailyTotal}</strong>
+                    <small>{goal.nextTaskTitle}</small>
+                </div>
+                <div className="goal-chip mini">
+                    <span>行动</span>
+                    <strong>{goal.actionBudget.label}</strong>
+                    <small>已用 {goal.actionBudget.used}</small>
+                </div>
+                <div className="goal-chip mini retention-chip">
+                    <span>连续</span>
+                    <strong>{goal.retention.label}</strong>
+                    <small>{goal.retention.todayQualified ? "有效日程" : goal.retention.nextHook.title}</small>
+                </div>
+            </div>
+            <div className="goal-chip companion">
+                <span>镇务参谋</span>
+                <strong>{goal.companionMessage}</strong>
+                {goal.memoryPromiseCount ? <small>待回应约定 {goal.memoryPromiseCount} 条</small> : null}
+            </div>
+            <div className="goal-chip-actions">
+                <Button type="button" variant="ghost" onClick={onOpenTasks}><GameIcon label="任" /><span>任务</span></Button>
+                <Button type="button" variant="ghost" onClick={onOpenEvents}><GameIcon label="志" /><span>日志</span></Button>
+                <Button type="button" variant="ghost" onClick={onOpenSettlement}><GameIcon label="月" /><span>日结</span></Button>
+            </div>
+        </div>
+    );
+}
+
+function ActionPreviewList({ items }: { items: Array<{ title: string; state: ReturnType<typeof getActionState> } | null> }) {
+    const visibleItems = items.filter((item): item is { title: string; state: ReturnType<typeof getActionState> } => Boolean(item));
+    return (
+        <div className="action-preview-list">
+            {visibleItems.map(({ title, state }) => (
+                <div className={state.canRun ? "action-preview-row" : "action-preview-row blocked"} key={title}>
+                    <span>{title}</span>
+                    <strong>{state.canRun ? state.preview.join(" · ") || "可执行" : state.disabledReason}</strong>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function mapStrategyAction(action: string) {
+    if (action.includes("经营")) return "operate";
+    if (action.includes("拜访")) return "visit";
+    if (action.includes("探索")) return "explore";
+    if (action.includes("休息")) return "rest";
+    if (action.includes("升级")) return "upgrade";
+    if (action.includes("布置")) return "decorate";
+    return null;
+}
+
+function mapPlanAction(actionLabel: string) {
+    if (actionLabel.includes("经营")) return "operate";
+    if (actionLabel.includes("拜访")) return "visit";
+    if (actionLabel.includes("探索")) return "explore";
+    if (actionLabel.includes("休息")) return "rest";
+    if (actionLabel.includes("升级")) return "upgrade";
+    if (actionLabel.includes("布置")) return "decorate";
+    return null;
+}
+
+export function CommandSummary({ commands, pending, onRun }: { commands: TownCommandViewModel[]; pending: boolean; onRun: (action: string) => void }) {
+    return (
+        <div className="command-summary">
+            {commands.map((action) => (
+                <Button type="button" variant="ghost" className={`${action.recommended ? "recommended" : ""}${action.taskLinked ? " task-linked" : ""}`} key={action.id} disabled={pending || !action.canRun} title={action.disabledReason} onClick={() => onRun(action.id)}>
+                    {action.taskLinked ? <span className="action-badge">任务</span> : null}
+                    <GameIcon label={action.icon} />
+                    <strong>{action.title}</strong>
+                    <small>{action.canRun ? `${action.desc} · ${action.preview[0] ?? action.hint}` : action.disabledReason}</small>
+                    <em>{action.hint}</em>
+                </Button>
+            ))}
+        </div>
+    );
+}
+
 function ProgressRow({ label, progress, target }: { label: string; progress: number; target: number }) {
     const percent = target > 0 ? Math.min(100, Math.round((progress / target) * 100)) : 0;
     return (
@@ -400,6 +584,17 @@ export function SettlementPanel({ save }: { save: TownSave }) {
                 <Stat label="维护" value={`-${settlement.maintenance}`} />
                 <Stat label="声望" value={`+${settlement.reputation}`} />
             </div>
+            {settlement.breakdown?.length ? (
+                <div className="settlement-breakdown">
+                    {settlement.breakdown.map((item) => (
+                        <article className={item.value >= 0 ? "positive" : "negative"} key={`${item.label}-${item.detail}`}>
+                            <span>{item.label}</span>
+                            <strong>{item.value > 0 ? "+" : ""}{item.value}</strong>
+                            <small>{item.detail}</small>
+                        </article>
+                    ))}
+                </div>
+            ) : null}
             <p>{settlement.summary}</p>
         </div>
     );
@@ -407,11 +602,11 @@ export function SettlementPanel({ save }: { save: TownSave }) {
 
 export function GameModalShell({ children, title, onClose }: { children: React.ReactNode; title: string; onClose: () => void }) {
     return (
-        <motion.div className="game-modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.section className="game-modal" initial={{ opacity: 0, scale: 0.94, y: 18 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 12 }} transition={{ duration: 0.18 }}>
+        <motion.div className="game-drawer-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.section className="game-drawer" initial={{ opacity: 0, x: 48 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 36 }} transition={{ duration: 0.18 }}>
                 <header>
                     <h2>{title}</h2>
-                    <button aria-label="关闭" onClick={onClose}>×</button>
+                    <Button type="button" variant="ghost" size="icon-sm" aria-label="关闭" onClick={onClose}>×</Button>
                 </header>
                 {children}
             </motion.section>
@@ -457,9 +652,9 @@ export function GoalBoard({ save, onOpenEvents, onOpenSettlement, onOpenTasks }:
                 <ProgressRow label={unlock.label} progress={unlock.progress} target={unlock.target} />
             </section>
             <div className="goal-shortcuts">
-                <button onClick={onOpenTasks}><GameIcon label="任" /><span>任务</span></button>
-                <button onClick={onOpenEvents}><GameIcon label="志" /><span>日志</span></button>
-                <button onClick={onOpenSettlement}><GameIcon label="月" /><span>日结</span></button>
+                <Button type="button" variant="ghost" onClick={onOpenTasks}><GameIcon label="任" /><span>任务</span></Button>
+                <Button type="button" variant="ghost" onClick={onOpenEvents}><GameIcon label="志" /><span>日志</span></Button>
+                <Button type="button" variant="ghost" onClick={onOpenSettlement}><GameIcon label="月" /><span>日结</span></Button>
             </div>
             <FestivalGoalCard save={save} />
         </aside>
@@ -496,17 +691,52 @@ export function getModalTitle(modal: GameModal, building: TownBuilding | null, c
     if (modal === "building") return building?.name ?? "建筑";
     if (modal === "npc") return character ? `和${character.name}聊天` : "居民";
     if (modal === "events") return "小镇日志";
-    if (modal === "advice") return "AI 经营建议";
+    if (modal === "advice") return "今日计划";
     if (modal === "settlement") return "每日结算";
     if (modal === "tasks") return "任务与目标";
     if (modal === "event") return "小镇事件";
-    if (modal === "ai-confirm") return "AI 额度提示";
+    if (modal === "ai-confirm") return "额度提示";
     return "小镇";
 }
 
 function EventImage({ eventType }: { eventType: string }) {
-    const src = eventType === "operate" || eventType === "upgrade" ? ASSETS.screenshots.kitchen : eventType === "chat" || eventType === "visit" || eventType === "relationship" || eventType === "npc_story" ? ASSETS.screenshots.npc : eventType === "explore" || eventType === "unlock" || eventType === "festival" ? ASSETS.screenshots.nightEvent : ASSETS.screenshots.town;
+    const src = eventType === "operate" || eventType === "upgrade" ? ASSETS.screenshots.kitchen : eventType === "chat" || eventType === "visit" || eventType === "relationship" || eventType === "npc_story" || eventType === "memory_promise" ? ASSETS.screenshots.npc : eventType === "explore" || eventType === "unlock" || eventType === "festival" ? ASSETS.screenshots.nightEvent : ASSETS.screenshots.town;
     return <AssetImage src={src} alt="事件插图" className="event-image" />;
+}
+
+function formatRuleRef(rule: string) {
+    if (rule === "rule:resource-delta") return "资源结算";
+    if (rule === "rule:daily-settlement") return "每日结算";
+    if (rule === "rule:building-income") return "建筑收入";
+    if (rule === "rule:building-maintenance") return "建筑维护";
+    if (rule === "rule:building-upgrade") return "建筑升级";
+    if (rule === "rule:strategy-advice") return "今日计划";
+    if (rule === "rule:relationship-target") return "居民关系";
+    if (rule === "rule:daily-action-budget") return "行动预算";
+    if (rule === "rule:npc-memory") return "居民记忆";
+    if (rule === "model:assisted") return "参谋生成";
+    if (rule === "model:fallback") return "规则补位";
+    if (rule.startsWith("action:")) return `行动：${formatActionRef(rule.slice("action:".length))}`;
+    if (rule.startsWith("choice:")) return "事件选择";
+    if (rule.startsWith("building:")) return "建筑目标";
+    return rule;
+}
+
+function formatAuditSource(source: string) {
+    if (source === "model-assisted") return "参谋参与";
+    if (source === "settlement") return "日结规则";
+    return "固定规则";
+}
+
+function formatActionRef(action: string) {
+    if (action === "operate") return "经营";
+    if (action === "visit") return "拜访";
+    if (action === "decorate") return "布置";
+    if (action === "explore") return "探索";
+    if (action === "rest") return "休息";
+    if (action === "upgrade") return "升级";
+    if (action === "advice") return "计划";
+    return action;
 }
 
 export function ResultBar({ event }: { event: TownEvent }) {

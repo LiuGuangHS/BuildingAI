@@ -6,7 +6,7 @@ export function createTownSave(name?: string) {
 }
 
 export function listTownSaves() {
-    return apiHttpClient.get<TownSaveListResult>("/ai-town/saves");
+    return apiHttpClient.get<TownSaveListResult>("/ai-town/saves", { silent: true });
 }
 
 export function getTownSave(saveId: string) {

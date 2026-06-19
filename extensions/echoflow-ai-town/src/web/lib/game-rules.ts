@@ -21,7 +21,7 @@ export function formatRequirement(type: string) {
 
 export function resolveEventScene(eventType?: string): "town" | "kitchen" | "npc" | "night" {
     if (eventType === "operate" || eventType === "upgrade") return "kitchen";
-    if (eventType === "visit" || eventType === "chat" || eventType === "relationship" || eventType === "npc_story") return "npc";
+    if (eventType === "visit" || eventType === "chat" || eventType === "relationship" || eventType === "npc_story" || eventType === "memory_promise") return "npc";
     if (eventType === "explore" || eventType === "unlock" || eventType === "festival") return "night";
     return "town";
 }
@@ -47,7 +47,7 @@ export function groupEvents(events: TownEvent[]) {
     const groups = [
         { title: "今日事件", match: (event: TownEvent) => ["operate", "visit", "decorate", "explore", "rest", "upgrade"].includes(event.type), events: [] as TownEvent[] },
         { title: "目标推进", match: (event: TownEvent) => ["task", "weekly", "quest", "achievement", "unlock"].includes(event.type), events: [] as TownEvent[] },
-        { title: "居民与 AI", match: (event: TownEvent) => ["chat", "advice", "relationship", "npc_story"].includes(event.type), events: [] as TownEvent[] },
+        { title: "居民与参谋", match: (event: TownEvent) => ["chat", "advice", "relationship", "npc_story", "memory_promise"].includes(event.type), events: [] as TownEvent[] },
         { title: "小镇活动", match: (event: TownEvent) => ["festival"].includes(event.type), events: [] as TownEvent[] },
         { title: "小镇记录", match: () => true, events: [] as TownEvent[] },
     ];
@@ -68,7 +68,7 @@ export function formatEventType(type: string) {
         rest: "日结事件",
         upgrade: "建筑升级",
         chat: "居民对话",
-        advice: "AI 建议",
+        advice: "今日计划",
         unlock: "区域解锁",
         task: "任务完成",
         weekly: "周目标",
@@ -76,6 +76,7 @@ export function formatEventType(type: string) {
         achievement: "成就达成",
         relationship: "关系升温",
         npc_story: "居民支线",
+        memory_promise: "记忆回响",
         festival: "小镇活动",
     };
     return labels[type] ?? type;
@@ -138,9 +139,14 @@ export function getBuildingActionCopy(buildingId: string) {
 export function getRecommendedTarget(save: TownSave | null) {
     if (!save) return null;
     if (save.stamina < 30) return "rest";
+    const memoryTarget = getPendingMemoryPromiseCharacter(save);
+    if (memoryTarget) return memoryTarget.id;
+    const taskTarget = getOpenTaskTarget(save);
+    if (taskTarget) return taskTarget;
     if (save.coins < 80) return "restaurant";
+    const hookTarget = getRetentionHookTarget(save);
+    if (hookTarget) return hookTarget;
     if (save.worldState.weather === "小雨") return save.characters.find((character) => character.role.includes("花店"))?.id ?? "florist";
-    if ((save.worldState.dailyTasks ?? []).some((task) => !task.completed && task.type === "explore")) return "square";
     return "florist";
 }
 
@@ -152,6 +158,9 @@ export function getRecommendedAction(save: TownSave | null, recommendedTarget: s
         if (task.type === "earnCoins") return "operate";
         if (task.type === "gainReputation") return "visit";
     }
+    const retentionAction = save.worldState.retention?.nextHook?.action;
+    if (retentionAction && retentionAction !== "chat") return retentionAction;
+    if (retentionAction === "chat") return "visit";
     if (recommendedTarget === "restaurant") return "operate";
     if (recommendedTarget === "florist") return "visit";
     if (recommendedTarget === "square") return "explore";
@@ -171,7 +180,7 @@ export function getStrategyPlan(save: TownSave) {
         actionLabel: action ? labels[action] ?? action : "自由经营",
         reason: getStrategyReason(save, action),
         targetLabel: targetCharacter?.name ?? targetBuilding?.name ?? (target === "rest" ? "休息日程" : "小镇地图"),
-        targetHint: targetCharacter ? `${targetCharacter.name}当前是${getRelationshipLevel(targetCharacter.relationship)}关系，适合继续培养。` : targetBuilding ? `${targetBuilding.name} Lv.${targetBuilding.level}，${getBuildingStatus(save, targetBuilding)}。` : "根据今日状态灵活选择下一步。",
+        targetHint: targetCharacter ? getCharacterStrategyHint(targetCharacter) : targetBuilding ? `${targetBuilding.name} Lv.${targetBuilding.level}，${getBuildingStatus(save, targetBuilding)}。` : "根据今日状态灵活选择下一步。",
         riskLabel: risk.label,
         riskHint: risk.hint,
     };
@@ -180,6 +189,9 @@ export function getStrategyPlan(save: TownSave) {
 function getStrategyReason(save: TownSave, action: string | null) {
     const task = save.worldState.dailyTasks?.find((item) => !item.completed);
     if (task) return `优先完成今日任务“${task.title}”，可以稳定获得奖励。`;
+    const memoryTarget = getPendingMemoryPromiseCharacter(save);
+    if (memoryTarget && action === "visit") return `${memoryTarget.name}还有一条未兑现约定，拜访能让记忆回到今天的行动循环。`;
+    if (save.worldState.retention?.nextHook && action === save.worldState.retention.nextHook.action) return save.worldState.retention.nextHook.reason;
     if (action === "operate") return "金币偏低或餐馆收益较高，先保证现金流最稳。";
     if (action === "visit") return "当前天气和居民状态适合社交，可以推进关系与声望。";
     if (action === "explore") return "探索能发现新线索，也更容易推动区域解锁。";
@@ -213,15 +225,18 @@ export function getChoiceTone(choiceId: string) {
     return "safe";
 }
 
-export function getChoicePreview(save: TownSave, choiceId: string) {
-    const cost = getActionCost(save, choiceId);
+export function getChoicePreview(save: TownSave, choiceId: string, buildingId?: string) {
+    const cost = getActionCost(save, choiceId, buildingId);
     const items: string[] = [];
     if (cost.stamina) items.push(`体力 ${cost.stamina}`);
     if (cost.coins) items.push(`金币 ${cost.coins}`);
     if (choiceId === "operate") items.push("金币 +");
     if (choiceId === "visit") items.push("关系 +");
     if (choiceId === "explore") items.push("线索 +");
+    if (choiceId === "decorate") items.push("声望 +");
+    if (choiceId === "upgrade") items.push("建筑收益 +");
     if (choiceId === "rest") items.push("明天 +1");
+    if (["visit", "decorate", "explore"].includes(choiceId) && getMemoryPromiseCount(save) > 0) items.push("记忆回响");
     return items;
 }
 
@@ -260,9 +275,13 @@ export function getNextUnlockGoal(save: TownSave) {
 export function createCompanionMessage(save: TownSave) {
     const task = save.worldState.dailyTasks?.find((item) => !item.completed);
     if (save.stamina < 30) return "体力偏低，适合休息或轻量拜访。";
+    const memoryTarget = getPendingMemoryPromiseCharacter(save);
+    if (memoryTarget) return `${memoryTarget.name}还记着一个约定，今天适合去回应。`;
+    const hook = save.worldState.retention?.nextHook;
+    if (hook) return `${hook.title}：${hook.targetLabel}`;
     if (save.worldState.weather === "小雨") return "今天小雨，居民更愿意聊天。";
     if (task) return `今日可先完成：${task.title}`;
-    return save.suggestion.replace(/^AI 建议：/, "");
+    return save.suggestion.replace(/^AI 建议：/, "").replace(/^今日计划：/, "");
 }
 
 export function getActionAffordability(save: TownSave, action: string, buildingId?: string): { canRun: boolean; reason: string } {
@@ -293,4 +312,43 @@ function getWeatherExploreStaminaCost(weather?: string) {
     if (weather === "小雨") return 3;
     if (weather === "大风") return 4;
     return 0;
+}
+
+export function getPendingMemoryPromiseCharacter(save: TownSave | null) {
+    if (!save) return null;
+    return save.characters
+        .filter((character) => (character.memory?.promises?.length ?? 0) > 0)
+        .sort((a, b) => b.relationship - a.relationship)[0] ?? null;
+}
+
+export function getMemoryPromiseCount(save: TownSave | null) {
+    if (!save) return 0;
+    return save.characters.reduce((total, character) => total + (character.memory?.promises?.length ?? 0), 0);
+}
+
+function getOpenTaskTarget(save: TownSave) {
+    const task = save.worldState.dailyTasks?.find((item) => !item.completed);
+    if (!task) return null;
+    if (task.type === "operate" || task.type === "earnCoins") return "restaurant";
+    if (task.type === "visit" || task.type === "chat" || task.type === "decorate" || task.type === "gainReputation") return "florist";
+    if (task.type === "explore") return "square";
+    if (task.type === "upgrade") return save.worldState.buildings.find((building) => isBuildingUpgradeable(save, building))?.id ?? "restaurant";
+    return null;
+}
+
+export function getRetentionHookTarget(save: TownSave | null) {
+    const hook = save?.worldState.retention?.nextHook;
+    if (!hook) return null;
+    if (hook.target) return hook.target;
+    if (hook.action === "operate") return "restaurant";
+    if (hook.action === "visit" || hook.action === "decorate" || hook.action === "chat") return "florist";
+    if (hook.action === "explore") return "square";
+    if (hook.action === "rest") return "rest";
+    return null;
+}
+
+function getCharacterStrategyHint(character: TownCharacter) {
+    const pendingPromise = character.memory?.promises?.[0];
+    if (pendingPromise) return `${character.name}还记着“${pendingPromise}”，拜访可能触发记忆回响。`;
+    return `${character.name}当前是${getRelationshipLevel(character.relationship)}关系，适合继续培养。`;
 }
