@@ -1,7 +1,13 @@
 import { lookup } from "node:dns/promises";
 import type { LookupAddress } from "node:dns";
 
-import { assertSafePushEndpoint } from "./web-push.service";
+import { assertSafePushEndpoint } from "./web-push-endpoint.util";
+
+jest.mock("@buildingai/errors", () => ({
+    HttpErrorFactory: {
+        badRequest: (message: string) => new Error(message),
+    },
+}));
 
 jest.mock("node:dns/promises", () => ({
     lookup: jest.fn(),

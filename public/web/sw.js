@@ -27,10 +27,11 @@ self.addEventListener("push", (event) => {
   const title = data.title || "EchoFlowAI";
   const options = {
     body: data.body || "任务状态已更新",
-    icon: "/pwa-192x192.png",
+    icon: data.icon || "/pwa-192x192.png",
     badge: "/pwa-192x192.png",
     data: {
       url: data.url || "/",
+      notificationId: data.notificationId,
     },
   };
 
@@ -41,7 +42,22 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  let targetUrl = self.location.origin + "/";
+  try {
+    const rawUrl = String(event.notification.data?.url || "/");
+    const parsedUrl = new URL(rawUrl, self.location.origin);
+    if (
+      (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+      parsedUrl.origin === self.location.origin &&
+      !parsedUrl.username &&
+      !parsedUrl.password &&
+      !rawUrl.trim().startsWith("//")
+    ) {
+      targetUrl = parsedUrl.href;
+    }
+  } catch {
+    targetUrl = self.location.origin + "/";
+  }
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
