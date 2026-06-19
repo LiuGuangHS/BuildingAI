@@ -15,6 +15,7 @@ import type {
 } from "@buildingai/core/modules";
 import { WechatOaService } from "@common/modules/wechat/services/wechatoa.service";
 import { Injectable, Logger } from "@nestjs/common";
+import { createHash } from "node:crypto";
 
 import {
     CreateBusinessNotificationDto,
@@ -87,6 +88,25 @@ type NotificationPreferences = {
     disabledScenes: string[];
 };
 
+const MAX_NOTIFICATION_DATA_BYTES = 16 * 1024;
+const FIELD_LIMITS = {
+    title: 128,
+    type: 32,
+    extensionId: 64,
+    sceneCode: 96,
+    sourceType: 64,
+    sourceId: 96,
+    dedupeKey: 160,
+    level: 16,
+    linkUrl: 512,
+    sceneName: 64,
+    sceneDescription: 1000,
+    contentTemplate: 4000,
+    wechatTemplateId: 128,
+    wechatFieldKey: 64,
+    wechatFieldTemplate: 256,
+} as const;
+
 function normalizeChannels(channels?: string[] | null): NotificationChannel[] {
     const allowed = new Set<NotificationChannel>([
         "in_app",
@@ -106,7 +126,52 @@ function normalizeSceneChannels(channels?: string[] | null) {
     return normalized;
 }
 
-function normalizeNotificationLinkUrl(linkUrl?: string | null) {
+function normalizeStringField(
+    value: string | null | undefined,
+    maxLength: number,
+    label: string,
+) {
+    const normalized = value?.trim();
+    if (!normalized) return null;
+    if (normalized.length > maxLength) {
+        throw HttpErrorFactory.badRequest(`${label}不能超过 ${maxLength} 个字符`);
+    }
+    return normalized;
+}
+
+function normalizeNullableText(value: string | null | undefined, maxLength: number, label: string) {
+    const normalized = value?.trim();
+    if (!normalized) return null;
+    if (normalized.length > maxLength) {
+        throw HttpErrorFactory.badRequest(`${label}不能超过 ${maxLength} 个字符`);
+    }
+    return normalized;
+}
+
+export function normalizeDedupeKey(value?: string | null) {
+    const normalized = value?.trim();
+    if (!normalized) return null;
+    if (normalized.length <= FIELD_LIMITS.dedupeKey) return normalized;
+
+    const digest = createHash("sha256").update(normalized).digest("hex").slice(0, 32);
+    const prefix = normalized.slice(0, FIELD_LIMITS.dedupeKey - digest.length - 1);
+    return `${prefix}:${digest}`;
+}
+
+export function normalizeNotificationData(data: Record<string, unknown>) {
+    let json: string;
+    try {
+        json = JSON.stringify(data);
+    } catch {
+        throw HttpErrorFactory.badRequest("通知扩展数据必须是可序列化 JSON");
+    }
+    if (Buffer.byteLength(json, "utf8") > MAX_NOTIFICATION_DATA_BYTES) {
+        throw HttpErrorFactory.badRequest("通知扩展数据过大");
+    }
+    return JSON.parse(json) as Record<string, unknown>;
+}
+
+export function normalizeNotificationLinkUrl(linkUrl?: string | null) {
     const trimmed = linkUrl?.trim();
     if (!trimmed) return null;
     if (/[\u0000-\u001F\u007F]/.test(trimmed)) {
@@ -115,6 +180,9 @@ function normalizeNotificationLinkUrl(linkUrl?: string | null) {
     if (trimmed.startsWith("/")) {
         if (trimmed.startsWith("//")) {
             throw HttpErrorFactory.badRequest("通知跳转链接不能使用协议相对地址");
+        }
+        if (trimmed.length > FIELD_LIMITS.linkUrl) {
+            throw HttpErrorFactory.badRequest(`通知跳转链接不能超过 ${FIELD_LIMITS.linkUrl} 个字符`);
         }
         return trimmed;
     }
@@ -131,10 +199,14 @@ function normalizeNotificationLinkUrl(linkUrl?: string | null) {
     if (url.username || url.password) {
         throw HttpErrorFactory.badRequest("通知跳转链接不能包含凭据");
     }
-    return url.toString();
+    const normalized = url.toString();
+    if (normalized.length > FIELD_LIMITS.linkUrl) {
+        throw HttpErrorFactory.badRequest(`通知跳转链接不能超过 ${FIELD_LIMITS.linkUrl} 个字符`);
+    }
+    return normalized;
 }
 
-function normalizeNotificationLinkTemplate(template?: string | null) {
+export function normalizeNotificationLinkTemplate(template?: string | null) {
     const trimmed = template?.trim();
     if (!trimmed) return null;
     if (!trimmed.includes("{{")) {
@@ -151,6 +223,36 @@ function normalizeNotificationLinkTemplate(template?: string | null) {
         }
     }
     return trimmed;
+}
+
+export function normalizeWechatTemplateConfig(template?: Record<string, unknown> | null) {
+    if (!template || typeof template !== "object") return {};
+    const result: Record<string, unknown> = {};
+    const templateId = normalizeStringField(
+        typeof template.templateId === "string" ? template.templateId : null,
+        FIELD_LIMITS.wechatTemplateId,
+        "微信模板 ID",
+    );
+    if (templateId) result.templateId = templateId;
+    if (typeof template.url === "string") {
+        result.url = normalizeNotificationLinkTemplate(template.url);
+    }
+    if (template.fields && typeof template.fields === "object" && !Array.isArray(template.fields)) {
+        result.fields = Object.entries(template.fields as Record<string, unknown>).reduce<Record<string, string>>(
+            (fields, [key, value]) => {
+                const fieldKey = normalizeStringField(key, FIELD_LIMITS.wechatFieldKey, "微信模板字段名");
+                if (!fieldKey) return fields;
+                fields[fieldKey] = normalizeStringField(
+                    String(value ?? ""),
+                    FIELD_LIMITS.wechatFieldTemplate,
+                    "微信模板字段",
+                ) || "";
+                return fields;
+            },
+            {},
+        );
+    }
+    return result;
 }
 
 function renderTemplate(template: string | null | undefined, payload: Record<string, unknown>) {
@@ -235,7 +337,11 @@ export class NotificationService implements ExtensionNotificationPort {
     }
 
     async createBusinessNotification(dto: CreateBusinessNotificationDto) {
-        const sceneCode = dto.sceneCode || dto.type || "system";
+        const sceneCode = normalizeStringField(
+            dto.sceneCode || dto.type || "system",
+            FIELD_LIMITS.sceneCode,
+            "通知场景编码",
+        ) || "system";
         const scene = await this.getScene(sceneCode);
         if (scene && !scene.isEnabled) {
             return null;
@@ -243,27 +349,34 @@ export class NotificationService implements ExtensionNotificationPort {
         if (scene?.userConfigurable && await this.isSceneDisabledForUser(dto.userId, scene.sceneCode)) {
             return null;
         }
-        const extensionId = dto.extensionId || scene?.extensionId || null;
+        const extensionId = normalizeStringField(
+            dto.extensionId || scene?.extensionId,
+            FIELD_LIMITS.extensionId,
+            "来源插件 ID",
+        );
+        const sourceType = normalizeStringField(dto.sourceType, FIELD_LIMITS.sourceType, "业务来源类型");
+        const sourceId = normalizeStringField(dto.sourceId, FIELD_LIMITS.sourceId, "业务来源 ID");
+        const dedupeKey = normalizeDedupeKey(dto.dedupeKey);
         const requestedChannels: string[] = dto.channels || scene?.channels || ["in_app", "web_push"];
         const channels = normalizeSceneChannels(requestedChannels);
         const siteName = await this.getSiteName();
-        const data = {
+        const data = normalizeNotificationData({
             ...(dto.data || {}),
             siteName,
             extensionId,
             sceneCode,
-            sourceType: dto.sourceType,
-            sourceId: dto.sourceId,
-            dedupeKey: dto.dedupeKey,
-        };
+            sourceType,
+            sourceId,
+            dedupeKey,
+        });
 
-        if (dto.dedupeKey) {
+        if (dedupeKey) {
             const existing = await this.notificationRepository
                 .createQueryBuilder("notification")
                 .where("notification.user_id = :userId", { userId: dto.userId })
                 .andWhere(
                     "(notification.dedupe_key = :dedupeKey OR notification.data ->> 'dedupeKey' = :dedupeKey)",
-                    { dedupeKey: dto.dedupeKey },
+                    { dedupeKey },
                 )
                 .getOne();
             if (existing) {
@@ -271,13 +384,25 @@ export class NotificationService implements ExtensionNotificationPort {
             }
         }
 
-        const title =
-            dto.title || renderTemplate(scene?.titleTemplate, data) || `${siteName} 通知`;
+        const title = normalizeStringField(
+            dto.title || renderTemplate(scene?.titleTemplate, data) || `${siteName} 通知`,
+            FIELD_LIMITS.title,
+            "通知标题",
+        ) || `${siteName} 通知`;
         const content = dto.content || renderTemplate(scene?.contentTemplate, data) || null;
         const linkUrl = normalizeNotificationLinkUrl(
             dto.linkUrl || renderTemplate(scene?.linkUrlTemplate, data),
         );
-        const notificationType = dto.type || extensionId || (sceneCode.length <= 32 ? sceneCode : "business");
+        const notificationType = normalizeStringField(
+            dto.type || extensionId || (sceneCode.length <= 32 ? sceneCode : "business"),
+            FIELD_LIMITS.type,
+            "通知类型",
+        ) || "business";
+        const level = normalizeStringField(
+            dto.level || scene?.level || "info",
+            FIELD_LIMITS.level,
+            "通知等级",
+        ) || "info";
         let notification: Notification;
         try {
             notification = await this.notificationRepository.save(
@@ -288,17 +413,17 @@ export class NotificationService implements ExtensionNotificationPort {
                     type: notificationType,
                     extensionId,
                     sceneCode,
-                    sourceType: dto.sourceType || null,
-                    sourceId: dto.sourceId || null,
-                    dedupeKey: dto.dedupeKey || null,
-                    level: dto.level || scene?.level || "info",
+                    sourceType,
+                    sourceId,
+                    dedupeKey,
+                    level,
                     linkUrl,
                     data,
                 }),
             );
         } catch (error) {
-            if (dto.dedupeKey && isUniqueViolation(error)) {
-                const existing = await this.findExistingByDedupeKey(dto.userId, dto.dedupeKey);
+            if (dedupeKey && isUniqueViolation(error)) {
+                const existing = await this.findExistingByDedupeKey(dto.userId, dedupeKey);
                 if (existing) return existing;
             }
             throw error;
@@ -316,24 +441,34 @@ export class NotificationService implements ExtensionNotificationPort {
     async registerScenes(extensionId: string, scenes: RegisterNotificationSceneInput[]) {
         await this.ensureDefaultScenes();
         for (const scene of scenes) {
-            if (!scene.sceneCode.startsWith(`${extensionId}.`)) {
+            const sceneCode = normalizeStringField(scene.sceneCode, FIELD_LIMITS.sceneCode, "通知场景编码");
+            if (!sceneCode?.startsWith(`${extensionId}.`)) {
                 throw HttpErrorFactory.badRequest("插件通知场景编码必须带插件命名空间");
             }
 
             const existing = await this.notificationSceneRepository.findOne({
-                where: { sceneCode: scene.sceneCode },
+                where: { sceneCode },
             });
             const payload = {
-                sceneCode: scene.sceneCode,
-                name: scene.name,
-                description: scene.description ?? null,
+                sceneCode,
+                name: normalizeStringField(scene.name, FIELD_LIMITS.sceneName, "通知场景名称") || sceneCode,
+                description: normalizeNullableText(
+                    scene.description,
+                    FIELD_LIMITS.sceneDescription,
+                    "通知场景说明",
+                ),
                 extensionId,
-                level: scene.level || "info",
+                level: normalizeStringField(scene.level || "info", FIELD_LIMITS.level, "通知等级") || "info",
                 channels: normalizeSceneChannels(scene.channels?.length ? scene.channels : ["in_app", "web_push"]),
-                titleTemplate: scene.titleTemplate,
-                contentTemplate: scene.contentTemplate ?? null,
+                titleTemplate: normalizeStringField(scene.titleTemplate, FIELD_LIMITS.title, "通知标题模板")
+                    || "{{siteName}} 通知",
+                contentTemplate: normalizeNullableText(
+                    scene.contentTemplate,
+                    FIELD_LIMITS.contentTemplate,
+                    "通知内容模板",
+                ),
                 linkUrlTemplate: normalizeNotificationLinkTemplate(scene.linkUrlTemplate),
-                wechatTemplate: scene.wechatTemplate ?? {},
+                wechatTemplate: normalizeWechatTemplateConfig(scene.wechatTemplate),
                 userConfigurable: scene.userConfigurable ?? true,
             };
 
@@ -509,14 +644,34 @@ export class NotificationService implements ExtensionNotificationPort {
 
         Object.assign(scene, {
             ...(dto.isEnabled !== undefined ? { isEnabled: dto.isEnabled } : {}),
-            ...(dto.level !== undefined ? { level: dto.level } : {}),
+            ...(dto.level !== undefined
+                ? { level: normalizeStringField(dto.level, FIELD_LIMITS.level, "通知等级") }
+                : {}),
             ...(dto.channels !== undefined ? { channels: normalizeSceneChannels(dto.channels) } : {}),
-            ...(dto.titleTemplate !== undefined ? { titleTemplate: dto.titleTemplate } : {}),
-            ...(dto.contentTemplate !== undefined ? { contentTemplate: dto.contentTemplate } : {}),
+            ...(dto.titleTemplate !== undefined
+                ? {
+                    titleTemplate: normalizeStringField(
+                        dto.titleTemplate,
+                        FIELD_LIMITS.title,
+                        "通知标题模板",
+                    ) || "{{siteName}} 通知",
+                }
+                : {}),
+            ...(dto.contentTemplate !== undefined
+                ? {
+                    contentTemplate: normalizeNullableText(
+                        dto.contentTemplate,
+                        FIELD_LIMITS.contentTemplate,
+                        "通知内容模板",
+                    ),
+                }
+                : {}),
             ...(dto.linkUrlTemplate !== undefined
                 ? { linkUrlTemplate: normalizeNotificationLinkTemplate(dto.linkUrlTemplate) }
                 : {}),
-            ...(dto.wechatTemplate !== undefined ? { wechatTemplate: dto.wechatTemplate } : {}),
+            ...(dto.wechatTemplate !== undefined
+                ? { wechatTemplate: normalizeWechatTemplateConfig(dto.wechatTemplate) }
+                : {}),
             ...(dto.userConfigurable !== undefined
                 ? { userConfigurable: dto.userConfigurable }
                 : {}),

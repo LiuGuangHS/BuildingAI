@@ -4,6 +4,7 @@ import { Repository } from "@buildingai/db/typeorm";
 import { DictService } from "@buildingai/dict";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { Injectable, Logger } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import type { LookupAddress } from "node:dns";
 import { isIP } from "node:net";
@@ -48,6 +49,17 @@ const DICT_GROUP = "notification";
 const VAPID_KEYS_KEY = "webPushVapidKeys";
 const VAPID_SUBJECT = "mailto:support@echoflow.com";
 const MAX_PUSH_ENDPOINT_LENGTH = 2048;
+const MAX_PUSH_USER_AGENT_LENGTH = 512;
+const ALLOWED_PUSH_ENDPOINT_HOSTS = [
+    "fcm.googleapis.com",
+    "updates.push.services.mozilla.com",
+    "updates-autopush.stage.mozaws.net",
+    "updates-autopush.dev.mozaws.net",
+    "web.push.apple.com",
+    "api.push.apple.com",
+    "wns.windows.com",
+    "notify.windows.com",
+];
 
 function generateVapidKeys(): VapidKeys {
     return webPush.generateVAPIDKeys();
@@ -67,20 +79,45 @@ function normalizeHostname(hostname: string) {
     return hostname.trim().toLowerCase().replace(/\.$/, "");
 }
 
+function describePushEndpoint(endpoint: string) {
+    let host = "unknown";
+    try {
+        host = normalizeHostname(new URL(endpoint).hostname) || "unknown";
+    } catch {
+        // Keep a stable fingerprint for malformed legacy records without storing the raw endpoint.
+    }
+    const fingerprint = createHash("sha256").update(endpoint).digest("hex").slice(0, 12);
+    return `${host}#${fingerprint}`;
+}
+
+function normalizePushErrorMessage(error: unknown, endpoint: string) {
+    const message = (error instanceof Error ? error.message : String(error))
+        .replaceAll(endpoint, describePushEndpoint(endpoint));
+    if (!message) return "Web Push 发送失败";
+    if (message.length > 300) return `${message.slice(0, 300)}...`;
+    return message;
+}
+
 function isPrivateOrReservedIpv4(address: string) {
     const parts = address.split(".").map((part) => Number(part));
     if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
         return true;
     }
 
-    const [a, b] = parts;
+    const [a, b, c] = parts;
     return (
         a === 0 ||
         a === 10 ||
         a === 127 ||
         a === 169 && b === 254 ||
         a === 172 && b >= 16 && b <= 31 ||
+        a === 192 && b === 0 && c === 0 ||
         a === 192 && b === 168 ||
+        a === 198 && (b === 18 || b === 19) ||
+        a === 100 && b >= 64 && b <= 127 ||
+        a === 192 && b === 0 && c === 2 ||
+        a === 198 && b === 51 && c === 100 ||
+        a === 203 && b === 0 && c === 113 ||
         a >= 224
     );
 }
@@ -106,7 +143,13 @@ function isPrivateOrReservedIp(address: string) {
     return true;
 }
 
-async function assertSafePushEndpoint(endpoint: string) {
+function isAllowedPushEndpointHostname(hostname: string) {
+    return ALLOWED_PUSH_ENDPOINT_HOSTS.some(
+        (allowed) => hostname === allowed || hostname.endsWith(`.${allowed}`),
+    );
+}
+
+export async function assertSafePushEndpoint(endpoint: string) {
     if (endpoint.length > MAX_PUSH_ENDPOINT_LENGTH) {
         throw HttpErrorFactory.badRequest("浏览器通知订阅地址过长");
     }
@@ -128,6 +171,9 @@ async function assertSafePushEndpoint(endpoint: string) {
     const hostname = normalizeHostname(url.hostname);
     if (!hostname || hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) {
         throw HttpErrorFactory.badRequest("浏览器通知订阅地址不能指向本机或内网");
+    }
+    if (!isAllowedPushEndpointHostname(hostname)) {
+        throw HttpErrorFactory.badRequest("浏览器通知订阅地址不是受支持的 Push 服务");
     }
     if (isIP(hostname) && isPrivateOrReservedIp(hostname)) {
         throw HttpErrorFactory.badRequest("浏览器通知订阅地址不能指向本机或内网");
@@ -186,7 +232,7 @@ export class WebPushService {
             endpoint: dto.endpoint,
             p256dh: dto.keys.p256dh,
             auth: dto.keys.auth,
-            userAgent,
+            userAgent: userAgent?.slice(0, MAX_PUSH_USER_AGENT_LENGTH),
             expiresAt: dto.expirationTime || null,
             isEnabled: true,
             failureCount: 0,
@@ -241,7 +287,7 @@ export class WebPushService {
             failures: results
                 .filter((item) => !item.sent)
                 .map((item) => ({
-                    endpoint: item.endpoint,
+                    endpoint: describePushEndpoint(item.endpoint),
                     statusCode: item.statusCode,
                     message: item.message || "Web Push 发送失败",
                 })),
@@ -316,7 +362,7 @@ export class WebPushService {
                 failedAt: new Date(),
                 failureCount: subscription.failureCount + 1,
             });
-            const message = error instanceof Error ? error.message : String(error);
+            const message = normalizePushErrorMessage(error, subscription.endpoint);
             this.logger.warn(message);
             return {
                 endpoint: subscription.endpoint,
