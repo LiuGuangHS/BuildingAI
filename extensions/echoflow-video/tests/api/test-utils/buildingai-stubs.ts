@@ -94,6 +94,45 @@ export function normalizeProviderConfig(config: Record<string, { value?: string 
     };
 }
 
+export function normalizePublicHttpUrl(value: string) {
+    const trimmed = value.trim().replace(/\/+$/, "");
+    if (!trimmed) throw new Error("Base URL 不能为空");
+
+    const url = new URL(trimmed);
+    if (!["http:", "https:"].includes(url.protocol)) {
+        throw new Error("Base URL 仅支持 http/https");
+    }
+    if (url.username || url.password) {
+        throw new Error("Base URL 不允许包含用户名或密码");
+    }
+
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (
+        host === "localhost" ||
+        host === "0.0.0.0" ||
+        host === "127.0.0.1" ||
+        host === "::1" ||
+        host.startsWith("10.") ||
+        host.startsWith("127.") ||
+        host.startsWith("169.254.") ||
+        host.startsWith("192.168.") ||
+        /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    ) {
+        throw new Error("Base URL 不允许指向本机或内网地址");
+    }
+
+    return trimmed;
+}
+
+export async function assertPublicHttpUrl(value: string) {
+    return normalizePublicHttpUrl(value);
+}
+
+export function isPrivateOrReservedIp() {
+    return false;
+}
+
 export class HttpError extends Error {
     constructor(
         message: string,

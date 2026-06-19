@@ -18,3 +18,9 @@ export {
 } from "./modules/notification/extension-notification.service";
 export { PublicUserService } from "./services/user.service";
 export { defineBuildingAITsupConfig } from "./tsup";
+export {
+    assertPublicHttpUrl,
+    isPrivateOrReservedIp,
+    normalizePublicHttpUrl,
+    type PublicHttpUrlOptions,
+} from "./utils/public-http-url";

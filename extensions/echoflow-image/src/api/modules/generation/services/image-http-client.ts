@@ -1,4 +1,5 @@
 import { HttpErrorFactory } from "@buildingai/errors";
+import { normalizePublicHttpUrl } from "@buildingai/extension-sdk";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -69,22 +70,7 @@ export async function requestImageResponseText(url: string, options: ImageReques
 }
 
 export function normalizeImageBaseURL(raw: string): string {
-    try {
-        const trimmed = raw.trim().replace(/\/+$/, "");
-        if (!trimmed) {
-            throw new Error("empty baseURL");
-        }
-        const url = new URL(trimmed);
-        if (!["http:", "https:"].includes(url.protocol)) {
-            throw new Error("unsupported protocol");
-        }
-        if (url.username || url.password) {
-            throw new Error("credentials not allowed");
-        }
-        return trimmed;
-    } catch {
-        throw HttpErrorFactory.badRequest("图片模型 Base URL 配置无效");
-    }
+    return normalizePublicHttpUrl(raw, { label: "图片模型 Base URL" });
 }
 
 export async function downloadReferenceImageFromUrl(url: string, maxBytes: number): Promise<DownloadedReferenceImage> {

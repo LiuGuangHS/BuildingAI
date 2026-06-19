@@ -4,7 +4,11 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { normalizeProviderConfig } from "@buildingai/extension-sdk";
+import {
+    assertPublicHttpUrl,
+    normalizeProviderConfig,
+    normalizePublicHttpUrl,
+} from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 
 import { ImageBillingRule } from "../../../db/entities/image-billing-rule.entity";
@@ -152,7 +156,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     async updateConfig(id: string, dto: UpdateModelConfigDto) {
         const config = await this.findByIdOrFail(id);
         this.assertSupportedModelConfig(config.model);
-        Object.assign(config, this.normalizeOperationalConfig(dto, config));
+        Object.assign(config, await this.normalizeOperationalConfig(dto, config));
         const saved = await this.modelConfigRepository.save(config);
         return this.toOperationalView(saved);
     }
@@ -161,7 +165,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         const config = await this.findByIdOrFail(id);
         this.assertSupportedModelConfig(config.model);
         const resolved = this.toResolvedConfig(config);
-        const [endpoint] = this.normalizeEndpointConfigs([endpointDto], config.endpoints ?? []);
+        const [endpoint] = await this.normalizeEndpointConfigsForSave([endpointDto], config.endpoints ?? []);
         const credential = await this.resolveEndpointCredential(endpoint);
         const { OpenAIImageClient } = await import("../../generation/services/openai-image-client");
         await new OpenAIImageClient({ apiKey: credential.apiKey, baseURL: credential.baseUrl }).testConnection(resolved.externalModelId, resolved.requestContract);
@@ -198,7 +202,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         }
         return {
             apiKey,
-            baseUrl: this.normalizeBaseUrl(baseUrl),
+            baseUrl: await assertPublicHttpUrl(baseUrl, { label: "Base URL" }),
         };
     }
 
@@ -278,7 +282,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         await this.schemaReadyPromise;
     }
 
-    private normalizeOperationalConfig(
+    private async normalizeOperationalConfig(
         dto: UpdateModelConfigDto,
         existing?: ImageModelConfig,
     ) {
@@ -307,7 +311,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
                 ...(existing.allowedParams ?? {}),
                 ...(dto.allowedParams ?? {}),
             },
-            endpoints: this.normalizeEndpointConfigs(dto.endpoints, existing.endpoints ?? []),
+            endpoints: await this.normalizeEndpointConfigsForSave(dto.endpoints, existing.endpoints ?? []),
             sortOrder: dto.sortOrder ?? existing.sortOrder ?? defaultConfig.sortOrder,
         };
     }
@@ -323,7 +327,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             secretId: endpoint.secretId?.trim() || undefined,
             secretName: endpoint.secretName?.trim() || undefined,
             baseUrlOverride: endpoint.baseUrlOverride
-                ? this.normalizeBaseUrl(endpoint.baseUrlOverride)
+                ? normalizePublicHttpUrl(endpoint.baseUrlOverride, { label: "Base URL" })
                 : existing[index]?.baseUrlOverride,
             enabled: endpoint.enabled ?? index === 0,
             priority: Number(endpoint.priority ?? 100 - index),
@@ -334,44 +338,17 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         }));
     }
 
-    private normalizeBaseUrl(value: string): string {
-        const trimmed = value.trim().replace(/\/+$/, "");
-        if (!trimmed) {
-            throw HttpErrorFactory.badRequest("Base URL 不能为空");
-        }
-        let url: URL;
-        try {
-            url = new URL(trimmed);
-        } catch {
-            throw HttpErrorFactory.badRequest("Base URL 格式不正确");
-        }
-        if (!["http:", "https:"].includes(url.protocol)) {
-            throw HttpErrorFactory.badRequest("Base URL 仅支持 http/https");
-        }
-        if (url.username || url.password) {
-            throw HttpErrorFactory.badRequest("Base URL 不允许包含用户名或密码");
-        }
-        if (this.isPrivateOrLocalHost(url.hostname)) {
-            throw HttpErrorFactory.badRequest("Base URL 不允许指向本机或内网地址");
-        }
-        return trimmed;
-    }
-
-    private isPrivateOrLocalHost(hostname: string): boolean {
-        const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-        return (
-            host === "localhost" ||
-            host === "0.0.0.0" ||
-            host === "127.0.0.1" ||
-            host === "::1" ||
-            host.endsWith(".local") ||
-            host.startsWith("10.") ||
-            host.startsWith("127.") ||
-            host.startsWith("169.254.") ||
-            host.startsWith("192.168.") ||
-            /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
-            /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    private async normalizeEndpointConfigsForSave(
+        endpoints: ImageModelEndpointDto[] | undefined,
+        existing: ImageModelEndpoint[],
+    ): Promise<ImageModelEndpoint[]> {
+        const normalized = this.normalizeEndpointConfigs(endpoints, existing);
+        await Promise.all(
+            normalized
+                .filter((endpoint) => endpoint.baseUrlOverride)
+                .map((endpoint) => assertPublicHttpUrl(endpoint.baseUrlOverride!, { label: "Base URL" })),
         );
+        return normalized;
     }
 
     private isSupportedModelConfig(model: string) {

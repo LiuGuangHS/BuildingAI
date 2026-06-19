@@ -95,6 +95,7 @@
 | 底层 AI | 只有做底层工作流封装时直接使用 `@buildingai/ai-sdk`。 | 普通插件绕开主站模型、Provider 和 Secret。 |
 | Provider Config | 从 `@buildingai/extension-sdk` 复用 `normalizeProviderConfig`，兼容 `apiKey/api_key`、`baseURL/baseUrl/base_url`、`webhookSecret` 等别名。 | 各插件重复维护 flatten helper。 |
 | Secret | 图像、视频模型接入点只保存 `secretId`、`secretName`、可选 `baseUrlOverride`、优先级、超时、重试和启用状态。 | 保存业务 API Key 明文、密文副本或写入 `.env`、源码、前端包。 |
+| Base URL | 图像、视频接入点保存、测试和运行时统一复用 `@buildingai/extension-sdk` 的 `normalizePublicHttpUrl` / `assertPublicHttpUrl`。 | 插件内重复维护 Base URL 协议、凭据、本机或内网判断。 |
 | 媒体模型 | 图像、视频采用插件内置固定模型目录；管理员只配置启用、展示名、默认参数、模型级计费和接入点。 | Console 手工新增协议模型、供应商或覆盖能力矩阵。 |
 | 能力矩阵 | capability 由协议适配层真实支持反推；Responses 生图不暴露 mask，Images 纯生成不暴露图生图/mask/多参考图。 | 前端展示尚未实现的编辑能力。 |
 | 计费 | 注册 `ExtensionBillingModule` 并使用 `ExtensionBillingService`，业务记录 ID 作为 `associationNo`，事务内传同一个 `EntityManager`。 | 直接修改用户余额或重复扣费。 |
@@ -143,6 +144,7 @@
 - 后端校验上传者、插件归属、大小、MIME/扩展名和 URL 格式后再处理文件。
 - 文件解析、导出、AI 生成等异步流程写回业务记录前重新读取记录并检查 `deletedAt`。
 - SSRF 防护默认拒绝任意外部 URL 指向本机或内网。
+- 管理员配置的第三方 Base URL 属于外部 URL，保存时和运行时都必须校验协议、凭据、本机/内网和 DNS 解析结果。
 - 已通过平台 `fileId`、上传者、插件归属、大小和 MIME 校验的插件上传文件，可以按本插件 `/uploads/` 路径允许本地或私有化部署域名。
 - Provider 返回结果 URL 不允许指向本机、内网、带凭据或非 http/https 协议。
 - `.gitignore` 保持忽略运行时 `storage/*`，但允许 `storage/static` 与必要 `.gitkeep` 入库。

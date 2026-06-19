@@ -73,6 +73,7 @@
 |---|---|
 | Secret | 接入点复用主站 Secret；插件只保存 `secretId`、`secretName` 和运行参数。 |
 | Provider Config | 通过 `normalizeProviderConfig()` 解析 `apiKey`、`baseURL` 等别名。 |
+| Base URL | 接入点保存、测试和运行时复用 `@buildingai/extension-sdk` 的 `normalizePublicHttpUrl` / `assertPublicHttpUrl`，防止各插件重复维护公网校验。 |
 | Billing | 使用 `ExtensionBillingModule` / `ExtensionBillingService` 做余额预检、预扣和失败退款。 |
 | Upload | 参考图优先使用平台 `fileId`；外部 URL 默认需通过风控与 SSRF 校验。 |
 | Notification | 通过 `ExtensionNotificationService` 注册图片生成成功、生成失败和崩溃超时失败场景；通知失败不回滚生成任务状态。 |
@@ -88,6 +89,7 @@
 | 用户端返回 | Web API 返回生成记录时剥离 `rawRequest`、`rawResponse`、`rawEvents` 和 `baseURL`。 |
 | Console 详情 | 可保留脱敏 raw 摘要，用于排障。 |
 | 接入点 | 不保存业务 API Key 明文或密文副本。 |
+| Base URL 覆盖 | 保存时和运行时都拒绝本机、内网、保留地址、带凭据 URL 和非 http/https 协议；域名按 DNS 解析结果校验。 |
 | 外部参考图 | 生产默认建议关闭外部 URL，优先平台上传 `fileId`。 |
 | Provider 结果 | URL 不允许指向本机、内网、带凭据或非 http/https 协议。 |
 | 删除保护 | 模型配置存在计费规则、策略、模板或生成历史引用时应停用而不是删除。 |

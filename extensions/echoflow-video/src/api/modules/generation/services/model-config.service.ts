@@ -4,7 +4,11 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { normalizeProviderConfig } from "@buildingai/extension-sdk";
+import {
+    assertPublicHttpUrl,
+    normalizeProviderConfig,
+    normalizePublicHttpUrl,
+} from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 
 import {
@@ -155,7 +159,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     async updateConfig(id: string, dto: UpdateVideoModelConfigDto) {
         const config = await this.findByIdOrFail(id);
         this.assertSupportedModelConfig(config.model);
-        Object.assign(config, this.normalizeOperationalConfig(dto, config));
+        Object.assign(config, await this.normalizeOperationalConfig(dto, config));
         const saved = await this.modelConfigRepository.save(config);
         return this.toOperationalView(saved);
     }
@@ -164,7 +168,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         const config = await this.findByIdOrFail(id);
         this.assertSupportedModelConfig(config.model);
         const resolved = this.toResolvedConfig(config);
-        const [endpoint] = this.normalizeEndpointConfigs([endpointDto], config.endpoints ?? []);
+        const [endpoint] = await this.normalizeEndpointConfigsForSave([endpointDto], config.endpoints ?? []);
         const credential = await this.resolveEndpointCredential(endpoint);
         const { VideoGatewayClient } = await import("./video-gateway-client.js");
         await new VideoGatewayClient(resolved, endpoint, credential.apiKey, credential.baseUrl).testConnection();
@@ -201,7 +205,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         }
         return {
             apiKey,
-            baseUrl: this.normalizeBaseUrl(baseUrl),
+            baseUrl: await assertPublicHttpUrl(baseUrl, { label: "Base URL" }),
         };
     }
 
@@ -266,7 +270,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         await this.schemaReadyPromise;
     }
 
-    private normalizeOperationalConfig(
+    private async normalizeOperationalConfig(
         dto: UpdateVideoModelConfigDto,
         existing?: VideoModelConfig,
     ) {
@@ -285,7 +289,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
             capabilities: defaultConfig.capabilities,
             defaultParams: this.normalizeDefaultParams(dto.defaultParams ?? existing.defaultParams, defaultConfig),
             endpoints: dto.endpoints
-                ? this.normalizeEndpointConfigs(dto.endpoints, existing.endpoints ?? [])
+                ? await this.normalizeEndpointConfigsForSave(dto.endpoints, existing.endpoints ?? [])
                 : this.normalizeEndpointConfigs(existing.endpoints ?? defaultConfig.endpoints, []),
             sortOrder: dto.sortOrder ?? existing.sortOrder ?? defaultConfig.sortOrder,
         };
@@ -365,7 +369,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
                 secretId: endpoint.secretId?.trim() || undefined,
                 secretName: endpoint.secretName?.trim() || undefined,
                 baseUrlOverride: endpoint.baseUrlOverride
-                    ? this.normalizeBaseUrl(endpoint.baseUrlOverride)
+                    ? normalizePublicHttpUrl(endpoint.baseUrlOverride, { label: "Base URL" })
                     : previous?.baseUrlOverride,
                 enabled: endpoint.enabled ?? true,
                 priority: this.normalizeInteger(endpoint.priority ?? 100 - index, 0, 100000, "接入点优先级"),
@@ -382,53 +386,25 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         return normalized;
     }
 
+    private async normalizeEndpointConfigsForSave(
+        endpoints: Array<VideoModelEndpoint | VideoModelEndpointDto> | undefined,
+        existing: VideoModelEndpoint[],
+    ): Promise<VideoModelEndpoint[]> {
+        const normalized = this.normalizeEndpointConfigs(endpoints, existing);
+        await Promise.all(
+            normalized
+                .filter((endpoint) => endpoint.baseUrlOverride)
+                .map((endpoint) => assertPublicHttpUrl(endpoint.baseUrlOverride!, { label: "Base URL" })),
+        );
+        return normalized;
+    }
+
     private maskEndpoints(endpoints: VideoModelEndpoint[]): VideoModelEndpoint[] {
         return endpoints.map((endpoint) => ({ ...endpoint }));
     }
 
     private hasUsableEndpoint(config: ResolvedVideoModelConfig): boolean {
         return (config.endpoints ?? []).some((endpoint) => endpoint.enabled && endpoint.secretId);
-    }
-
-    private normalizeBaseUrl(value?: string): string {
-        const trimmed = value?.trim().replace(/\/+$/, "") ?? "";
-        if (!trimmed) {
-            throw HttpErrorFactory.badRequest("Base URL 不能为空");
-        }
-
-        let url: URL;
-        try {
-            url = new URL(trimmed);
-        } catch {
-            throw HttpErrorFactory.badRequest("Base URL 格式不正确");
-        }
-        if (!["http:", "https:"].includes(url.protocol)) {
-            throw HttpErrorFactory.badRequest("Base URL 仅支持 http/https");
-        }
-        if (url.username || url.password) {
-            throw HttpErrorFactory.badRequest("Base URL 不允许包含用户名或密码");
-        }
-        if (this.isPrivateOrLocalHost(url.hostname)) {
-            throw HttpErrorFactory.badRequest("Base URL 不允许指向本机或内网地址");
-        }
-        return trimmed;
-    }
-
-    private isPrivateOrLocalHost(hostname: string): boolean {
-        const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-        return (
-            host === "localhost" ||
-            host === "0.0.0.0" ||
-            host === "127.0.0.1" ||
-            host === "::1" ||
-            host.endsWith(".local") ||
-            host.startsWith("10.") ||
-            host.startsWith("127.") ||
-            host.startsWith("169.254.") ||
-            host.startsWith("192.168.") ||
-            /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
-            /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
-        );
     }
 
     private normalizeInteger(value: number, min: number, max: number, label: string): number {
