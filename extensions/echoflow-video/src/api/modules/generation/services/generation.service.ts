@@ -1,12 +1,18 @@
 import { BaseService } from "@buildingai/base";
 import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants/shared/account-log.constants";
-import { ExtensionBillingService, PublicAiModelService } from "@buildingai/extension-sdk";
+import {
+    ExtensionBillingService,
+    ExtensionNotificationService,
+    PublicAiModelService,
+} from "@buildingai/extension-sdk";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { AccountLog, AiModel, File } from "@buildingai/db/entities";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThanOrEqual, Like, MoreThanOrEqual, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { Injectable, Logger } from "@nestjs/common";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import type { Queue } from "bullmq";
 
 import {
     VideoGeneration,
@@ -29,9 +35,14 @@ import { PromptOptimizationService } from "./prompt-optimization.service";
 import { ProviderConfigService } from "./provider-config.service";
 import { TemplateService } from "./template.service";
 import { VideoGatewayClient } from "./video-gateway-client";
+import { VIDEO_POLL_JOB, VIDEO_POLL_QUEUE } from "./video-poll-queue.constants";
+
+const VIDEO_POLL_DELAY_MS = 15_000;
+const VIDEO_POLL_JOB_PREFIX = "video-poll";
+const EXTENSION_ID = "echoflow-video";
 
 @Injectable()
-export class GenerationService extends BaseService<VideoGeneration> {
+export class GenerationService extends BaseService<VideoGeneration> implements OnModuleInit {
     protected readonly logger = new Logger(GenerationService.name);
 
     constructor(
@@ -46,13 +57,45 @@ export class GenerationService extends BaseService<VideoGeneration> {
         private readonly modelConfigService: ModelConfigService,
         private readonly billingRuleService: BillingRuleService,
         private readonly policyService: PolicyService,
+        private readonly notificationService: ExtensionNotificationService,
+        @InjectQueue(VIDEO_POLL_QUEUE)
+        private readonly videoPollQueue: Queue,
     ) {
         super(generationRepository);
+    }
+
+    async onModuleInit() {
+        await this.notificationService.registerScenes(EXTENSION_ID, [
+            {
+                sceneCode: `${EXTENSION_ID}.generation.succeeded`,
+                name: "视频生成完成",
+                description: "用户发起的视频生成任务处理成功。",
+                level: "success",
+                channels: ["in_app", "web_push", "wechat_oa_template"],
+                titleTemplate: "视频生成完成",
+                contentTemplate: "{{taskName}} 已处理完成，可前往查看结果。",
+                linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
+            },
+            {
+                sceneCode: `${EXTENSION_ID}.generation.failed`,
+                name: "视频生成失败",
+                description: "用户发起的视频生成任务处理失败。",
+                level: "error",
+                channels: ["in_app", "web_push", "wechat_oa_template"],
+                titleTemplate: "视频生成失败",
+                contentTemplate: "{{taskName}} 处理失败，{{reason}}",
+                linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
+            },
+        ]);
     }
 
     /** Return admin-enabled model options for web/console selectors. */
     async listModels() {
         return this.modelConfigService.listEnabledForWeb();
+    }
+
+    async createAndSubmitForWeb(dto: CreateVideoGenerationDto, userId: string) {
+        return this.toPublicGeneration(await this.createAndSubmit(dto, userId));
     }
 
     /**
@@ -214,6 +257,7 @@ export class GenerationService extends BaseService<VideoGeneration> {
             saved.progress = 20;
             this.appendStatusEvent(saved, VideoGenerationStatus.PROCESSING, "任务已提交到视频接口", "provider");
             await this.generationRepository.save(saved);
+            await this.schedulePollJob(saved.id, VIDEO_POLL_DELAY_MS);
 
             this.logger.log(`Video generation ${saved.id} submitted: taskId=${result.taskId}`);
             return saved;
@@ -244,9 +288,13 @@ export class GenerationService extends BaseService<VideoGeneration> {
         return this.pollRecord(record, userId);
     }
 
-    async pollAnyAndUpdate(id: string) {
+    async pollAndUpdateForWeb(id: string, userId: string) {
+        return this.toPublicGeneration(await this.pollAndUpdate(id, userId));
+    }
+
+    async pollAnyAndUpdate(id: string, options: { scheduleNext?: boolean } = {}) {
         const record = await this.findOne(id);
-        return this.pollRecord(record, record.userId);
+        return this.pollRecord(record, record.userId, options);
     }
 
     /** Batch poll all pending/processing tasks. Returns summary. */
@@ -317,7 +365,7 @@ export class GenerationService extends BaseService<VideoGeneration> {
         };
     }
 
-    private async pollRecord(record: VideoGeneration, userId: string) {
+    private async pollRecord(record: VideoGeneration, userId: string, options: { scheduleNext?: boolean } = {}) {
         // If already in a terminal state, just return
         if (isTerminalStatus(record.status)) {
             return record;
@@ -330,7 +378,10 @@ export class GenerationService extends BaseService<VideoGeneration> {
             record.completedAt = new Date();
             this.appendStatusEvent(record, VideoGenerationStatus.FAILED, "任务 ID 丢失，无法轮询", "system");
             await this.refundIfNeeded(record, userId, "视频任务 ID 丢失自动退款");
-            return this.saveNonTerminalUpdate(record);
+            const saved = await this.saveNonTerminalUpdate(record);
+            await this.notifyTerminalStatus(saved);
+            await this.scheduleNextPollIfNeeded(saved, options);
+            return saved;
         }
 
         const modelConfig = await this.modelConfigService.findEnabledByModel(record.model);
@@ -373,7 +424,10 @@ export class GenerationService extends BaseService<VideoGeneration> {
             }
             // else: still processing, keep status as-is
 
-            return this.saveNonTerminalUpdate(record);
+            const saved = await this.saveNonTerminalUpdate(record);
+            await this.notifyTerminalStatus(saved);
+            await this.scheduleNextPollIfNeeded(saved, options);
+            return saved;
         } catch (error) {
             this.logger.error(`Poll failed for generation ${record.id}`, error);
             // Don't mark as failed on poll error — let the frontend retry
@@ -413,6 +467,14 @@ export class GenerationService extends BaseService<VideoGeneration> {
             where: whereClause as FindOptionsWhere<VideoGeneration>,
             order: { [query.sortBy ?? "createdAt"]: (query.sortOrder ?? "DESC").toUpperCase() },
         });
+    }
+
+    async listForWeb(query: QueryVideoGenerationDto, userId: string) {
+        const page = await this.list(query, userId);
+        return {
+            ...page,
+            items: page.items.map((item) => this.toPublicGeneration(item)),
+        };
     }
 
     /** Admin: find any record by id (no user check). */
@@ -458,8 +520,9 @@ export class GenerationService extends BaseService<VideoGeneration> {
             record.completedAt = record.completedAt ?? new Date();
         }
         this.appendStatusEvent(record, status, message || "管理员更新状态", "console");
-        await this.generationRepository.save(record);
-        return record;
+        const saved = await this.saveNonTerminalUpdate(record);
+        await this.notifyTerminalStatus(saved);
+        return saved;
     }
 
     async batchMarkFailed(ids: string[], message = "管理员批量标记失败") {
@@ -491,7 +554,9 @@ export class GenerationService extends BaseService<VideoGeneration> {
             record.completedAt = new Date();
             this.appendStatusEvent(record, VideoGenerationStatus.FAILED, record.errorMessage, "system");
             await this.refundIfNeeded(record, record.userId, "视频任务超时自动退款");
-            updated.push(await this.saveNonTerminalUpdate(record));
+            const saved = await this.saveNonTerminalUpdate(record);
+            await this.notifyTerminalStatus(saved);
+            updated.push(saved);
         }
         return { total: records.length, updated };
     }
@@ -508,7 +573,9 @@ export class GenerationService extends BaseService<VideoGeneration> {
         record.completedAt = new Date();
         this.appendStatusEvent(record, VideoGenerationStatus.FAILED, message, "console");
         await this.refundIfNeeded(record, record.userId, "管理员取消任务自动退款");
-        return this.saveNonTerminalUpdate(record);
+        const saved = await this.saveNonTerminalUpdate(record);
+        await this.notifyTerminalStatus(saved);
+        return saved;
     }
 
     async batchCancel(ids: string[], message = "管理员批量取消任务") {
@@ -573,6 +640,24 @@ export class GenerationService extends BaseService<VideoGeneration> {
         return generation;
     }
 
+    async findOwnedPublicById(id: string, userId: string) {
+        return this.toPublicGeneration(await this.findOwnedById(id, userId));
+    }
+
+    private toPublicGeneration(record: VideoGeneration) {
+        const {
+            userId: _userId,
+            taskId: _taskId,
+            adminRemark: _adminRemark,
+            rawRequest: _rawRequest,
+            rawResponse: _rawResponse,
+            billingRuleSnapshot: _billingRuleSnapshot,
+            deletedAt: _deletedAt,
+            ...publicRecord
+        } = record;
+        return publicRecord;
+    }
+
     async deleteOwnedById(id: string, userId: string) {
         const record = await this.findOwnedById(id, userId);
         this.assertVideoCanBeDeleted(record);
@@ -627,6 +712,7 @@ export class GenerationService extends BaseService<VideoGeneration> {
         }
 
         const saved = await this.saveNonTerminalUpdate(record);
+        await this.notifyTerminalStatus(saved);
         this.logger.log(`Webhook processed: taskId=${taskId} status=${saved.status}`);
         return saved;
     }
@@ -893,6 +979,72 @@ export class GenerationService extends BaseService<VideoGeneration> {
                 2000,
             );
         }
+    }
+
+    private async scheduleNextPollIfNeeded(record: VideoGeneration, options: { scheduleNext?: boolean }) {
+        if (!options.scheduleNext || isTerminalStatus(record.status) || !record.taskId) {
+            return;
+        }
+        await this.schedulePollJob(record.id, VIDEO_POLL_DELAY_MS);
+    }
+
+    private async schedulePollJob(id: string, delayMs: number) {
+        try {
+            await this.videoPollQueue.add(
+                VIDEO_POLL_JOB,
+                { id },
+                {
+                    jobId: `${VIDEO_POLL_JOB_PREFIX}-${id}-${Date.now()}`,
+                    delay: Math.max(delayMs, 0),
+                    attempts: 1,
+                    removeOnComplete: true,
+                    removeOnFail: false,
+                },
+            );
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Schedule video poll ${id} failed: ${message}`, error);
+            await this.recordPollScheduleFailure(id, message);
+        }
+    }
+
+    private async recordPollScheduleFailure(id: string, message: string) {
+        const record = await this.generationRepository.findOne({
+            where: { id } as FindOptionsWhere<VideoGeneration>,
+        });
+        if (!record || isTerminalStatus(record.status)) {
+            return;
+        }
+        this.appendStatusEvent(
+            record,
+            record.status,
+            this.truncateText(`自动轮询队列入队失败: ${message}`, 500),
+            "system",
+        );
+        await this.generationRepository.save(record);
+    }
+
+    private async notifyTerminalStatus(record: VideoGeneration) {
+        if (!isTerminalStatus(record.status)) return;
+
+        const succeeded = record.status === VideoGenerationStatus.SUCCEEDED;
+        await this.notificationService.notifyUser({
+            extensionId: EXTENSION_ID,
+            userId: record.userId,
+            sceneCode: succeeded
+                ? `${EXTENSION_ID}.generation.succeeded`
+                : `${EXTENSION_ID}.generation.failed`,
+            level: succeeded ? "success" : "error",
+            linkUrl: `/extension/${EXTENSION_ID}/`,
+            sourceType: "generation",
+            sourceId: record.id,
+            data: {
+                taskName: record.modelName || record.model || "视频任务",
+                modelName: record.modelName || record.model,
+                reason: record.errorMessage || "请稍后重试或联系管理员",
+                completedAt: record.completedAt?.toISOString(),
+            },
+        });
     }
 
     private async saveNonTerminalUpdate(record: VideoGeneration) {

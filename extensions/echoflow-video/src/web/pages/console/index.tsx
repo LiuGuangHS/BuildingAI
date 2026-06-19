@@ -73,7 +73,7 @@ export default function AIVideoConsolePage() {
                 <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => navigate("/console/config")}>
                         <Settings className="size-4" />
-                        优化配置
+                        LLM 与回调
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => navigate("/console/models")}>
                         <ServerCog className="size-4" />

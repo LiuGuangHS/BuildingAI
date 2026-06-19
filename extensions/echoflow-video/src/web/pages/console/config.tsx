@@ -6,6 +6,7 @@ import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Switch } from "@buildingai/ui/components/ui/switch";
+import { useSecretsListQuery } from "@buildingai/services/console";
 import { CheckCircle2, Loader2, Save, ShieldCheck, Sparkles } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -19,20 +20,20 @@ import {
     useUpdateProviderConfigMutation,
 } from "../../services";
 
+const EMPTY_SECRET_VALUE = "__empty_secret__";
+
 export default function ProviderConfigPage() {
-    useDocumentHead({ title: "AI视频工作台配置" });
-    const [webhookSecret, setWebhookSecret] = useState("");
+    useDocumentHead({ title: "AI视频工作台 LLM 与回调" });
+    const [webhookSecretId, setWebhookSecretId] = useState("");
+    const [webhookSecretName, setWebhookSecretName] = useState("");
     const [clearWebhookSecret, setClearWebhookSecret] = useState(false);
     const [promptOptimizerEnabled, setPromptOptimizerEnabled] = useState(true);
     const [promptOptimizerModelId, setPromptOptimizerModelId] = useState("");
-    const [promptOptimizerBillingEnabled, setPromptOptimizerBillingEnabled] = useState(true);
-    const [promptOptimizerBillingPower, setPromptOptimizerBillingPower] = useState(1);
-    const [promptOptimizerBillingTokens, setPromptOptimizerBillingTokens] = useState(1000);
-    const [promptOptimizerEstimatedTokens, setPromptOptimizerEstimatedTokens] = useState(500);
-    const [enabled, setEnabled] = useState(true);
     const { data, isError, refetch } = useProviderConfigQuery();
     const { data: audits = [] } = useProviderConfigAuditsQuery();
     const { data: promptOptimizerModels = [] } = usePromptOptimizerModelsQuery();
+    const { data: secretsData, isLoading: secretsLoading } = useSecretsListQuery({ page: 1, pageSize: 100, status: 1 });
+    const secretOptions = secretsData?.items ?? [];
     const updateMutation = useUpdateProviderConfigMutation({
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["echoflow-video", "provider-config"] });
@@ -41,39 +42,32 @@ export default function ProviderConfigPage() {
     });
     useEffect(() => {
         if (data) {
-            setEnabled(data.enabled);
             setClearWebhookSecret(false);
+            setWebhookSecretId(data.webhookSecretId ?? "");
+            setWebhookSecretName(data.webhookSecretName ?? "");
             setPromptOptimizerEnabled(data.promptOptimizerEnabled);
             setPromptOptimizerModelId(data.promptOptimizerModelId ?? "");
-            setPromptOptimizerBillingEnabled(data.promptOptimizerBillingEnabled ?? true);
-            setPromptOptimizerBillingPower(data.promptOptimizerBillingPower ?? 1);
-            setPromptOptimizerBillingTokens(data.promptOptimizerBillingTokens ?? 1000);
-            setPromptOptimizerEstimatedTokens(data.promptOptimizerEstimatedTokens ?? 500);
         }
     }, [data]);
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
+        const nextWebhookSecretId = webhookSecretId.trim();
         await updateMutation.mutateAsync({
-            webhookSecret: webhookSecret.trim() || undefined,
+            webhookSecretId: clearWebhookSecret ? undefined : nextWebhookSecretId || undefined,
+            webhookSecretName: clearWebhookSecret ? undefined : webhookSecretName.trim() || undefined,
             clearWebhookSecret,
             promptOptimizerEnabled,
             promptOptimizerModelId: promptOptimizerModelId.trim() || undefined,
             clearPromptOptimizerModelId: !promptOptimizerModelId.trim(),
-            promptOptimizerBillingEnabled,
-            promptOptimizerBillingPower,
-            promptOptimizerBillingTokens,
-            promptOptimizerEstimatedTokens,
-            enabled,
         });
-        setWebhookSecret("");
         setClearWebhookSecret(false);
     };
 
     if (isError) {
         return (
             <div className="min-h-screen p-4 md:p-6">
-                <ErrorState title="加载配置失败" message="无法获取优化配置" onRetry={() => refetch()} />
+                <ErrorState title="加载配置失败" message="无法获取 LLM 与回调配置" onRetry={() => refetch()} />
             </div>
         );
     }
@@ -83,7 +77,7 @@ export default function ProviderConfigPage() {
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <Badge variant="secondary" className="mb-3 shadow-sm">管理后台</Badge>
-                    <h1 className="text-3xl font-semibold tracking-tight">高级配置</h1>
+                    <h1 className="text-3xl font-semibold tracking-tight">LLM 与回调</h1>
                     <p className="text-muted-foreground mt-2 text-sm">
                         视频模型的接入密钥在模型配置页绑定主站 Secret；这里保留主站 LLM 选择、提示词优化和 Webhook。
                     </p>
@@ -127,7 +121,7 @@ export default function ProviderConfigPage() {
 
             <Card className="max-w-4xl">
                 <CardHeader>
-                    <CardTitle>高级配置</CardTitle>
+                    <CardTitle>LLM 与回调配置</CardTitle>
                     <CardDescription>
                         模型调用密钥复用主站密钥管理；这里仅配置提示词优化和 Webhook。
                     </CardDescription>
@@ -136,24 +130,52 @@ export default function ProviderConfigPage() {
                     <form className="space-y-5" onSubmit={handleSubmit}>
                         <div className="grid gap-4 md:grid-cols-[1fr_220px]">
                             <div className="space-y-2">
-                                <Label htmlFor="happyhorse-webhook-secret">Webhook Secret</Label>
-                                <Input
-                                    id="happyhorse-webhook-secret"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    value={webhookSecret}
-                                    placeholder={
-                                        data?.webhookSecretConfigured
-                                            ? `已配置 ${data.webhookSecretMasked}`
-                                            : "可选，配置后校验 x-webhook-secret"
-                                    }
-                                    onChange={(event) => {
-                                        setWebhookSecret(event.target.value);
-                                        if (event.target.value.trim()) {
-                                            setClearWebhookSecret(false);
+                                <Label htmlFor="happyhorse-webhook-secret-id">Webhook Secret</Label>
+                                <Select
+                                    value={webhookSecretId || EMPTY_SECRET_VALUE}
+                                    onValueChange={(value) => {
+                                        if (value === EMPTY_SECRET_VALUE) {
+                                            setWebhookSecretId("");
+                                            setWebhookSecretName("");
+                                            return;
                                         }
+                                        const selected = secretOptions.find((item) => item.id === value);
+                                        setWebhookSecretId(value);
+                                        setWebhookSecretName(selected?.name ?? value);
+                                        setClearWebhookSecret(false);
                                     }}
+                                >
+                                    <SelectTrigger id="happyhorse-webhook-secret-id">
+                                        <SelectValue placeholder={secretsLoading ? "加载主站密钥..." : "选择主站密钥"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value={EMPTY_SECRET_VALUE}>未选择 Webhook Secret</SelectItem>
+                                        {secretOptions.map((secret) => (
+                                            <SelectItem key={secret.id} value={secret.id}>
+                                                {secret.name}
+                                            </SelectItem>
+                                        ))}
+                                        {webhookSecretId && !secretOptions.some((item) => item.id === webhookSecretId) ? (
+                                            <SelectItem value={webhookSecretId}>{webhookSecretName || webhookSecretId}</SelectItem>
+                                        ) : null}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="happyhorse-webhook-secret-name">显示名称</Label>
+                                <Input
+                                    id="happyhorse-webhook-secret-name"
+                                    value={webhookSecretName}
+                                    placeholder="可选，用于后台展示"
+                                    onChange={(event) => setWebhookSecretName(event.target.value)}
                                 />
+                            </div>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-[1fr_220px]">
+                            <div className="text-muted-foreground rounded-md border bg-muted/30 p-3 text-xs">
+                                {data?.webhookSecretConfigured
+                                    ? `当前引用：${data.webhookSecretName || data.webhookSecretId}`
+                                    : "未配置 Webhook Secret；配置后会校验 x-webhook-secret。"}
                             </div>
                             <div className="flex items-end gap-2 pb-2">
                                 <Switch
@@ -162,7 +184,10 @@ export default function ProviderConfigPage() {
                                     disabled={!data?.webhookSecretConfigured}
                                     onCheckedChange={(checked) => {
                                         setClearWebhookSecret(checked);
-                                        if (checked) setWebhookSecret("");
+                                        if (checked) {
+                                            setWebhookSecretId("");
+                                            setWebhookSecretName("");
+                                        }
                                     }}
                                 />
                                 <Label htmlFor="happyhorse-clear-webhook" className="cursor-pointer text-sm">
@@ -171,18 +196,10 @@ export default function ProviderConfigPage() {
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-4">
-                            <div className="flex items-center gap-2">
-                                <Switch id="happyhorse-enabled" checked={enabled} onCheckedChange={setEnabled} />
-                                <Label htmlFor="happyhorse-enabled" className="cursor-pointer">
-                                    启用高级配置
-                                </Label>
-                            </div>
-                            <Badge variant={data?.webhookSecretConfigured ? "default" : "secondary"} className="gap-1">
-                                <ShieldCheck className="size-3.5" />
-                                {data?.webhookSecretConfigured ? "Webhook 已加密配置" : "Webhook 未配置密钥"}
-                            </Badge>
-                        </div>
+                        <Badge variant={data?.webhookSecretConfigured ? "default" : "secondary"} className="w-fit gap-1">
+                            <ShieldCheck className="size-3.5" />
+                            {data?.webhookSecretConfigured ? "Webhook 已引用主站 Secret" : "Webhook 未配置密钥"}
+                        </Badge>
 
                         <div className="rounded-md border p-4">
                             <div className="mb-4 flex items-start justify-between gap-4">
@@ -192,7 +209,7 @@ export default function ProviderConfigPage() {
                                         <p className="text-sm font-medium">提示词优化</p>
                                     </div>
                                     <p className="text-muted-foreground mt-1 text-xs">
-                                        生成前调用主站 LLM 优化用户提示词，扣费直接走主站模型的计费规则。
+                                        生成前调用主站 LLM 优化用户提示词，计费只读取主站模型自身的计费规则。
                                     </p>
                                 </div>
                                 <Switch
@@ -230,50 +247,9 @@ export default function ProviderConfigPage() {
                                     )}
                                 </div>
                             </div>
-                            <div className="mt-4 flex flex-wrap items-center gap-4">
-                                <div className="flex items-center gap-2">
-                                    <Switch
-                                        id="prompt-optimizer-billing-enabled"
-                                        checked={promptOptimizerBillingEnabled}
-                                        onCheckedChange={setPromptOptimizerBillingEnabled}
-                                    />
-                                    <Label htmlFor="prompt-optimizer-billing-enabled" className="cursor-pointer">
-                                        按 token 计费
-                                    </Label>
-                                </div>
-                            </div>
-                            <div className="mt-4 grid gap-4 md:grid-cols-3">
-                                <div className="space-y-2">
-                                    <Label htmlFor="prompt-optimizer-billing-power">兜底算力</Label>
-                                    <Input
-                                        id="prompt-optimizer-billing-power"
-                                        type="number"
-                                        min={1}
-                                        value={promptOptimizerBillingPower}
-                                        onChange={(event) => setPromptOptimizerBillingPower(Number(event.target.value))}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="prompt-optimizer-billing-tokens">兜底 tokens</Label>
-                                    <Input
-                                        id="prompt-optimizer-billing-tokens"
-                                        type="number"
-                                        min={1}
-                                        value={promptOptimizerBillingTokens}
-                                        onChange={(event) => setPromptOptimizerBillingTokens(Number(event.target.value))}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="prompt-optimizer-estimated-tokens">预检 tokens</Label>
-                                    <Input
-                                        id="prompt-optimizer-estimated-tokens"
-                                        type="number"
-                                        min={50}
-                                        value={promptOptimizerEstimatedTokens}
-                                        onChange={(event) => setPromptOptimizerEstimatedTokens(Number(event.target.value))}
-                                    />
-                                </div>
-                            </div>
+                            <p className="text-muted-foreground mt-4 rounded-md border bg-muted/30 p-3 text-xs">
+                                提示词优化不在插件内维护单独价格；所选 LLM 如配置了主站计费规则，会按该规则预检、扣费和失败退款。
+                            </p>
                         </div>
 
                         <div className="flex flex-wrap gap-2">
@@ -293,7 +269,7 @@ export default function ProviderConfigPage() {
             <Card className="max-w-4xl">
                 <CardHeader>
                     <CardTitle>配置审计</CardTitle>
-                    <CardDescription>最近的优化配置保存、清除记录，敏感字段已脱敏。</CardDescription>
+                    <CardDescription>最近的 LLM 与回调配置保存、清除记录，敏感字段已脱敏。</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                     {audits.length === 0 ? (

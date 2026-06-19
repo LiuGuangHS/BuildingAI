@@ -1,7 +1,6 @@
 import { defineRouteOption } from "@buildingai/web-core";
 
 import packageJson from "./../../package.json";
-import ConsoleBillingPage from "./pages/console/billing";
 import ProviderConfigPage from "./pages/console/config";
 import ConsoleDetailPage from "./pages/console/detail";
 import HistoryPage from "./pages/console/history";
@@ -65,7 +64,7 @@ export const routeOption = defineRouteOption({
             icon: "history",
         },
         {
-            title: "高级配置",
+            title: "LLM 与回调",
             path: "/config",
             icon: "settings",
         },
@@ -83,10 +82,6 @@ export const routeOption = defineRouteOption({
         {
             path: "models",
             element: <ConsoleVideoModelsPage />,
-        },
-        {
-            path: "billing",
-            element: <ConsoleBillingPage />,
         },
         {
             path: "policies",

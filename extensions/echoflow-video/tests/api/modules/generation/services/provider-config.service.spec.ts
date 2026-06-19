@@ -1,6 +1,5 @@
 /// <reference path="../../../jest-globals.d.ts" />
 
-import { encryptApiKey } from "../../../../../src/api/common/crypto/encryption";
 import { VideoProviderConfig } from "../../../../../src/api/db/entities/video-provider-config.entity";
 import { ProviderConfigService } from "../../../../../src/api/modules/generation/services/provider-config.service";
 
@@ -17,32 +16,29 @@ const mockAuditRepo = {
     find: jest.fn(),
 };
 
+const mockAiModelRepo = {
+    find: jest.fn(),
+};
+
 const mockAiModelService = {
     getModelInfo: jest.fn(),
 };
 
+const mockSecretService = {
+    getConfigKeyValuePairs: jest.fn(),
+};
+
 function makeService(): ProviderConfigService {
-    return new ProviderConfigService(mockConfigRepo as any, mockAuditRepo as any, mockAiModelService as any);
+    return new ProviderConfigService(mockConfigRepo as any, mockAuditRepo as any, mockAiModelRepo as any, mockAiModelService as any, mockSecretService as any);
 }
 
 function makeConfig(overrides: Partial<VideoProviderConfig> = {}): VideoProviderConfig {
     return {
         id: "cfg-001",
         provider: "happyhorse",
-        apiKey: encryptApiKey("sk-test-key-12345678"),
-        baseUrl: "https://api.echoflow.cn",
-        requestTimeoutMs: 120000,
-        testTimeoutMs: 15000,
-        maxRetries: 2,
-        retryDelayMs: 1000,
-        enabled: true,
         templates: [],
         promptOptimizerEnabled: true,
         promptOptimizerAllowedModelIds: [],
-        promptOptimizerBillingEnabled: true,
-        promptOptimizerBillingPower: 1,
-        promptOptimizerBillingTokens: 1000,
-        promptOptimizerEstimatedTokens: 500,
         createdAt: new Date("2026-01-01"),
         updatedAt: new Date("2026-01-02"),
         ...overrides,
@@ -57,37 +53,59 @@ beforeEach(() => {
         isActive: true,
         provider: { isActive: true },
     });
+    mockSecretService.getConfigKeyValuePairs.mockResolvedValue({
+        webhookSecret: { value: "secret-123", required: true },
+    });
 });
 
 describe("ProviderConfigService", () => {
-    it("returns full empty console config when no provider config exists", async () => {
+    it("returns prompt optimizer and webhook config when no provider config exists", async () => {
         mockConfigRepo.findOne.mockResolvedValue(null);
 
         const result = await makeService().getConsoleConfig();
 
         expect(result).toMatchObject({
             provider: "happyhorse",
-            enabled: false,
-            configured: false,
-            apiKeyMasked: "",
             webhookSecretConfigured: false,
+            webhookSecretId: "",
+            webhookSecretName: "",
             promptOptimizerEnabled: true,
+            promptOptimizerAllowedModelIds: [],
         });
     });
 
     it("requires a configured webhook secret before trusting public callbacks", async () => {
-        mockConfigRepo.findOne.mockResolvedValue(makeConfig({ webhookSecret: undefined }));
+        mockConfigRepo.findOne.mockResolvedValue(makeConfig({ webhookSecretId: undefined }));
 
         const verified = await makeService().verifyHappyHorseWebhookSecret(undefined);
 
         expect(verified).toBe(false);
     });
 
-    it("verifies webhook secret when configured", async () => {
-        mockConfigRepo.findOne.mockResolvedValue(makeConfig({ webhookSecret: encryptApiKey("secret-123") }));
+    it("verifies webhook secret through main-system Secret", async () => {
+        mockConfigRepo.findOne.mockResolvedValue(makeConfig({ webhookSecretId: "33333333-3333-4333-8333-333333333333" }));
 
         await expect(makeService().verifyHappyHorseWebhookSecret("secret-123")).resolves.toBe(true);
         await expect(makeService().verifyHappyHorseWebhookSecret("wrong")).resolves.toBe(false);
+        expect(mockSecretService.getConfigKeyValuePairs).toHaveBeenCalledWith("33333333-3333-4333-8333-333333333333");
+    });
+
+    it("stores only webhook Secret reference on update", async () => {
+        const existing = makeConfig();
+        mockConfigRepo.findOne.mockResolvedValue(existing);
+        mockConfigRepo.save.mockImplementation(async (value) => value);
+
+        await makeService().updateConsoleConfig({
+            webhookSecretId: "33333333-3333-4333-8333-333333333333",
+            webhookSecretName: "HappyHorse 回调",
+        });
+
+        expect(mockConfigRepo.save).toHaveBeenCalledWith(
+            expect.objectContaining({
+                webhookSecretId: "33333333-3333-4333-8333-333333333333",
+                webhookSecretName: "HappyHorse 回调",
+            }),
+        );
     });
 
     it("writes sanitized audit record with operator id on update", async () => {
@@ -95,15 +113,16 @@ describe("ProviderConfigService", () => {
         mockConfigRepo.findOne.mockResolvedValue(existing);
         mockConfigRepo.save.mockResolvedValue(existing);
 
-        await makeService().updateConsoleConfig({ enabled: false }, "admin-001");
+        await makeService().updateConsoleConfig({ promptOptimizerEnabled: false }, "admin-001");
 
         expect(mockAuditRepo.save).toHaveBeenCalledWith(
             expect.objectContaining({
                 action: "provider_config_updated",
                 operatorId: "admin-001",
                 snapshot: expect.objectContaining({
-                    configured: true,
                     webhookSecretConfigured: false,
+                    webhookSecretId: undefined,
+                    promptOptimizerEnabled: false,
                 }),
             }),
         );
@@ -141,19 +160,38 @@ describe("ProviderConfigService", () => {
         ).rejects.toThrow("提示词优化模型池必须选择 LLM 文本模型");
     });
 
-    it("rejects invalid runtime numeric config even when service is called directly", async () => {
+    it("ignores removed prompt optimizer billing config even when service is called directly", async () => {
         mockConfigRepo.findOne.mockResolvedValue(makeConfig());
+        mockConfigRepo.save.mockImplementation(async (value) => value);
 
-        await expect(
-            makeService().updateConsoleConfig({ maxRetries: 99 }),
-        ).rejects.toThrow("重试次数必须是 0 到 5 之间的整数");
+        const result = await makeService().updateConsoleConfig({ promptOptimizerEstimatedTokens: 49 } as any);
+
+        expect(result).not.toHaveProperty("promptOptimizerEstimatedTokens");
+        expect(mockConfigRepo.save).toHaveBeenCalledWith(
+            expect.not.objectContaining({
+                promptOptimizerEstimatedTokens: expect.anything(),
+            }),
+        );
     });
 
-    it("rejects private HappyHorse base URLs", async () => {
-        mockConfigRepo.findOne.mockResolvedValue(makeConfig());
+    it("normalizes prompt templates and model pool without touching model endpoint credentials", async () => {
+        const existing = makeConfig();
+        mockConfigRepo.findOne.mockResolvedValue(existing);
+        mockConfigRepo.save.mockImplementation(async (value) => value);
 
-        await expect(
-            makeService().updateConsoleConfig({ baseUrl: "http://127.0.0.1:8080" }),
-        ).rejects.toThrow("本机或内网");
+        await makeService().updateConsoleConfig({
+            promptOptimizerAllowedModelIds: [
+                "11111111-1111-4111-8111-111111111111",
+                "11111111-1111-4111-8111-111111111111",
+            ],
+            templates: [{ label: "  开场  ", prompt: "  一段电影感开场  " }],
+        });
+
+        expect(mockConfigRepo.save).toHaveBeenCalledWith(
+            expect.objectContaining({
+                promptOptimizerAllowedModelIds: ["11111111-1111-4111-8111-111111111111"],
+                templates: [{ label: "开场", prompt: "一段电影感开场" }],
+            }),
+        );
     });
 });

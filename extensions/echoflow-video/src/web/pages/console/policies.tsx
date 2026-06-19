@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buil
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
+import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Save } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -112,14 +113,18 @@ function PolicyEditor({ value, onSave }: { value?: VideoPolicyConfig; onSave: (d
                     <NumberField label="用户每日任务数" value={dailyJobsPerUser} onChange={setDailyJobsPerUser} />
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
-                    <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                        <input type="checkbox" checked={allowPublicMediaUrl} onChange={(event) => setAllowPublicMediaUrl(event.target.checked)} />
-                        允许外部媒体 URL
-                    </label>
-                    <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                        <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-                        启用策略
-                    </label>
+                    <SwitchField
+                        checked={allowPublicMediaUrl}
+                        description="默认只接受平台上传文件；开启后仍会拒绝本机、内网和带凭据地址。"
+                        label="允许外部媒体 URL"
+                        onCheckedChange={setAllowPublicMediaUrl}
+                    />
+                    <SwitchField
+                        checked={enabled}
+                        description="关闭后该策略不参与提交校验，模型策略会回退到全局策略或后端默认值。"
+                        label="启用策略"
+                        onCheckedChange={setEnabled}
+                    />
                 </div>
                 <div className="flex justify-end">
                     <Button onClick={() => onSave({
@@ -139,6 +144,18 @@ function PolicyEditor({ value, onSave }: { value?: VideoPolicyConfig; onSave: (d
                 </div>
             </CardContent>
         </Card>
+    );
+}
+
+function SwitchField(props: { label: string; description: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+    return (
+        <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+            <div className="min-w-0">
+                <Label className="text-sm">{props.label}</Label>
+                <p className="text-muted-foreground mt-1 text-xs leading-5">{props.description}</p>
+            </div>
+            <Switch checked={props.checked} onCheckedChange={props.onCheckedChange} />
+        </div>
     );
 }
 

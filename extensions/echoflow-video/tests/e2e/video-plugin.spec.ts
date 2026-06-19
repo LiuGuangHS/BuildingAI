@@ -6,7 +6,7 @@ import { test, expect } from "@playwright/test";
  * Prerequisites:
  * 1. BuildingAI server running on localhost:4090
  * 2. Logged-in user session (provide ADMIN_AUTH_TOKEN env var)
- * 3. HappyHorse API Key configured via Console Admin UI
+ * 3. Fixed video model catalog initialized by the plugin upgrade
  *
  * Run: npx playwright test tests/e2e/
  */
@@ -30,30 +30,35 @@ const userHeaders = {
 };
 
 // ──────────────────────────────────────────────
-// Admin Config Flow
+// Admin Model And Config Flow
 // ──────────────────────────────────────────────
 
-test.describe("Admin: Provider Config", () => {
-    test("GET /config returns current provider config", async ({ request }) => {
-        const res = await request.get(consoleApi("/generation/options/models"), {
+test.describe("Admin: Fixed Model Catalog", () => {
+    test("GET /models returns fixed P0 model catalog", async ({ request }) => {
+        const res = await request.get(consoleApi("/models?page=1&pageSize=50"), {
             headers: adminHeaders,
         });
         expect(res.ok()).toBeTruthy();
 
-        const models = await res.json();
+        const body = await res.json();
+        const models = body.items ?? [];
         expect(Array.isArray(models)).toBeTruthy();
-        expect(models.length).toBe(4);
-        expect(models[0].id).toContain("happyhorse-1.0");
+        const ids = models.map((model: { model: string }) => model.model);
+        expect(ids).toContain("doubao-seedance-2-0-260128");
+        expect(ids).toContain("doubao-seedance-1-5-pro-251215");
+        expect(ids).toContain("kling-text2video");
+        expect(ids).toContain("kling-image2video");
     });
 
-    test("POST /config/test with invalid key returns error", async ({ request }) => {
-        const res = await request.post(consoleApi("/config/test"), {
+    test("GET /config returns prompt optimizer and webhook config", async ({ request }) => {
+        const res = await request.get(consoleApi("/config"), {
             headers: adminHeaders,
-            data: { apiKey: "invalid-key-12345" },
         });
         expect(res.ok()).toBeTruthy();
         const body = await res.json();
-        expect(body.success).toBe(false);
+        expect(body).toHaveProperty("webhookSecretConfigured");
+        expect(body).toHaveProperty("promptOptimizerEnabled");
+        expect(body).not.toHaveProperty("apiKeyMasked");
     });
 
     test("GET /config/health returns health status", async ({ request }) => {
@@ -72,17 +77,17 @@ test.describe("Admin: Provider Config", () => {
 // ──────────────────────────────────────────────
 
 test.describe("Web User: Video Generation", () => {
-    test("GET /options/models returns 4 models", async ({ request }) => {
+    test("GET /options/models returns only currently usable models", async ({ request }) => {
         const res = await request.get(webApi("/generation/options/models"));
         expect(res.ok()).toBeTruthy();
 
         const models = await res.json();
-        expect(models).toHaveLength(4);
-        const ids = models.map((m: { id: string }) => m.id);
-        expect(ids).toContain("happyhorse-1.0-t2v");
-        expect(ids).toContain("happyhorse-1.0-i2v");
-        expect(ids).toContain("happyhorse-1.0-r2v");
-        expect(ids).toContain("happyhorse-1.0-video-edit");
+        expect(Array.isArray(models)).toBeTruthy();
+        for (const model of models) {
+            expect(model).toHaveProperty("id");
+            expect(model).toHaveProperty("name");
+            expect(model).toHaveProperty("model");
+        }
     });
 
     test("GET /options/provider-status returns status", async ({ request }) => {
@@ -104,7 +109,7 @@ test.describe("Web User: Video Generation", () => {
     test("POST /generation with empty prompt returns 400", async ({ request }) => {
         const res = await request.post(webApi("/generation"), {
             headers: userHeaders,
-            data: { prompt: "", model: "happyhorse-1.0-t2v" },
+            data: { prompt: "", model: "doubao-seedance-2-0-260128" },
         });
         expect(res.status()).toBe(400);
     });
@@ -122,7 +127,7 @@ test.describe("Web User: Video Generation", () => {
             headers: userHeaders,
             data: {
                 prompt: "test video",
-                model: "happyhorse-1.0-t2v",
+                model: "kling-text2video",
                 media: [{ type: "first_frame", url: "https://example.com/img.jpg" }],
             },
         });
@@ -134,7 +139,7 @@ test.describe("Web User: Video Generation", () => {
             headers: userHeaders,
             data: {
                 prompt: "test video",
-                model: "happyhorse-1.0-i2v",
+                model: "kling-image2video",
                 media: [{ type: "first_frame", url: "http://127.0.0.1/img.jpg" }],
             },
         });

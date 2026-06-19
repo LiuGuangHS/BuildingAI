@@ -70,16 +70,12 @@ export class Upgrade {
         await this.dataSource.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_video"."video_provider_config" (
                 "id" uuid NOT NULL DEFAULT gen_random_uuid(),
-                "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
-                "webhook_secret" text,
+                "provider" varchar(50) NOT NULL DEFAULT 'happyhorse',
+                "webhook_secret_id" uuid,
+                "webhook_secret_name" varchar(120),
                 "prompt_optimizer_enabled" boolean NOT NULL DEFAULT true,
                 "prompt_optimizer_model_id" uuid,
                 "prompt_optimizer_allowed_model_ids" jsonb NOT NULL DEFAULT '[]',
-                "prompt_optimizer_billing_enabled" boolean NOT NULL DEFAULT true,
-                "prompt_optimizer_billing_power" integer NOT NULL DEFAULT 1,
-                "prompt_optimizer_billing_tokens" integer NOT NULL DEFAULT 1000,
-                "prompt_optimizer_estimated_tokens" integer NOT NULL DEFAULT 500,
-                "enabled" boolean NOT NULL DEFAULT true,
                 "templates" jsonb NOT NULL DEFAULT '[]',
                 "created_at" TIMESTAMP NOT NULL DEFAULT now(),
                 "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
@@ -87,14 +83,21 @@ export class Upgrade {
                 CONSTRAINT "uq_video_provider_config_provider" UNIQUE ("provider")
             )
         `);
-        await this.ensureColumn("video_provider_config", "webhook_secret", "text");
+        await this.ensureColumn("video_provider_config", "webhook_secret_id", "uuid");
+        await this.ensureColumn("video_provider_config", "webhook_secret_name", "varchar(120)");
+        await this.dropColumnIfExists("video_provider_config", "webhook_secret");
+        await this.dataSource.query(`
+            ALTER TABLE "echoflow_video"."video_provider_config"
+            ALTER COLUMN "provider" SET DEFAULT 'happyhorse'
+        `);
         await this.ensureColumn("video_provider_config", "prompt_optimizer_enabled", "boolean NOT NULL DEFAULT true");
         await this.ensureColumn("video_provider_config", "prompt_optimizer_model_id", "uuid");
         await this.ensureColumn("video_provider_config", "prompt_optimizer_allowed_model_ids", "jsonb NOT NULL DEFAULT '[]'");
-        await this.ensureColumn("video_provider_config", "prompt_optimizer_billing_enabled", "boolean NOT NULL DEFAULT true");
-        await this.ensureColumn("video_provider_config", "prompt_optimizer_billing_power", "integer NOT NULL DEFAULT 1");
-        await this.ensureColumn("video_provider_config", "prompt_optimizer_billing_tokens", "integer NOT NULL DEFAULT 1000");
-        await this.ensureColumn("video_provider_config", "prompt_optimizer_estimated_tokens", "integer NOT NULL DEFAULT 500");
+        await this.dropColumnIfExists("video_provider_config", "prompt_optimizer_billing_enabled");
+        await this.dropColumnIfExists("video_provider_config", "prompt_optimizer_billing_power");
+        await this.dropColumnIfExists("video_provider_config", "prompt_optimizer_billing_tokens");
+        await this.dropColumnIfExists("video_provider_config", "prompt_optimizer_estimated_tokens");
+        await this.dropColumnIfExists("video_provider_config", "enabled");
         await this.ensureColumn("video_provider_config", "templates", "jsonb NOT NULL DEFAULT '[]'");
     }
 
@@ -368,6 +371,13 @@ export class Upgrade {
         await this.dataSource.query(`
             ALTER TABLE "echoflow_video"."${table}"
             ADD COLUMN IF NOT EXISTS "${column}" ${definition}
+        `);
+    }
+
+    private async dropColumnIfExists(table: string, column: string): Promise<void> {
+        await this.dataSource.query(`
+            ALTER TABLE "echoflow_video"."${table}"
+            DROP COLUMN IF EXISTS "${column}"
         `);
     }
 

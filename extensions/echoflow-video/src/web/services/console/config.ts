@@ -5,16 +5,12 @@ import { consoleHttpClient } from "../base";
 
 export interface ProviderConfig {
     provider: string;
-    enabled: boolean;
     webhookSecretConfigured: boolean;
-    webhookSecretMasked: string;
+    webhookSecretId: string;
+    webhookSecretName: string;
     promptOptimizerEnabled: boolean;
     promptOptimizerModelId: string;
     promptOptimizerAllowedModelIds: string[];
-    promptOptimizerBillingEnabled: boolean;
-    promptOptimizerBillingPower: number;
-    promptOptimizerBillingTokens: number;
-    promptOptimizerEstimatedTokens: number;
     templates?: PromptTemplate[];
     updatedAt?: string;
 }
@@ -53,17 +49,13 @@ export interface ProviderConfigAudit {
 }
 
 export interface UpdateProviderConfigParams {
-    webhookSecret?: string;
+    webhookSecretId?: string;
+    webhookSecretName?: string;
     clearWebhookSecret?: boolean;
     promptOptimizerEnabled?: boolean;
     promptOptimizerModelId?: string;
     clearPromptOptimizerModelId?: boolean;
     promptOptimizerAllowedModelIds?: string[];
-    promptOptimizerBillingEnabled?: boolean;
-    promptOptimizerBillingPower?: number;
-    promptOptimizerBillingTokens?: number;
-    promptOptimizerEstimatedTokens?: number;
-    enabled?: boolean;
     templates?: PromptTemplate[];
 }
 

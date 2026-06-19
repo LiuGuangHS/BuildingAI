@@ -141,7 +141,7 @@ export class VideoGeneration {
     @Column({ type: "int", default: 0, comment: "Progress percent" })
     progress: number;
 
-    @Column({ type: "float", default: 0, comment: "Billing amount (reserved)" })
+    @Column({ type: "float", default: 0, comment: "Deducted billing amount" })
     billingAmount: number;
 
     @Column({ type: "timestamp", nullable: true, comment: "Started time" })

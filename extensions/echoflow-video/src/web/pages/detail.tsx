@@ -13,6 +13,7 @@ import {
     useWebVideoDetailQuery,
 } from "../services";
 import type { VideoGeneration } from "../services/types/generation";
+import { writeReuseParams } from "../lib/reuse-params-storage";
 
 const statusLabel: Record<string, string> = {
     pending: "排队中",
@@ -244,23 +245,20 @@ function ReuseButton({ generation }: { generation: VideoGeneration }) {
             variant="outline"
             className="w-full"
             onClick={() => {
-                sessionStorage.setItem(
-                    "echoflow-video:reuse-params",
-                    JSON.stringify({
-                        prompt: generation.prompt,
-                        originalPrompt: generation.originalPrompt,
-                        promptOptimizationSource: generation.promptOptimizationSource,
-                        promptOptimizationStyle: generation.promptOptimizationStyle,
-                        promptOptimizerModelId: generation.promptOptimizerModelId,
-                        model: generation.model,
-                        media: generation.media,
-                        resolution: generation.parameters.resolution,
-                        duration: generation.parameters.duration,
-                        ratio: generation.parameters.ratio,
-                        watermark: generation.parameters.watermark,
-                        audioSetting: generation.parameters.audio_setting,
-                    }),
-                );
+                writeReuseParams({
+                    prompt: generation.prompt,
+                    originalPrompt: generation.originalPrompt,
+                    promptOptimizationSource: generation.promptOptimizationSource,
+                    promptOptimizationStyle: generation.promptOptimizationStyle,
+                    promptOptimizerModelId: generation.promptOptimizerModelId,
+                    model: generation.model,
+                    media: generation.media,
+                    resolution: generation.parameters.resolution,
+                    duration: generation.parameters.duration,
+                    ratio: generation.parameters.ratio,
+                    watermark: generation.parameters.watermark,
+                    audioSetting: generation.parameters.audio_setting,
+                });
                 toast.success("已复制参数");
                 navigate("/");
             }}

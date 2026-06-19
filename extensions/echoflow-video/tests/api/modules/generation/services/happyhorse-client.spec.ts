@@ -88,7 +88,7 @@ describe("HappyHorseClient", () => {
 
     describe("constructor", () => {
         it("throws when apiKey is empty", () => {
-            expect(() => new HappyHorseClient("")).toThrow("API Key");
+            expect(() => new HappyHorseClient("")).toThrow("主站密钥");
         });
 
         it("creates instance with valid apiKey", () => {
@@ -152,7 +152,7 @@ describe("HappyHorseClient", () => {
                     model: "happyhorse-1.0-t2v" as never,
                     prompt: "test",
                 }),
-            ).rejects.toThrow("API Key 无效");
+            ).rejects.toThrow("主站密钥中的 apiKey 无效");
 
             expect(callCount).toBe(1); // no retries for 401
         });

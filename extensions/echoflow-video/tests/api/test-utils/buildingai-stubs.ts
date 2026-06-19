@@ -26,6 +26,12 @@ export class PublicAiModelService {}
 
 export class ExtensionBillingService {}
 
+export class SecretService {}
+
+export class RedisModule {}
+
+export class RedisService {}
+
 export function Column() {
     return () => undefined;
 }
@@ -68,12 +74,56 @@ export function maskSensitiveValue(value: string) {
     return `${value.slice(0, 4)}${"*".repeat(value.length - 8)}${value.slice(-4)}`;
 }
 
+export function getProviderSecret(key: string, config: Record<string, { value?: string }>) {
+    return config[key]?.value ?? "";
+}
+
+export function normalizeProviderConfig(config: Record<string, { value?: string }> = {}) {
+    return {
+        apiKey: config.apiKey?.value ?? config.api_key?.value ?? config.API_KEY?.value ?? "",
+        baseURL: config.baseURL?.value ?? config.baseUrl?.value ?? config.base_url?.value ?? config.BASE_URL?.value ?? "",
+        webhookSecret:
+            config.webhookSecret?.value ??
+            config.webhook_secret?.value ??
+            config.WEBHOOK_SECRET?.value ??
+            config.secret?.value ??
+            config.SECRET?.value ??
+            config.token?.value ??
+            config.TOKEN?.value ??
+            "",
+    };
+}
+
+export class HttpError extends Error {
+    constructor(
+        message: string,
+        public readonly options: { httpStatus: number; businessCode: number; data?: unknown },
+    ) {
+        super(message);
+    }
+
+    get httpStatus() {
+        return this.options.httpStatus;
+    }
+
+    get businessCode() {
+        return this.options.businessCode;
+    }
+
+    get data() {
+        return this.options.data;
+    }
+}
+
 export const HttpErrorFactory = {
     badRequest(message: string) {
         return new Error(message);
     },
     notFound(message: string) {
         return new Error(message);
+    },
+    tooManyRequests(message = "Too many requests", data?: unknown) {
+        return new HttpError(message, { httpStatus: 429, businessCode: 40700, data });
     },
 };
 

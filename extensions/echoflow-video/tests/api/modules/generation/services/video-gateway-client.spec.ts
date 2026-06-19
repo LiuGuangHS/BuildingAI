@@ -30,7 +30,8 @@ function makeClient(model: string) {
         {
             id: "primary",
             name: "主接口",
-            baseUrl: "https://api.echoflow.cn",
+            secretId: "secret-001",
+            baseUrlOverride: "https://api.echoflow.cn",
             enabled: true,
             priority: 100,
             requestTimeoutMs: 3000,
@@ -39,6 +40,7 @@ function makeClient(model: string) {
             retryDelayMs: 100,
         },
         "test-key",
+        "https://api.echoflow.cn",
     );
 }
 

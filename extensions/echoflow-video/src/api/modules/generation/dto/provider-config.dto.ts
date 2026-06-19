@@ -3,13 +3,10 @@ import {
     ArrayMaxSize,
     IsArray,
     IsBoolean,
-    IsInt,
     IsOptional,
     IsString,
     IsUUID,
     Length,
-    Max,
-    Min,
     ValidateNested,
 } from "class-validator";
 
@@ -27,10 +24,15 @@ export class PromptTemplateDto {
 
 export class UpdateProviderConfigDto {
     @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
-    @IsString()
-    @Length(8, 500)
+    @IsUUID()
     @IsOptional()
-    webhookSecret?: string;
+    webhookSecretId?: string;
+
+    @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+    @IsString()
+    @Length(1, 120)
+    @IsOptional()
+    webhookSecretName?: string;
 
     @IsBoolean()
     @IsOptional()
@@ -54,35 +56,6 @@ export class UpdateProviderConfigDto {
     @IsUUID(undefined, { each: true })
     @IsOptional()
     promptOptimizerAllowedModelIds?: string[];
-
-    @IsBoolean()
-    @IsOptional()
-    promptOptimizerBillingEnabled?: boolean;
-
-    @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value)))
-    @IsInt()
-    @Min(1)
-    @Max(100000)
-    @IsOptional()
-    promptOptimizerBillingPower?: number;
-
-    @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value)))
-    @IsInt()
-    @Min(1)
-    @Max(1000000)
-    @IsOptional()
-    promptOptimizerBillingTokens?: number;
-
-    @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value)))
-    @IsInt()
-    @Min(50)
-    @Max(20000)
-    @IsOptional()
-    promptOptimizerEstimatedTokens?: number;
-
-    @IsBoolean()
-    @IsOptional()
-    enabled?: boolean;
 
     @IsArray()
     @ArrayMaxSize(20)

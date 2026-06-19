@@ -1,9 +1,11 @@
 import { useDocumentHead } from "@buildingai/hooks";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
+import { Checkbox } from "@buildingai/ui/components/ui/checkbox";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
+import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -158,11 +160,10 @@ function TemplateEditor({ value, onSave, onCancel }: { value?: VideoPromptTempla
                     <div className="grid grid-cols-2 gap-2">
                         {abilityOptions.map(([key, label]) => (
                             <label key={key} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                                <input
-                                    type="checkbox"
+                                <Checkbox
                                     checked={abilityTypes.includes(key)}
-                                    onChange={(event) => setAbilityTypes((current) =>
-                                        event.target.checked ? [...current, key] : current.filter((item) => item !== key),
+                                    onCheckedChange={(checked) => setAbilityTypes((current) =>
+                                        checked ? [...current, key] : current.filter((item) => item !== key),
                                     )}
                                 />
                                 {label}
@@ -173,10 +174,10 @@ function TemplateEditor({ value, onSave, onCancel }: { value?: VideoPromptTempla
                 <div className="space-y-2"><Label>Prompt</Label><Textarea className="min-h-32" value={prompt} onChange={(event) => setPrompt(event.target.value)} /></div>
                 <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2"><Label>排序</Label><Input type="number" value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} /></div>
-                    <label className="mt-7 flex h-10 items-center gap-2 rounded-md border px-3 text-sm">
-                        <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-                        启用
-                    </label>
+                    <div className="mt-7 flex h-10 items-center justify-between gap-2 rounded-md border px-3 text-sm">
+                        <Label className="text-sm">启用模板</Label>
+                        <Switch checked={enabled} onCheckedChange={setEnabled} />
+                    </div>
                 </div>
                 <div className="space-y-2">
                     <Label>默认参数 JSON</Label>

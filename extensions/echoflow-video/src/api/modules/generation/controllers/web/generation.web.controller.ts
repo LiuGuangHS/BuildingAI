@@ -4,13 +4,13 @@ import type { UserPlayground } from "@buildingai/db";
 import { Playground } from "@buildingai/decorators/playground.decorator";
 import { Public } from "@buildingai/decorators/public.decorator";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
-import { Body, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Get, Param, Post, Query } from "@nestjs/common";
 
-import { WebApiRateLimitGuard } from "../../../../common/guards/rate-limit.guard";
 import { CreateVideoGenerationDto, OptimizePromptDto, QueryVideoGenerationDto, QueryVideoTemplateDto } from "../../dto";
 import { GenerationService } from "../../services/generation.service";
 import { PromptOptimizationService } from "../../services/prompt-optimization.service";
 import { TemplateService } from "../../services/template.service";
+import { VideoRequestLimiterService } from "../../services/video-request-limiter.service";
 
 /**
  * Video generation controller for web (user-facing).
@@ -22,22 +22,23 @@ export class GenerationWebController extends BaseController {
         private readonly generationService: GenerationService,
         private readonly templateService: TemplateService,
         private readonly promptOptimizationService: PromptOptimizationService,
+        private readonly requestLimiterService: VideoRequestLimiterService,
     ) {
         super();
     }
 
     @Post()
-    @UseGuards(WebApiRateLimitGuard)
     async create(
         @Body() dto: CreateVideoGenerationDto,
         @Playground() user: UserPlayground,
     ) {
-        return this.generationService.createAndSubmit(dto, user.id);
+        await this.requestLimiterService.assertAllowed("generation", user.id);
+        return this.generationService.createAndSubmitForWeb(dto, user.id);
     }
 
     @Post("prompt/optimize")
-    @UseGuards(WebApiRateLimitGuard)
     async optimizePrompt(@Body() dto: OptimizePromptDto, @Playground() user: UserPlayground) {
+        await this.requestLimiterService.assertAllowed("prompt-optimization", user.id);
         return this.promptOptimizationService.optimize(dto, user.id);
     }
 
@@ -52,7 +53,7 @@ export class GenerationWebController extends BaseController {
         @Query() query: QueryVideoGenerationDto,
         @Playground() user: UserPlayground,
     ) {
-        return this.generationService.list(query, user.id);
+        return this.generationService.listForWeb(query, user.id);
     }
 
     @Get("options/models")
@@ -97,7 +98,7 @@ export class GenerationWebController extends BaseController {
         @Param("id", UUIDValidationPipe) id: string,
         @Playground() user: UserPlayground,
     ) {
-        return this.generationService.findOwnedById(id, user.id);
+        return this.generationService.findOwnedPublicById(id, user.id);
     }
 
     @Get(":id/status")
@@ -105,6 +106,6 @@ export class GenerationWebController extends BaseController {
         @Param("id", UUIDValidationPipe) id: string,
         @Playground() user: UserPlayground,
     ) {
-        return this.generationService.pollAndUpdate(id, user.id);
+        return this.generationService.pollAndUpdateForWeb(id, user.id);
     }
 }

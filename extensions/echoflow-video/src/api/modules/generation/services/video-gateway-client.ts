@@ -4,6 +4,7 @@ import { Logger } from "@nestjs/common";
 import type { VideoMediaItem } from "../../../db/entities/video-generation.entity";
 import type { VideoModelEndpoint } from "../../../db/entities/video-model-config.entity";
 import type { ResolvedVideoModelConfig } from "./model-config.service";
+import { requestVideoJson, testVideoJsonEndpoint } from "./video-http-client";
 import type { PollTaskOutput, SubmitTaskInput, SubmitTaskOutput } from "./video-provider.interface";
 import { ECHOFLOW_VIDEO_MODEL } from "./video-model-catalog";
 
@@ -17,7 +18,7 @@ export class VideoGatewayClient {
         private readonly baseUrl: string,
     ) {
         if (!apiKey) {
-            throw HttpErrorFactory.badRequest(`模型 ${modelConfig.displayName} 的接入点未配置 API Key`);
+            throw HttpErrorFactory.badRequest(`模型 ${modelConfig.displayName} 的接入点主站密钥缺少 apiKey/api_key 字段`);
         }
         if (!baseUrl) {
             throw HttpErrorFactory.badRequest(`模型 ${modelConfig.displayName} 的接入点未配置 Base URL`);
@@ -51,32 +52,15 @@ export class VideoGatewayClient {
     }
 
     async testConnection(): Promise<void> {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.endpoint.testTimeoutMs ?? 15_000);
-        try {
-            const response = await fetch(this.url(this.modelConfig.pollPath.replace("{id}", "echoflow-video-config-check")), {
-                method: "GET",
-                headers: this.headers(),
-                signal: controller.signal,
-            });
-            if (response.status === 404) {
-                return;
-            }
-            if ([401, 403].includes(response.status)) {
-                throw HttpErrorFactory.badRequest("API Key 无效或无权限访问该模型");
-            }
-            if (!response.ok) {
-                const responseText = await response.text();
-                throw classifyHttpError(response.status, responseText, 0);
-            }
-        } catch (error) {
-            if (error instanceof Error && error.name === "AbortError") {
-                throw HttpErrorFactory.badRequest("视频接口连接测试超时，请稍后重试");
-            }
-            throw error;
-        } finally {
-            clearTimeout(timeoutId);
-        }
+        await testVideoJsonEndpoint(
+            this.url(this.modelConfig.pollPath.replace("{id}", "echoflow-video-config-check")),
+            { method: "GET", headers: this.headers() },
+            {
+                requestTimeoutMs: this.endpoint.testTimeoutMs ?? 15_000,
+                serviceLabel: "视频接口",
+                badRequestLabel: "视频接口请求参数有误",
+            },
+        );
     }
 
     private buildRequest(input: SubmitTaskInput): Record<string, unknown> {
@@ -173,44 +157,17 @@ export class VideoGatewayClient {
         url: string,
         options: { method: string; body?: string },
     ): Promise<Record<string, unknown>> {
-        let lastError: Error | undefined;
-        const maxRetries = this.endpoint.maxRetries ?? 2;
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            try {
-                return await this.executeRequest(url, options, attempt);
-            } catch (error) {
-                lastError = error instanceof Error ? error : new Error(String(error));
-                if (!isRetryable(lastError) || attempt >= maxRetries) {
-                    throw lastError;
-                }
-                await sleep((this.endpoint.retryDelayMs ?? 1_000) * Math.pow(2, attempt));
-            }
-        }
-        throw lastError ?? new Error("视频接口请求失败");
-    }
-
-    private async executeRequest(
-        url: string,
-        options: { method: string; body?: string },
-        attempt: number,
-    ): Promise<Record<string, unknown>> {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.endpoint.requestTimeoutMs ?? 120_000);
-        try {
-            const response = await fetch(url, {
-                method: options.method,
-                headers: this.headers(),
-                body: options.body,
-                signal: controller.signal,
-            });
-            const responseText = await response.text();
-            if (!response.ok) {
-                throw classifyHttpError(response.status, responseText, attempt);
-            }
-            return safeJsonParse(responseText) ?? {};
-        } finally {
-            clearTimeout(timeoutId);
-        }
+        return requestVideoJson(
+            url,
+            { ...options, headers: this.headers() },
+            {
+                requestTimeoutMs: this.endpoint.requestTimeoutMs ?? 120_000,
+                maxRetries: this.endpoint.maxRetries ?? 2,
+                retryDelayMs: this.endpoint.retryDelayMs ?? 1_000,
+                serviceLabel: "视频接口",
+                badRequestLabel: "视频接口请求参数有误",
+            },
+        );
     }
 
     private url(path: string) {
@@ -283,53 +240,4 @@ function getPath(data: unknown, path: string): unknown {
         if (typeof value === "object") return (value as Record<string, unknown>)[key];
         return undefined;
     }, data);
-}
-
-function isRetryable(error: Error): boolean {
-    const message = error.message || "";
-    return (
-        message.includes("429") ||
-        message.includes("500") ||
-        message.includes("502") ||
-        message.includes("503") ||
-        message.includes("504") ||
-        message.includes("timeout") ||
-        message.includes("ETIMEDOUT") ||
-        message.includes("ECONNRESET") ||
-        message.includes("aborted")
-    );
-}
-
-function classifyHttpError(status: number, body: string, attempt: number): Error {
-    const prefix = attempt > 0 ? `(重试 ${attempt} 次后) ` : "";
-    const truncated = body.length > 500 ? body.slice(0, 500) + "..." : body;
-    switch (status) {
-        case 400:
-            return HttpErrorFactory.badRequest(`${prefix}视频接口请求参数有误: ${truncated}`);
-        case 401:
-            return HttpErrorFactory.badRequest(`${prefix}API Key 无效或已过期`);
-        case 403:
-            return HttpErrorFactory.badRequest(`${prefix}API Key 无权限访问该模型`);
-        case 429:
-            return HttpErrorFactory.badRequest(`${prefix}视频接口请求过于频繁，请稍后重试`);
-        case 500:
-        case 502:
-        case 503:
-        case 504:
-            return HttpErrorFactory.badRequest(`${prefix}视频服务暂时不可用 (${status})，请稍后重试`);
-        default:
-            return HttpErrorFactory.badRequest(`${prefix}视频接口请求失败: ${status} ${truncated}`);
-    }
-}
-
-function safeJsonParse<T>(value: string): T | undefined {
-    try {
-        return JSON.parse(value) as T;
-    } catch {
-        return undefined;
-    }
-}
-
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
 }

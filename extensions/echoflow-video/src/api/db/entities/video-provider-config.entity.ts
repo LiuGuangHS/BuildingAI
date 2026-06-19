@@ -19,8 +19,11 @@ export class VideoProviderConfig {
     @Column({ type: "varchar", length: 50, unique: true, default: "happyhorse" })
     provider: string;
 
-    @Column({ type: "text", nullable: true, comment: "Encrypted webhook secret for provider callbacks" })
-    webhookSecret?: string;
+    @Column({ type: "uuid", nullable: true, comment: "Main-system Secret id for provider callback verification" })
+    webhookSecretId?: string;
+
+    @Column({ type: "varchar", length: 120, nullable: true, comment: "Main-system Secret display name for callbacks" })
+    webhookSecretName?: string;
 
     @Column({ type: "boolean", default: true, comment: "Whether prompt optimizer is enabled" })
     promptOptimizerEnabled: boolean;
@@ -30,21 +33,6 @@ export class VideoProviderConfig {
 
     @Column({ type: "jsonb", default: () => "'[]'", comment: "Allowed main-system AI model ids for prompt optimization" })
     promptOptimizerAllowedModelIds: string[];
-
-    @Column({ type: "boolean", default: true, comment: "Whether prompt optimizer charges by chat token usage" })
-    promptOptimizerBillingEnabled: boolean;
-
-    @Column({ type: "integer", default: 1, comment: "Power cost per token bucket for prompt optimization" })
-    promptOptimizerBillingPower: number;
-
-    @Column({ type: "integer", default: 1000, comment: "Token bucket size for prompt optimization billing" })
-    promptOptimizerBillingTokens: number;
-
-    @Column({ type: "integer", default: 500, comment: "Estimated token usage for prompt optimizer pre-check" })
-    promptOptimizerEstimatedTokens: number;
-
-    @Column({ type: "boolean", default: true, comment: "Whether provider config is enabled" })
-    enabled: boolean;
 
     @Column({ type: "jsonb", default: () => "'[]'", comment: "Prompt templates for quick fill" })
     templates: PromptTemplate[];

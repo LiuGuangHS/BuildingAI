@@ -13,6 +13,7 @@ import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
+import { createRequestKey } from "../lib/request-key";
 import { useWebEstimateVideoBillingMutation, useWebOptimizePromptMutation, useWebPromptOptimizerOptionsQuery } from "../services";
 import type {
     CreateVideoParams,
@@ -216,7 +217,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             model: selectedModel?.model ?? modelId,
             style: promptStyle,
             modelId: optimizerModelId || undefined,
-            requestKey: createRequestKey(),
+            requestKey: createRequestKey("prompt-opt"),
             ratio: supportsRatio ? ratio : undefined,
             resolution,
         });
@@ -386,7 +387,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
                                                 )}
                                             </div>
                                             <div className="flex gap-2">
-                                                <input
+                                                <Input
                                                     ref={(node) => {
                                                         fileInputsRef.current[index] = node;
                                                     }}
@@ -603,11 +604,4 @@ function estimatePower(model: VideoModelOption | undefined, resolution: string, 
     const max = model?.capabilities?.duration?.max ?? 30;
     const safeDuration = Math.min(Math.max(duration || 5, min), max);
     return Math.ceil(safeDuration * (modelMultiplier[model?.model ?? ""] ?? 2) * (resolution === "1080P" ? 2 : 1));
-}
-
-function createRequestKey() {
-    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-        return crypto.randomUUID();
-    }
-    return `prompt-opt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }

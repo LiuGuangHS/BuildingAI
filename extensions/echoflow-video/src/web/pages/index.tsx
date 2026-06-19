@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { GenerationForm } from "../components/generation-form";
 import { HistoryList } from "../components/history-list";
 import { VideoResult } from "../components/video-result";
+import { createRequestKey } from "../lib/request-key";
+import { readReuseParams } from "../lib/reuse-params-storage";
 import {
     useWebCreateVideoMutation,
     useWebVideoTemplatesQuery,
@@ -40,23 +42,16 @@ export default function AIVideoIndexPage() {
         : undefined;
 
     useEffect(() => {
-        const raw = sessionStorage.getItem("echoflow-video:reuse-params");
-        if (!raw) return;
-        try {
-            setFormInitialValues(JSON.parse(raw) as Partial<CreateVideoParams>);
+        const reuseParams = readReuseParams();
+        if (reuseParams) {
+            setFormInitialValues(reuseParams);
             toast.success("已回填生成参数");
-        } catch {
-            // ignore invalid handoff payload
-        } finally {
-            sessionStorage.removeItem("echoflow-video:reuse-params");
         }
     }, []);
 
     const handleSubmit = async (data: CreateVideoParams) => {
         try {
-            const requestKey =
-                globalThis.crypto?.randomUUID?.() ??
-                `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+            const requestKey = createRequestKey();
             const gen = await createMutation.mutateAsync({ ...data, requestKey });
             setCurrentId(gen.id);
             toast.success("任务已提交，正在生成视频...");

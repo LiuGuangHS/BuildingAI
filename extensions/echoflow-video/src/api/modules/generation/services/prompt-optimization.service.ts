@@ -5,7 +5,7 @@ import { AccountLog } from "@buildingai/db/entities";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { ExtensionBillingService, PublicAiModelService } from "@buildingai/extension-sdk";
+import { ExtensionBillingService, PublicAiModelService, normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { Injectable, Logger } from "@nestjs/common";
 
 import {
@@ -88,7 +88,7 @@ export class PromptOptimizationService {
         const { record } = pending;
 
         try {
-            const result = await this.aiOptimize(record, modelId, prompt, style, dto, userId, config);
+            const result = await this.aiOptimize(record, modelId, prompt, style, dto, userId);
             const response: PromptOptimizationResult = {
                 originalPrompt: prompt,
                 optimizedPrompt: result.optimizedPrompt,
@@ -130,32 +130,18 @@ export class PromptOptimizationService {
         style: PromptOptimizationStyle,
         dto: OptimizePromptDto,
         userId: string | undefined,
-        config: Awaited<ReturnType<ProviderConfigService["getConsoleConfig"]>>,
     ): Promise<{
         optimizedPrompt: string;
         usage?: PromptOptimizationResult["usage"];
         consumedPower?: number;
     }> {
         const modelInfo = await this.aiModelService.getModelInfo(modelId);
-        const providerConfig = this.flattenProviderConfig(
+        const providerConfig = normalizeProviderConfig(
             await this.aiModelService.getProviderConfig(modelId),
         );
         const provider = await this.aiModelService.getProviderAdapter(modelId, providerConfig);
         if (!provider.supports("language")) {
             throw new Error("所选主站模型不支持文本生成");
-        }
-
-        const billingRule = this.resolveBillingRule(modelInfo.billingRule, config);
-        const estimatedPower = this.calculateConsumedPower(
-            config.promptOptimizerEstimatedTokens ?? 500,
-            billingRule,
-        );
-        const billingEnabled = config.promptOptimizerBillingEnabled !== false && Boolean(userId) && estimatedPower > 0;
-        if (billingEnabled) {
-            if (!(await this.billingService.hasSufficientPower(userId!, estimatedPower))) {
-                throw HttpErrorFactory.badRequest("积分不足，请充值后重试");
-            }
-            await this.deductOptimizationBilling(record.id, userId!, estimatedPower, modelId);
         }
 
         const system = [
@@ -174,6 +160,17 @@ export class PromptOptimizationService {
             dto.resolution ? `Resolution: ${dto.resolution}` : "",
             "Optimized video prompt:",
         ].filter(Boolean).join("\n");
+
+        const billingRule = this.resolveBillingRule(modelInfo.billingRule);
+        const estimatedTokens = this.estimateTokens(`${system}\n${userPrompt}`) + 300;
+        const estimatedPower = billingRule ? this.calculateConsumedPower(estimatedTokens, billingRule) : 0;
+        const billingEnabled = Boolean(userId) && estimatedPower > 0;
+        if (billingEnabled) {
+            if (!(await this.billingService.hasSufficientPower(userId!, estimatedPower))) {
+                throw HttpErrorFactory.badRequest("积分不足，请充值后重试");
+            }
+            await this.deductOptimizationBilling(record.id, userId!, estimatedPower, modelId);
+        }
 
         const result = await generateText({
             model: provider(modelInfo.model).model,
@@ -227,7 +224,7 @@ export class PromptOptimizationService {
         return {
             enabled: config.promptOptimizerEnabled !== false,
             defaultModelId,
-            billingEnabled: config.promptOptimizerBillingEnabled !== false,
+            billingEnabled: usableModels.some((model) => this.resolveBillingRule(model.billingRule)),
             models: usableModels,
         };
     }
@@ -331,14 +328,13 @@ export class PromptOptimizationService {
         );
     }
 
-    private resolveBillingRule(
-        modelBillingRule: { power?: number; tokens?: number } | undefined,
-        config: Awaited<ReturnType<ProviderConfigService["getConsoleConfig"]>>,
-    ) {
-        return {
-            power: Number(modelBillingRule?.power ?? config.promptOptimizerBillingPower ?? 1),
-            tokens: Number(modelBillingRule?.tokens ?? config.promptOptimizerBillingTokens ?? 1000),
-        };
+    private resolveBillingRule(modelBillingRule: { power?: number; tokens?: number } | undefined) {
+        const power = Number(modelBillingRule?.power ?? 0);
+        const tokens = Number(modelBillingRule?.tokens ?? 0);
+        if (!Number.isFinite(power) || !Number.isFinite(tokens) || power <= 0 || tokens <= 0) {
+            return undefined;
+        }
+        return { power, tokens };
     }
 
     private calculateConsumedPower(totalTokens: number, billingRule: { power: number; tokens: number }) {
@@ -372,27 +368,6 @@ export class PromptOptimizationService {
         const cjkChars = text.match(/[\u3400-\u9fff]/g)?.length ?? 0;
         const punctuation = text.match(/[^\sA-Za-z0-9_\u3400-\u9fff]/g)?.length ?? 0;
         return Math.max(1, Math.ceil(asciiWords * 1.3 + cjkChars * 0.8 + punctuation * 0.25));
-    }
-
-    private flattenProviderConfig(config: Record<string, unknown>): Record<string, string> {
-        const normalized: Record<string, string> = {};
-
-        Object.entries(config).forEach(([key, item]) => {
-            if (typeof item === "string") {
-                normalized[key] = item;
-                return;
-            }
-
-            const value = (item as { value?: unknown } | undefined)?.value;
-            if (typeof value === "string") {
-                normalized[key] = value;
-            }
-        });
-
-        return {
-            apiKey: normalized.apiKey || normalized.api_key || normalized.API_KEY || "",
-            baseURL: normalized.baseURL || normalized.baseUrl || normalized.base_url || "",
-        };
     }
 
     private async assertOptimizerModelUsable(modelId: string, label: string) {

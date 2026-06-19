@@ -16,8 +16,9 @@ function makeEndpoint(overrides: Record<string, unknown> = {}) {
     return {
         id: "primary",
         name: "主接口",
-        baseUrl: "https://api.echoflow.cn",
-        apiKey: "test-key",
+        secretId: "secret-001",
+        secretName: "测试密钥",
+        baseUrlOverride: "https://api.echoflow.cn",
         enabled: true,
         priority: 100,
         requestTimeoutMs: 120000,
@@ -28,8 +29,12 @@ function makeEndpoint(overrides: Record<string, unknown> = {}) {
     };
 }
 
+const mockSecretService = {
+    getConfigKeyValuePairs: jest.fn(),
+};
+
 function makeService() {
-    return new ModelConfigService(mockRepository as any);
+    return new ModelConfigService(mockRepository as any, mockSecretService as any);
 }
 
 beforeEach(() => {
@@ -58,7 +63,7 @@ describe("ModelConfigService", () => {
         expect(mockRepository.save).toHaveBeenCalled();
     });
 
-    it("returns web models when endpoint has api key", async () => {
+    it("returns web models when endpoint has a secret binding", async () => {
         mockRepository.find.mockResolvedValue([
             {
                 id: "model-seedance",
@@ -150,7 +155,7 @@ describe("ModelConfigService", () => {
             visibleToUser: true,
             capabilities: { abilityTypes: ["text_to_video"] },
             defaultParams: { duration: 5, resolution: "720P", ratio: "16:9", watermark: true },
-            endpoints: [makeEndpoint({ apiKey: "old-key" })],
+            endpoints: [makeEndpoint({ secretId: "old-secret" })],
             sortOrder: 10,
         });
 
@@ -159,7 +164,7 @@ describe("ModelConfigService", () => {
             model: "other-video",
             displayName: "运营名",
             defaultParams: { duration: 999, resolution: "bad", ratio: "bad", watermark: false },
-            endpoints: [makeEndpoint({ apiKey: "new-key" })],
+            endpoints: [makeEndpoint({ secretId: "new-secret" })],
         });
 
         expect(mockRepository.save).toHaveBeenCalledWith(expect.objectContaining({
@@ -173,7 +178,8 @@ describe("ModelConfigService", () => {
                 watermark: false,
             }),
             endpoints: [expect.objectContaining({
-                baseUrl: "https://api.echoflow.cn",
+                secretId: "new-secret",
+                baseUrlOverride: "https://api.echoflow.cn",
                 enabled: true,
             })],
         }));

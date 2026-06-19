@@ -4,6 +4,7 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
+import { normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 
 import {
@@ -163,7 +164,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         const config = await this.findByIdOrFail(id);
         this.assertSupportedModelConfig(config.model);
         const resolved = this.toResolvedConfig(config);
-        const [endpoint] = this.normalizeEndpointConfigs([endpointDto], config.endpoints ?? [], true);
+        const [endpoint] = this.normalizeEndpointConfigs([endpointDto], config.endpoints ?? []);
         const credential = await this.resolveEndpointCredential(endpoint);
         const { VideoGatewayClient } = await import("./video-gateway-client");
         await new VideoGatewayClient(resolved, endpoint, credential.apiKey, credential.baseUrl).testConnection();
@@ -190,10 +191,10 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
             throw HttpErrorFactory.badRequest("请先为接入点选择主站密钥");
         }
         const secretConfig = await this.secretService.getConfigKeyValuePairs(endpoint.secretId);
-        const values = this.flattenSecretConfig(secretConfig);
-        const apiKey = this.pickFirst(values, ["apiKey", "api_key", "API_KEY", "key", "token"]);
+        const values = normalizeProviderConfig(secretConfig);
+        const apiKey = values.apiKey;
         const baseUrl = endpoint.baseUrlOverride ||
-            this.pickFirst(values, ["baseURL", "baseUrl", "base_url", "BASE_URL", "endpoint"]) ||
+            values.baseURL ||
             defaultHappyHorseClientOptions.baseUrl;
         if (!apiKey) {
             throw HttpErrorFactory.badRequest("主站密钥中未找到 apiKey/api_key 字段");
@@ -211,17 +212,18 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     }
 
     toWebOption(config: ResolvedVideoModelConfig | VideoModelConfig) {
+        const resolved = "externalModelId" in config ? config : this.toResolvedConfig(config);
         return {
-            id: config.model,
-            modelConfigId: "id" in config ? config.id : undefined,
-            name: config.displayName,
-            model: config.model,
-            provider: config.provider,
-            modelType: config.capabilities?.abilityTypes?.[0] ?? "video",
-            description: config.description ?? "",
-            mediaTypes: config.capabilities?.mediaTypes ?? [],
-            capabilities: config.capabilities ?? {},
-            defaultParams: config.defaultParams ?? {},
+            id: resolved.model,
+            modelConfigId: resolved.id,
+            name: resolved.displayName,
+            model: resolved.model,
+            provider: resolved.provider,
+            modelType: resolved.capabilities?.abilityTypes?.[0] ?? "video",
+            description: resolved.description ?? "",
+            mediaTypes: resolved.capabilities?.mediaTypes ?? [],
+            capabilities: resolved.capabilities ?? {},
+            defaultParams: resolved.defaultParams ?? {},
         };
     }
 
@@ -245,7 +247,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
                 visibleToUser: config.visibleToUser,
                 capabilities: config.capabilities,
                 defaultParams: config.defaultParams,
-                endpoints: this.normalizeEndpointConfigs(config.endpoints, [], false),
+                endpoints: this.normalizeEndpointConfigs(config.endpoints, []),
                 sortOrder: config.sortOrder,
             })),
         );
@@ -283,8 +285,8 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
             capabilities: defaultConfig.capabilities,
             defaultParams: this.normalizeDefaultParams(dto.defaultParams ?? existing.defaultParams, defaultConfig),
             endpoints: dto.endpoints
-                ? this.normalizeEndpointConfigs(dto.endpoints, existing.endpoints ?? [], true)
-                : this.normalizeEndpointConfigs(existing.endpoints ?? defaultConfig.endpoints, [], false),
+                ? this.normalizeEndpointConfigs(dto.endpoints, existing.endpoints ?? [])
+                : this.normalizeEndpointConfigs(existing.endpoints ?? defaultConfig.endpoints, []),
             sortOrder: dto.sortOrder ?? existing.sortOrder ?? defaultConfig.sortOrder,
         };
     }
@@ -306,7 +308,7 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
             visibleToUser: config.visibleToUser,
             capabilities: defaultConfig.capabilities,
             defaultParams: this.normalizeDefaultParams(config.defaultParams, defaultConfig),
-            endpoints: this.normalizeEndpointConfigs(config.endpoints?.length ? config.endpoints : defaultConfig.endpoints, [], false),
+            endpoints: this.normalizeEndpointConfigs(config.endpoints?.length ? config.endpoints : defaultConfig.endpoints, []),
             submitPath: defaultConfig.submitPath,
             pollPath: defaultConfig.pollPath,
             sortOrder: config.sortOrder ?? defaultConfig.sortOrder,
@@ -352,18 +354,16 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     private normalizeEndpointConfigs(
         endpoints: Array<VideoModelEndpoint | VideoModelEndpointDto> | undefined,
         existing: VideoModelEndpoint[],
-        encryptPlainKeys: boolean,
     ): VideoModelEndpoint[] {
         const byId = new Map(existing.map((endpoint) => [endpoint.id, endpoint]));
         const normalized = (endpoints ?? []).map((endpoint, index) => {
             const id = endpoint.id?.trim() || `endpoint-${index + 1}`;
             const previous = byId.get(id);
-            void encryptPlainKeys;
             return {
                 id,
                 name: endpoint.name?.trim().slice(0, 80) || `接入点 ${index + 1}`,
-                secretId: endpoint.secretId?.trim() || previous?.secretId,
-                secretName: endpoint.secretName?.trim() || previous?.secretName,
+                secretId: endpoint.secretId?.trim() || undefined,
+                secretName: endpoint.secretName?.trim() || undefined,
                 baseUrlOverride: endpoint.baseUrlOverride
                     ? this.normalizeBaseUrl(endpoint.baseUrlOverride)
                     : previous?.baseUrlOverride,
@@ -436,18 +436,6 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
             throw HttpErrorFactory.badRequest(`${label}必须是 ${min} 到 ${max} 之间的整数`);
         }
         return value;
-    }
-
-    private flattenSecretConfig(config: Record<string, { value: string; required: boolean }>): Record<string, string> {
-        return Object.fromEntries(Object.entries(config).map(([key, item]) => [key, item.value ?? ""]));
-    }
-
-    private pickFirst(values: Record<string, string>, keys: string[]): string {
-        for (const key of keys) {
-            const value = values[key]?.trim();
-            if (value) return value;
-        }
-        return "";
     }
 
     private assertSupportedModelConfig(model: string) {
