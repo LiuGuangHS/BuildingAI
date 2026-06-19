@@ -1,88 +1,131 @@
-# AI 乐园小镇
+# 乐园小镇
 
-`echoflow-ai-town` 是 EchoFlow 的 AI 小镇经营插件，核心玩法包括日常经营、居民关系、探索事件、建筑升级、AI 建议和 NPC 对话。
+`echoflow-ai-town` 是 EchoFlow 的小镇经营叙事插件。用户端直接进入可玩小镇，围绕存档、行动、居民关系、事件、日结、今日计划和居民对话形成日常循环；Console 负责模型配置、存档诊断、日志和运营排查。
 
-## 功能范围
+## 定位
 
-- 用户端直接展示小镇经营主界面。
-- 支持新建存档、读取存档、删除存档、行动推进和居民聊天。
-- 支持随机事件、节日活动、主线任务、关系推进和资源结算。
-- Console 管理端支持存档管理、AI 配置、模型查看、日志查看、统计和测试生成。
+| 维度 | 当前边界 |
+|---|---|
+| 产品形态 | 经营叙事游戏，不做营销落地页或“进入工作台”中转页。 |
+| AI 价值 | 作为镇务参谋、叙事导演和居民表演层；资源、奖励、扣费和成长仍由确定性规则控制。 |
+| 用户体验 | 第一屏展示小镇场景、资源、目标、建筑/居民热点和行动入口。 |
+| 商业方向 | 优先售卖故事深度、记忆容量、角色章节、季节活动和外观表达；不卖数值碾压。 |
+| 管理职责 | Console 只做 AI 配置、存档管理、日志统计、测试生成和异常诊断。 |
 
-## 配置
+## 当前能力
 
-- 管理员在 Console 配置可用 LLM 模型。
-- Console 只展示启用的 LLM 模型和启用的 Provider；保存默认模型时后端会再次校验模型可用性。
-- 模型列表返回 `providerName` 供后台展示，用户侧不暴露模型选择。
-- 模型 Provider 的 API Key、Base URL 等敏感配置走平台密钥配置，不写入源码、`manifest.json`、前端包或 `.env`。
-- 用户侧仅提示 AI 生成可能消耗额度，不暴露模型选择。
+| 能力 | 状态 | 说明 |
+|---|---|---|
+| 存档 | ready | 支持创建、读取、软删除；删除时同步软删除角色和事件。 |
+| 行动循环 | ready | 经营、拜访、布置、探索、升级和休息都会经过服务端规则结算。 |
+| 行动预算 | ready | 每日行动预算、同日重复动作拦截和 `rest` 重置已在服务端和前端联动。 |
+| 资源审计 | ready | 行动结果和日结展示金币、体力、声望、关系和等级 delta。 |
+| 居民对话 | ready | 支持主站 LLM 调用、本地 fallback、日志记录和关系推进。 |
+| 居民记忆 | ready | 保存摘要、心情、偏好、约定、关键时刻和有限最近消息；prompt 只取白名单记忆片段。 |
+| 记忆闭环 | ready | 待回应约定会影响推荐目标、行动预览、地图热点、镇务参谋和 Console 诊断。 |
+| 连续开张 | ready | `worldState.retention` 记录有效日程、连续天数和下次回访钩子。 |
+| Catalog | ready | 建筑、区域、初始居民、基础行动、事件选项、日常任务、周目标、主线章节、成就和节日候选已迁入 catalog。 |
+| 正式计费 | pending | 当前只记录 AI 调用日志，尚未接入 `ExtensionBillingModule`。 |
+| Phaser 主场景 | reserved | 当前仍是 React 场景化界面；Phaser 可后续评估，但不进入默认发布路径。 |
 
-## 计费
+## 入口与页面
 
-- 插件内 AI 建议、聊天和结构化事件可能消耗额度。
-- 当前实现通过插件自身的 AI 服务记录调用日志，并由平台模型配置提供推理能力。
-- 若后续引入正式计费，需要再接入 `ExtensionBillingModule`，不要直接修改用户余额。
+| 入口 | 路径 | 文件 | 职责 |
+|---|---|---|---|
+| Web | `/extension/echoflow-ai-town/` | `src/web/pages/index.tsx` | 小镇主场景、存档、行动、聊天、事件、日结和目标。 |
+| Console | `/extension/echoflow-ai-town/console/` | `src/web/pages/console/saves/list.tsx` | 存档列表、详情、预算、记忆和异常诊断。 |
+| Console | `/extension/echoflow-ai-town/console/ai-config` | `src/web/pages/console/ai-config.tsx` | LLM 模型、温度、token、fallback、每日限制和测试生成。 |
+
+路由由 `src/web/routes.tsx` 使用 `defineRouteOption()` 注册，包含 Web `routes` 和 Console `consoleRoutes` / `consoleMenus`。
+
+## API 与后端模块
+
+| 模块 | 文件 | 说明 |
+|---|---|---|
+| Module | `src/api/modules/town/town.module.ts` | 导入 `AiPublicModule`，注册小镇业务服务和规则服务。 |
+| Web Controller | `controllers/web/town.web.controller.ts` | 用户端存档、行动、聊天、事件和状态接口。 |
+| Console Controller | `controllers/console/town.controller.ts` | 管理端配置、存档、日志、统计和测试生成接口。 |
+| TownService | `services/town.service.ts` | 存档事务、行动结算、聊天写回、软删除和恢复边界。 |
+| TownAiService | `services/town-ai.service.ts` | 主站 LLM 调用、结构化建议、居民回复、fallback 和日志。 |
+| Rule Services | `town-world-rules.service.ts`、`town-relationship-rules.service.ts`、`town-progress-rules.service.ts` | 天气、日结、关系、任务、成就、解锁和奖励计算。 |
+| Catalog | `catalog/*.ts` | 默认建筑、区域、居民、基础行动、事件选项、任务、周目标、主线章节、成就和节日候选。 |
+
+后端写入阶段使用存档锁保护资源、关系、任务和事件一致性；模型调用不放在长事务内。
+
+## 主系统复用边界
+
+| 能力 | 当前实现 |
+|---|---|
+| LLM | 通过 `AiPublicModule` / `PublicAiModelService` 获取启用 LLM 和 Provider adapter。 |
+| Provider Config | 使用 `@buildingai/extension-sdk` 的 `normalizeProviderConfig()`，兼容常见 `apiKey` / `baseURL` 字段别名。 |
+| Secret | 模型密钥来自主站 Provider Secret；插件不保存 API Key，不写 `.env`。 |
+| 上传 | 当前小镇不处理用户上传文件。 |
+| 计费 | 尚未接入正式扣费；商业化前需使用行动、聊天或事件 ID 作为 `associationNo`。 |
+| 队列 | 当前 AI 调用为业务请求内编排；如引入长流程记忆压缩或章节生成，应优先接主系统队列。 |
+| 通知 | 当前无异步终态或离线触达事件，暂不接入通知；后续长任务或运营触达应复用 `ExtensionNotificationService`。 |
+| UI | 用户端和 Console 优先复用主系统 Button、Card、Input、Select、Tabs、Badge、Label 等组件。 |
 
 ## 数据与存储
 
-- 插件实体使用 `@ExtensionEntity()`，表位于插件独立 schema。
-- 业务实体包括存档、角色、事件、AI 配置和 AI 调用日志。
-- 删除存档会软删除存档、角色和事件，后台统计和列表默认只统计未删除记录。
-- 运行时图片资源放在插件内 `src/web/assets` 与 `storage/static`，发布只依赖静态 icon。
+| 数据 | 说明 |
+|---|---|
+| 实体 | 存档、角色、事件、AI 配置和 AI 调用日志均使用 `@ExtensionEntity()`。 |
+| Migration | 首版 migration：`src/api/db/migrations/1781539200003-0.0.1-init-ai-town.ts`。 |
+| Upgrade | `src/api/upgrade/0.0.1/index.ts` 幂等修复 AI 配置单例键，并写入主系统 extension 安装记录。 |
+| 初始内容 | 初始世界、角色和事件由 `createSave()` 在事务内生成；当前无独立 seed 文件。 |
+| 软删除 | 删除存档会软删除存档、角色和事件；列表和统计默认只看未删除数据。 |
+| 静态资源 | 运行界面资源位于 `src/web/assets` 和 `storage/static`，发布包只依赖白名单内静态文件。 |
 
-## 种子数据
+## 玩法与 AI 规则
 
-当前插件不需要独立 seed 文件。初始世界、角色与事件由 `createSave()` 在事务内生成。
+| 规则 | 要求 |
+|---|---|
+| 数值边界 | AI 不直接改金币、体力、声望、关系、扣费或退款。 |
+| 结构化输出 | 今日计划和事件必须经过服务端校验、裁剪和 intent 白名单映射。 |
+| fallback | 模型未配置、禁用或失败时使用世界观化本地结果；用户端不展示上游错误或 fallback 字样。 |
+| 日程 | 行动预算、重复动作拦截和休息重置以服务端为最终边界。 |
+| 记忆 | LLM prompt 只携带摘要、心情、偏好、约定、关键时刻和最近少量消息。 |
+| 审计 | 资源变化应展示玩家可读解释，Console 可看到预算、记忆和异常诊断。 |
 
-## Migration 与 Upgrade
+## 开发与验证
 
-- 当前纳入版本为 `0.0.1`，已提交首版插件 migration：`src/api/db/migrations/1781539200003-0.0.1-init-ai-town.ts`。
-- 首版 migration 覆盖存档、角色、事件、AI 配置和 AI 调用日志；安装联调时需验证 migration 在目标数据库执行成功。
-- 首版 Upgrade：`src/api/upgrade/0.0.1/index.ts` 会幂等修复 `town_ai_configs.key` 单例配置列，并写入主系统 `extension` 安装记录，确保旧本地安装和新安装都能识别插件配置。
-- 后续字段变更时提升 `package.json.version` 与 `manifest.json.version`，并补充 migration 或 `src/api/upgrade/<version>/index.ts`。
+```bash
+pnpm --filter echoflow-ai-town check-types
+pnpm --filter echoflow-ai-town build:api
+pnpm --filter echoflow-ai-town build:web
+pnpm --filter echoflow-ai-town test
+pnpm --filter echoflow-ai-town build:publish
+```
 
-## 质量门禁
+当前已知验证状态：
 
-- `pnpm --filter echoflow-ai-town check-types`
-- `pnpm --filter echoflow-ai-town build:api`
-- `pnpm --filter echoflow-ai-town build:web`
-- `pnpm --filter echoflow-ai-town test`
+| 命令 | 状态 | 说明 |
+|---|---|---|
+| `check-types` | pass | 已在 Node 22.23.0 / pnpm 10.20.0 环境通过。 |
+| `test` | pass | 当前测试覆盖 catalog 守门、行动预算、居民记忆、推荐闭环、可玩首屏、连续开张和下次回访钩子。 |
+| `build:api` | pass | API 产物已包含 catalog、migration 和 `0.0.1` upgrade。 |
+| `build:web` | pass | Vite 8 / Rolldown 已恢复构建；仍有 `lucide` 等 chunk size warning，后续按实际加载成本拆包。 |
+| `build:publish` | pass | 已完成 `build:clean -> build:web -> build:api` 发布构建链路。 |
 
-## 后续待办
+## 已知风险
 
-- 为世界规则、关系推进、AI 建议和聊天补 focused unit tests。
-- 视需要再决定是否接入正式插件计费模块。
+| 风险 | 影响 | 下一步 |
+|---|---|---|
+| AI 上下文与写回分阶段 | 并发行动时 AI 文案可能基于稍早状态，资源结算仍以锁内最新状态为准。 | 如需强一致叙事，引入 action revision 或处理中状态。 |
+| 内容包仍未 seed 化 | 运行内容已从规则服务迁入 catalog，但还没有后台内容包、赛季或 seed 初始化能力。 | 后续把可运营内容扩展为 catalog + seed/config，并保持 service 只做事务、校验和编排。 |
+| 未接正式计费 | 无法对今日计划、聊天或深度事件做余额预检、扣费和失败退款。 | 接入 `ExtensionBillingModule` 前先确定免费额度、订阅权益和内容包边界。 |
+| 普通行动审计不完整 | 线上排查资源变化仍依赖事件文本和当前存档。 | 为行动结算补规则快照或审计字段。 |
+| Web 包体偏大 | `lucide` 等共享 chunk 超过 Vite 默认 500KB 提醒。 | 结合真实首屏指标拆分 Console、图标和低频面板。 |
+| Phaser 仅预留 | 目前还不是 Canvas/Phaser 游戏内核。 | 先保持 React 可发布路径，再做只读场景评估。 |
 
-## 后端业务逻辑审查（2026-06-15）
+## 下一步
 
-### 模块拆解
-
-| 模块 | 当前逻辑 | 黑盒/隐含规则 |
-|------|----------|---------------|
-| Save | 创建存档时写初始世界、角色和欢迎事件；删除存档会软删除存档、角色和事件。 | 初始世界、NPC、任务和事件都由服务代码生成，不来自 seed 或可配置数据。 |
-| Action | `operate`、`visit`、`decorate`、`explore`、`rest`、`advice`、`upgrade` 会计算资源、体力、声望、进度、解锁、关系和事件。 | 行动进入事务后锁定同一存档，再做资源校验、状态变更和事件写入。 |
-| Chat | NPC 聊天会生成 AI 回复或本地 fallback，提升关系并推进轻量进度。 | 聊天和行动共享同一存档锁，避免并发覆盖写。 |
-| World Rules | 天气、每日结算、区域解锁、活动、建筑升级和世界默认值都在规则服务内计算。 | 多数规则是代码常量，管理端暂不能配置。 |
-| Relationship Rules | 关系等级、行动加成、升级折扣、NPC 剧情事件由规则服务决定。 | 关系目标会偏向关系最低角色，属于隐含分配策略。 |
-| Progress Rules | 每日任务、周目标、主线任务和成就推进由规则服务决定。 | `rest` 会推进日期并刷新每日任务；周目标刷新逻辑藏在行动流程内。 |
-| Town AI | Console 配置默认 LLM、温度、token、fallback、每日限制；记录 AI 调用日志。 | AI 未配置或禁用时也会写 fallback 日志并纳入每日限制。 |
-
-### 问题与修复规划
-
-| 优先级 | 模块 | 问题 | 影响 | 修复规划 |
-|--------|------|------|------|----------|
-| 已修复 | Action / Chat | 行动和聊天读取存档后在事务外计算，事务内没有 `pessimistic_write` 锁定同一存档。 | 并发点击可能让金币、体力、进度、关系和事件出现覆盖写或重复结算。 | 行动和聊天已在写入阶段锁定 `TownSave` 后更新。 |
-| 已修复 | Town AI Config | 配置表没有单例键或唯一约束；首次并发保存可能创建多条配置。 | `getConfig()` 只取最早一条，后续配置可能被忽略；旧安装升级后可能缺少 `key` 列导致配置页 500。 | 已将 `key=default` 字段和唯一约束合并进首版 `0.0.1` migration，并在 `0.0.1` upgrade 中幂等补列、回填旧配置和补唯一索引。 |
-| 已修复 | Town AI Logs | AI 禁用、未配置或 fallback 成功时不写调用日志。 | 管理端统计看不到本地 fallback 的真实使用量，每日限制也不覆盖 fallback。 | fallback/disabled 路径已写日志，并在日志前做每日限制校验。 |
-| 已修复 | Action / Chat | AI 调用曾在存档锁事务内执行。 | 上游模型慢时会占用数据库连接和行锁。 | 已改为事务外准备 AI 文本、事务内重新锁定最新存档并写入结果；最终资源结算仍以锁内最新状态为准。 |
-| P1 | Action / Chat | 两阶段 AI 生成可能基于稍早的存档上下文。 | 并发行动时，AI 文案可能不是完全最新，但资源、任务和关系结算仍保持一致。 | 后续如需强一致叙事，可引入 action revision 或短事务写入处理中状态，再异步校验 revision 后写 AI 文案。 |
-| P2 | Rule Data | 初始世界、角色、活动、任务和奖励都硬编码在服务里。 | 运营无法配置，规则变更需要发布代码。 | 保留代码默认值，同时规划 seed/配置表或 JSON 静态配置；关键规则补单测快照。 |
-| P2 | Billing | AI 调用目前只记日志，不接入正式插件计费。 | 如果模型成本需要由用户承担，当前无法扣费或退款。 | 若进入商业化，接入 `ExtensionBillingModule`，用行动/聊天事件 ID 作为 `associationNo`。 |
-| P2 | Observability | AI fallback 会写调用日志，但普通行动、资源结算和规则命中没有结构化审计日志。 | 线上排查“金币/体力为什么变化”时只能追事件文本和存档状态。 | 为行动结算增加规则快照或审计字段，至少记录原值、delta、触发规则和 AI fallback 状态。 |
-| P3 | Abuse Control | 除 AI 每日限制外，普通行动没有频率限制。 | 用户可快速刷资源或制造大量事件。 | 增加每存档行动冷却、每日行动上限或服务端节流。 |
-
-### 已确认较好的边界
-
-- Web / Console 入口职责清晰：用户端只做存档和玩法，Console 做 AI 配置、日志、统计和测试生成。
-- 删除存档会软删除角色和事件，避免孤儿业务数据。
-- 模型列表只返回启用 LLM 且 Provider 启用的模型。
+| 优先级 | 任务 |
+|---|---|
+| P1 | 完成 5 分钟闭环 smoke：创建存档 -> 早晨目标 -> 2 到 3 次行动 -> 事件 -> 日结 -> 第二天变化。 |
+| P1 | 为 catalog 内容补充内容包版本号、赛季分组和安装/升级 seed 策略。 |
+| P1 | 补行动结算审计字段，记录 before/after、delta、规则来源和 AI/fallback 状态。 |
+| P1 | 基于真实首屏性能拆分 Console、低频面板和图标 chunk。 |
+| P2 | 设计正式计费模型，再接 `ExtensionBillingModule`。 |
+| P2 | 评估 Phaser 只读 TownScene，与 React HUD/抽屉通过 bridge 通信。 |
+| P2 | 补世界规则、关系推进、任务进度、AI fallback、记忆压缩和计费幂等 focused tests。 |

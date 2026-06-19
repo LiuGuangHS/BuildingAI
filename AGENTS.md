@@ -107,11 +107,16 @@
 
 | 主题 | 要求 |
 |---|---|
-| 场景追溯 | 终态事件提供 `sourceType`、`sourceId` 或 `dedupeKey`，避免轮询、Webhook、手动刷新和恢复扫描重复投递。 |
-| 浏览器 Push | 使用维护中的第三方库；不得手写 VAPID/AES/JWT，除非没有可维护依赖且 README 记录原因、风险和迁移条件。 |
-| 公众号 | 走 `WechatOaService` 模板消息接口。 |
+| SDK | 插件后端通过 `@buildingai/extension-sdk` 的 `ExtensionNotificationModule` / `ExtensionNotificationService` 接入。 |
+| 注册 | 在模块初始化时调用 `registerScenes(extensionId, scenes)`；`sceneCode` 必须以插件 identifier 开头，例如 `echoflow-video.generation.succeeded`。 |
+| 投递 | 业务终态后调用 `notifyUser()`；主站通知不可用或投递失败只记录 skipped/failed，不回滚插件业务状态。 |
+| 场景追溯 | 终态事件提供 `sourceType`、`sourceId` 或 `dedupeKey`，避免轮询、Webhook、手动刷新和恢复扫描重复投递；主站用 `userId + dedupeKey` 唯一约束兜住并发重复。 |
+| 浏览器 Push | 使用维护中的第三方库；不得手写 VAPID/AES/JWT，除非没有可维护依赖且 README 记录原因、风险和迁移条件；订阅 endpoint 必须校验 HTTPS、无凭据、非本机/内网/保留地址。 |
+| 链接 | 通知跳转、Web Push 点击和公众号模板 URL 只允许站内相对路径或 HTTP/HTTPS URL，不允许协议相对地址、危险协议或带凭据 URL。 |
+| 偏好 | 仅 `userConfigurable` 场景进入用户通知偏好；关闭偏好后不创建新通知，但不影响业务终态。 |
+| 公众号 | 走 `WechatOaService` 模板消息接口；未绑定 openid、缺模板或缺公众号配置只记录 skipped/failed。 |
 | 短信 | 走主系统短信模块。 |
-| 管理 | 场景、渠道、模板、投递日志和测试入口必须进入 Console 管理。 |
+| 管理 | 场景、渠道、模板、投递日志和测试入口必须进入 Console 管理，入口为 `/console/notice/notification-management`；预留渠道不能保存为实际投递渠道。 |
 
 ## 数据、Upgrade 与存储
 
