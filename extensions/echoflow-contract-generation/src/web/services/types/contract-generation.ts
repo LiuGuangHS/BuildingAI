@@ -138,8 +138,8 @@ export type RewriteContractClauseResult = {
 export type ContractGenerationTask = {
     id: string;
     userId: string;
-    modelId: string;
-    providerId: string;
+    modelId?: string;
+    providerId?: string;
     title: string;
     contractType: string;
     industry?: string | null;
@@ -157,7 +157,7 @@ export type ContractGenerationTask = {
     resultUrl?: string | null;
     errorMessage?: string | null;
     costCredits: number;
-    providerMetadata: Record<string, unknown>;
+    providerMetadata?: Record<string, unknown>;
     requestPayload?: Record<string, unknown> | null;
     createdAt: string;
     updatedAt: string;

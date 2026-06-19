@@ -27,27 +27,30 @@ import {
     TableHeader,
     TableRow,
 } from "@buildingai/ui/components/ui/table";
-import { TimeText } from "@buildingai/ui/components/ui/time-text";
 import { usePagination } from "@buildingai/ui/hooks/use-pagination";
 import {
     AlertCircle,
     CheckCircle2,
     Clock3,
+    Coins,
     Eye,
+    FileWarning,
     Heart,
     RefreshCw,
     RotateCcw,
     Save,
     Search,
     Settings,
-    Sparkles,
+    ShieldCheck,
+    FileText,
     Trash2,
-    Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import packageJson from "../../../package.json";
 import { priceGroupLabel, reportLabel, reportTypeOptions, statusLabel, statusOptions } from "../constants/report-types";
 import {
     useAstrologyFortuneSettingQuery,
@@ -83,10 +86,18 @@ type ProfileFilters = {
     keyword: string;
 };
 
-type ConsoleTab = "settings" | "reports" | "profiles";
+type ConsoleTab = "overview" | "settings" | "reports" | "tasks" | "profiles";
 type DeleteTarget = { source: "row" | "detail"; report: AstrologyReport };
 
 const PAGE_SIZE = 20;
+const CONSOLE_BASE_PATH = `/extension/${packageJson.name}/console`;
+const consoleTabPaths: Record<ConsoleTab, string> = {
+    overview: CONSOLE_BASE_PATH,
+    settings: `${CONSOLE_BASE_PATH}/settings`,
+    reports: `${CONSOLE_BASE_PATH}/reports`,
+    tasks: `${CONSOLE_BASE_PATH}/tasks`,
+    profiles: `${CONSOLE_BASE_PATH}/profiles`,
+};
 
 const defaultForm: SettingForm = {
     defaultModelId: "",
@@ -119,8 +130,9 @@ const emptyReportStats: AstrologyReportStats = {
     favorite: 0,
 };
 
-export default function AstrologyFortuneConsolePage() {
-    useDocumentHead({ title: "AI星盘运势管理" });
+export default function AstrologyFortuneConsolePage({ section = "overview" }: { section?: ConsoleTab }) {
+    useDocumentHead({ title: "星盘运营控制台" });
+    const navigate = useNavigate();
 
     const [form, setForm] = useState<SettingForm>(defaultForm);
     const [reportDraftFilters, setReportDraftFilters] = useState<ReportFilters>(defaultReportFilters);
@@ -129,9 +141,9 @@ export default function AstrologyFortuneConsolePage() {
     const [profileFilters, setProfileFilters] = useState<ProfileFilters>(defaultProfileFilters);
     const [reportPage, setReportPage] = useState(1);
     const [profilePage, setProfilePage] = useState(1);
-    const [activeTab, setActiveTab] = useState<ConsoleTab>("settings");
     const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+    const activeTab = section;
 
     const settingQuery = useAstrologyFortuneSettingQuery();
     const modelsQuery = useAvailableLlmModelsQuery();
@@ -250,11 +262,11 @@ export default function AstrologyFortuneConsolePage() {
             <header className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="bg-primary/10 text-primary grid size-10 shrink-0 place-items-center rounded-md">
-                        <Sparkles className="size-5" />
+                        <FileText className="size-5" />
                     </div>
                     <div className="min-w-0">
-                        <h1 className="text-xl font-semibold">AI星盘运势管理</h1>
-                        <p className="text-muted-foreground mt-1 text-sm">模型、积分价格、生成记录和用户档案分区管理。</p>
+                        <h1 className="text-xl font-semibold">星盘运营控制台</h1>
+                        <p className="text-muted-foreground mt-1 text-sm">围绕生成调用、积分价格、异常任务和用户档案做运营管理。</p>
                     </div>
                 </div>
                 <div className="bg-card min-w-64 rounded-md border p-3">
@@ -264,17 +276,21 @@ export default function AstrologyFortuneConsolePage() {
             </header>
 
             <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="运营概览">
-                <Metric icon={<Search className="size-4" />} label="筛选结果" value={formatMetricValue(stats.total, reportStatsQuery.isLoading)} />
+                <Metric icon={<Search className="size-4" />} label="报告总量" value={formatMetricValue(stats.total, reportStatsQuery.isLoading)} />
                 <Metric icon={<CheckCircle2 className="size-4" />} label="成功" value={formatMetricValue(stats.success, reportStatsQuery.isLoading)} />
                 <Metric icon={<Clock3 className="size-4" />} label="处理中" value={formatMetricValue(stats.busy, reportStatsQuery.isLoading)} />
-                <Metric icon={<Heart className="size-4" />} label="收藏" value={formatMetricValue(stats.favorite, reportStatsQuery.isLoading)} />
+                <Metric icon={<FileWarning className="size-4" />} label="失败" value={formatMetricValue(stats.failed, reportStatsQuery.isLoading)} />
             </section>
 
-            <nav className="inline-flex flex-wrap gap-1 rounded-md border bg-muted p-1" aria-label="管理分区">
-                <TabButton active={activeTab === "settings"} icon={<Settings className="size-4" />} label="模型与价格" onClick={() => setActiveTab("settings")} />
-                <TabButton active={activeTab === "reports"} icon={<Sparkles className="size-4" />} label="报告记录" onClick={() => setActiveTab("reports")} />
-                <TabButton active={activeTab === "profiles"} icon={<Users className="size-4" />} label="用户档案" onClick={() => setActiveTab("profiles")} />
-            </nav>
+            {activeTab === "overview" && (
+                <OverviewPanel
+                    stats={stats}
+                    selectedModel={selectedModel}
+                    loading={reportStatsQuery.isLoading || loadingSettings}
+                    onOpenSettings={() => navigate(consoleTabPaths.settings)}
+                    onOpenTasks={() => navigate(consoleTabPaths.tasks)}
+                />
+            )}
 
             {activeTab === "settings" && (
                 <SettingsPanel
@@ -306,6 +322,17 @@ export default function AstrologyFortuneConsolePage() {
                     onOpen={setSelectedReportId}
                     onDelete={(report) => setDeleteTarget({ source: "row", report })}
                     onCleanupStale={handleCleanupStaleReports}
+                />
+            )}
+
+            {activeTab === "tasks" && (
+                <TasksPanel
+                    stats={stats}
+                    reports={reports}
+                    cleanupLoading={cleanupStaleMutation.isPending}
+                    onCleanupStale={handleCleanupStaleReports}
+                    onOpen={setSelectedReportId}
+                    onDelete={(report) => setDeleteTarget({ source: "row", report })}
                 />
             )}
 
@@ -368,7 +395,7 @@ function SettingsPanel({
         <section className="rounded-md border bg-card p-4">
             <PanelHeader
                 title="模型与价格"
-                description="这里是管理员配置区，用户端不展示模型选择。"
+                description="用户端每次生成都会发起模型调用并扣费；这里维护默认 LLM 和不同入口的价格策略。"
                 aside={(
                     <div className="min-w-56 rounded-md bg-muted p-3">
                         <div className="text-muted-foreground text-xs">{selectedModel ? selectedModel.providerName || selectedModel.provider?.name || selectedModel.provider?.provider : "未选择供应商"}</div>
@@ -398,10 +425,14 @@ function SettingsPanel({
                     </div>
                 )}
 
-                <PriceField label="每日运势" value={form.dailyPrice} onChange={(value) => onChange("dailyPrice", value)} />
-                <PriceField label="通用深度报告" value={form.reportPrice} onChange={(value) => onChange("reportPrice", value)} />
-                <PriceField label="星座配对" value={form.compatibilityPrice} onChange={(value) => onChange("compatibilityPrice", value)} />
-                <PriceField label="决策占卜" value={form.decisionPrice} onChange={(value) => onChange("decisionPrice", value)} />
+                <PriceField label="今日运势价格" value={form.dailyPrice} onChange={(value) => onChange("dailyPrice", value)} />
+                <PriceField label="问问/深度报告价格" value={form.reportPrice} onChange={(value) => onChange("reportPrice", value)} />
+                <PriceField label="关系分析价格" value={form.compatibilityPrice} onChange={(value) => onChange("compatibilityPrice", value)} />
+                <PriceField label="决策建议价格" value={form.decisionPrice} onChange={(value) => onChange("decisionPrice", value)} />
+
+                <div className="rounded-md border bg-muted p-3 text-sm text-muted-foreground md:col-span-2">
+                    用户端会在生成入口展示分析范围、价格组和失败退款提示；实际扣费仍以后端保存的价格为准，避免前端价格漂移。
+                </div>
 
                 <div className="flex flex-wrap gap-2 md:col-span-2">
                     {reportTypeOptions.map((item) => (
@@ -420,6 +451,70 @@ function SettingsPanel({
                 </div>
             </form>
         </section>
+    );
+}
+
+function OverviewPanel({
+    stats,
+    selectedModel,
+    loading,
+    onOpenSettings,
+    onOpenTasks,
+}: {
+    stats: AstrologyReportStats;
+    selectedModel?: { name?: string; model?: string; providerName?: string; provider?: { name?: string; provider?: string } };
+    loading: boolean;
+    onOpenSettings: () => void;
+    onOpenTasks: () => void;
+}) {
+    const successRate = stats.total > 0 ? `${Math.round((stats.success / stats.total) * 100)}%` : "-";
+    return (
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,.72fr)]">
+            <div className="rounded-md border bg-card p-4">
+                <PanelHeader
+                    title="生成调用概览"
+                    description="这里看的是插件运营健康度，不承载用户生成流程。"
+                    aside={<Badge variant={selectedModel ? "default" : "destructive"}>{selectedModel ? "模型已配置" : "模型未配置"}</Badge>}
+                />
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <Metric icon={<FileText className="size-4" />} label="报告生成量" value={formatMetricValue(stats.total, loading)} />
+                    <Metric icon={<CheckCircle2 className="size-4" />} label="成功率" value={loading ? "--" : successRate} />
+                    <Metric icon={<Clock3 className="size-4" />} label="队列中" value={formatMetricValue(stats.busy, loading)} />
+                    <Metric icon={<Heart className="size-4" />} label="收藏" value={formatMetricValue(stats.favorite, loading)} />
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <OpsCard icon={<Coins className="size-4" />} title="扣费透明" text="用户端生成入口展示价格组，后端按报告类型预扣积分。" />
+                    <OpsCard icon={<ShieldCheck className="size-4" />} title="失败退款" text="失败任务按账务事实退款，退款异常写入报告元数据。" />
+                    <OpsCard icon={<FileWarning className="size-4" />} title="异常可追踪" text="失败、超时和处理中任务在任务分区集中处理。" />
+                </div>
+            </div>
+            <div className="rounded-md border bg-card p-4">
+                <PanelHeader title="运营动作" description="把高风险动作从普通报告列表里拆出来。" />
+                <div className="space-y-3">
+                    <div className="rounded-md bg-muted p-3">
+                        <div className="text-muted-foreground text-xs">默认模型</div>
+                        <div className="mt-1 truncate text-sm font-medium">{selectedModel ? formatModelLabel(selectedModel) : "未配置"}</div>
+                    </div>
+                    <Button className="w-full justify-start" variant="outline" onClick={onOpenSettings}>
+                        <Settings className="size-4" />
+                        配置模型与价格
+                    </Button>
+                    <Button className="w-full justify-start" variant="outline" onClick={onOpenTasks}>
+                        <ShieldCheck className="size-4" />
+                        查看任务与退款
+                    </Button>
+                </div>
+            </div>
+        </section>
+    );
+}
+
+function OpsCard({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
+    return (
+        <div className="rounded-md border bg-background p-3">
+            <div className="text-primary flex items-center gap-2 text-sm font-medium">{icon}{title}</div>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">{text}</p>
+        </div>
     );
 }
 
@@ -513,7 +608,7 @@ function ReportsPanel({
                                 <TableCell><StatusBadge status={report.status} /></TableCell>
                                 <TableCell className="max-w-44 truncate font-mono text-xs">{report.userId}</TableCell>
                                 <TableCell>{formatCredits(report.costCredits)}</TableCell>
-                                <TableCell><TimeText value={report.createdAt} format="YYYY/MM/DD HH:mm" /></TableCell>
+                                <TableCell>{formatDateTime(report.createdAt)}</TableCell>
                                 <TableCell>
                                     <div className="flex items-center gap-1">
                                         <Button variant="ghost" size="icon-sm" title="查看详情" onClick={() => onOpen(report.id)}>
@@ -538,6 +633,90 @@ function ReportsPanel({
             </DataTable>
 
             <PaginationFooter total={total} PaginationComponent={PaginationComponent} />
+        </section>
+    );
+}
+
+function TasksPanel({
+    stats,
+    reports,
+    cleanupLoading,
+    onCleanupStale,
+    onOpen,
+    onDelete,
+}: {
+    stats: AstrologyReportStats;
+    reports: AstrologyReport[];
+    cleanupLoading: boolean;
+    onCleanupStale: () => void;
+    onOpen: (id: string) => void;
+    onDelete: (report: AstrologyReport) => void;
+}) {
+    const taskReports = reports.filter((report) => report.status !== "success");
+    return (
+        <section className="rounded-md border bg-card p-4">
+            <PanelHeader
+                title="任务与退款"
+                description="集中查看处理中、失败和可能需要补偿的模型调用。失败任务会按后端账务事实自动退款。"
+                aside={(
+                    <Button variant="outline" onClick={onCleanupStale} loading={cleanupLoading}>
+                        <RefreshCw className="size-4" />
+                        处理超时任务
+                    </Button>
+                )}
+            />
+
+            <div className="mb-4 grid gap-3 md:grid-cols-3">
+                <Metric icon={<Clock3 className="size-4" />} label="等待/生成中" value={String(stats.busy)} />
+                <Metric icon={<FileWarning className="size-4" />} label="失败" value={String(stats.failed)} />
+                <Metric icon={<ShieldCheck className="size-4" />} label="可删除成功报告" value={String(stats.success)} />
+            </div>
+
+            <DataTable loading={false}>
+                <Table>
+                    <TableHeader className="bg-muted">
+                        <TableRow>
+                            <TableHead>任务</TableHead>
+                            <TableHead>状态</TableHead>
+                            <TableHead>扣费</TableHead>
+                            <TableHead>异常</TableHead>
+                            <TableHead>更新时间</TableHead>
+                            <TableHead className="w-24">操作</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {taskReports.map((report) => (
+                            <TableRow key={report.id}>
+                                <TableCell>
+                                    <div className="max-w-80 truncate font-medium">{report.result?.title || report.question || report.id}</div>
+                                    <div className="text-muted-foreground mt-1 text-xs">{reportLabel(report.reportType)} · {report.userId}</div>
+                                </TableCell>
+                                <TableCell><StatusBadge status={report.status} /></TableCell>
+                                <TableCell>{formatCredits(report.costCredits)}</TableCell>
+                                <TableCell className="max-w-80 truncate text-destructive">{report.errorMessage || "-"}</TableCell>
+                                <TableCell>{formatDateTime(report.updatedAt)}</TableCell>
+                                <TableCell>
+                                    <div className="flex items-center gap-1">
+                                        <Button variant="ghost" size="icon-sm" title="查看详情" onClick={() => onOpen(report.id)}>
+                                            <Eye className="size-4" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            title={isBusy(report.status) ? "生成中不可删除" : "删除失败记录"}
+                                            disabled={isBusy(report.status)}
+                                            onClick={() => onDelete(report)}
+                                        >
+                                            <Trash2 className="text-destructive size-4" />
+                                        </Button>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                        {!taskReports.length && <EmptyRow colSpan={6} text="当前筛选页暂无异常任务" />}
+                    </TableBody>
+                </Table>
+            </DataTable>
         </section>
     );
 }
@@ -612,7 +791,7 @@ function ProfilesPanel({
                                 <TableCell>{profile.chineseZodiac || "-"}</TableCell>
                                 <TableCell>{[profile.birthDate, profile.birthTime].filter(Boolean).join(" ") || "-"}</TableCell>
                                 <TableCell className="max-w-44 truncate font-mono text-xs">{profile.userId}</TableCell>
-                                <TableCell><TimeText value={profile.createdAt} format="YYYY/MM/DD HH:mm" /></TableCell>
+                                <TableCell>{formatDateTime(profile.createdAt)}</TableCell>
                             </TableRow>
                         ))}
                         {!profiles.length && <EmptyRow colSpan={6} text="暂无档案" />}
@@ -638,6 +817,7 @@ function ReportDetailDialog({
     onOpenChange: (open: boolean) => void;
     onDelete: (report: AstrologyReport) => void;
 }) {
+    const metadata = report?.providerMetadata ?? {};
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-h-[88vh] overflow-auto sm:max-w-3xl">
@@ -656,8 +836,10 @@ function ReportDetailDialog({
                             <Detail label="用户 ID" value={report.userId} />
                             <Detail label="类型" value={reportLabel(report.reportType)} />
                             <Detail label="状态" value={statusLabel(report.status)} />
+                            <Detail label="消耗积分" value={formatCredits(report.costCredits)} />
                             <Detail label="模型 ID" value={report.modelId} />
                             <Detail label="Provider ID" value={report.providerId} />
+                            <Detail label="退款异常" value={formatMetadataValue(metadata.refundError)} />
                         </div>
                         {report.errorMessage && <div className="text-destructive rounded-md border p-3 text-sm">{report.errorMessage}</div>}
                         <article className="rounded-md bg-muted p-4">
@@ -732,15 +914,6 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
                 <div className="mt-1 text-2xl font-semibold leading-none">{value}</div>
             </div>
         </div>
-    );
-}
-
-function TabButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
-    return (
-        <Button variant={active ? "secondary" : "ghost"} size="sm" type="button" onClick={onClick}>
-            {icon}
-            {label}
-        </Button>
     );
 }
 
@@ -876,6 +1049,25 @@ function formatCredits(value?: number | string | null) {
     const numberValue = Number(value ?? 0);
     if (!Number.isFinite(numberValue)) return "0";
     return numberValue.toFixed(4).replace(/\.?0+$/, "");
+}
+
+function formatDateTime(value?: string | Date | null) {
+    if (!value) return "-";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    const pad = (item: number) => String(item).padStart(2, "0");
+    return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatMetadataValue(value: unknown) {
+    if (value === undefined || value === null || value === "") return undefined;
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return String(value);
+    }
 }
 
 function getErrorMessage(error: unknown, fallback: string) {

@@ -122,6 +122,11 @@ export class GenerateAstrologyReportDto {
     @IsOptional()
     @MaxLength(20)
     language?: string;
+
+    @IsString()
+    @IsOptional()
+    @IsUUID("4")
+    sourceReportId?: string;
 }
 
 export class QueryAstrologyProfileDto {
@@ -185,6 +190,17 @@ export class UpdateFavoriteDto {
     @IsBoolean()
     @Transform(({ value }) => value === true || value === "true")
     isFavorite: boolean;
+}
+
+export class UpdateReportFeedbackDto {
+    @IsString()
+    @IsIn(["useful", "too_generic", "inaccurate", "too_long"])
+    rating: "useful" | "too_generic" | "inaccurate" | "too_long";
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(300)
+    note?: string;
 }
 
 export class UpdateAstrologyFortuneSettingDto {

@@ -1,7 +1,11 @@
 import { QueueModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import { AccountLog, AiModel } from "@buildingai/db/entities";
-import { AiPublicModule, ExtensionBillingModule } from "@buildingai/extension-sdk";
+import {
+    AiPublicModule,
+    ExtensionBillingModule,
+    ExtensionNotificationModule,
+} from "@buildingai/extension-sdk";
 import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
 
@@ -17,6 +21,7 @@ import { ASTROLOGY_REPORT_QUEUE } from "./services/astrology-queue.constants";
         TypeOrmModule.forFeature([AstrologyFortuneSetting, AstrologyProfile, AstrologyReport, AiModel, AccountLog]),
         AiPublicModule,
         ExtensionBillingModule,
+        ExtensionNotificationModule,
         QueueModule,
         BullModule.registerQueue({ name: ASTROLOGY_REPORT_QUEUE }),
     ],

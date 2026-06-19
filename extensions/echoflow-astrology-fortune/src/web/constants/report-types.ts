@@ -19,7 +19,7 @@ export type ReportIntent = ReportTypeOption & {
 };
 
 export const reportTypeOptions: ReportTypeOption[] = [
-    { value: "daily", label: "每日运势", priceGroup: "daily" },
+    { value: "daily", label: "今日运势", priceGroup: "daily" },
     { value: "profile", label: "星盘画像", priceGroup: "report" },
     { value: "personality", label: "性格洞察", priceGroup: "report" },
     { value: "weekly", label: "周运报告", priceGroup: "report" },
@@ -28,8 +28,8 @@ export const reportTypeOptions: ReportTypeOption[] = [
     { value: "career", label: "事业财富", priceGroup: "report" },
     { value: "wealth", label: "财富分析", priceGroup: "report" },
     { value: "relationship", label: "关系分析", priceGroup: "report" },
-    { value: "compatibility", label: "星座配对", priceGroup: "compatibility" },
-    { value: "decision", label: "决策占卜", priceGroup: "decision" },
+    { value: "compatibility", label: "关系配对", priceGroup: "compatibility" },
+    { value: "decision", label: "决策建议", priceGroup: "decision" },
 ];
 
 export const reportIntents: ReportIntent[] = [
@@ -57,8 +57,8 @@ export function statusLabel(status: AstrologyReportStatus) {
 }
 
 export function priceGroupLabel(group: ReportPriceGroup) {
-    if (group === "daily") return "每日价格";
-    if (group === "compatibility") return "配对价格";
-    if (group === "decision") return "占卜价格";
-    return "深度报告价格";
+    if (group === "daily") return "今日运势价格";
+    if (group === "compatibility") return "关系分析价格";
+    if (group === "decision") return "决策建议价格";
+    return "问问/深度报告价格";
 }

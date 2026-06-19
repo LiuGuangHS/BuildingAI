@@ -5,11 +5,16 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { AccountLog, AiModel, File } from "@buildingai/db/entities";
 import { Brackets, EntityManager, In, LessThan, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { ExtensionBillingService, PublicAiModelService } from "@buildingai/extension-sdk";
+import {
+    ExtensionBillingService,
+    ExtensionNotificationService,
+    PublicAiModelService,
+    normalizeProviderConfig,
+} from "@buildingai/extension-sdk";
 import { llmFileParser } from "@buildingai/llm-file-parser";
+import { generateText, Output } from "@buildingai/ai-sdk";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { generateText, Output } from "ai";
 import type { Queue } from "bullmq";
 import type { Request } from "express";
 import { Readable } from "node:stream";
@@ -30,6 +35,13 @@ import { ExportContractDto, GenerateContractDto, QueryContractTaskDto, ReviewUpl
 import { CONTRACT_TEMPLATES, type ContractTemplate } from "../templates/contract-templates";
 import { CONTRACT_GENERATION_JOB, CONTRACT_GENERATION_QUEUE } from "./contract-queue.constants";
 import { buildContractDocx } from "./contract-docx.builder";
+import {
+    CONTRACT_TASK_BUSY_STATUSES,
+    canClaimContractTaskForProcessing,
+    canRecoverContractTask,
+    isContractTaskBusyStatus,
+    resolveContractTaskJobName,
+} from "./contract-task-recovery-rules";
 
 const EXTENSION_ID = "echoflow-contract-generation";
 const DEFAULT_PAGE_SIZE = 20;
@@ -52,8 +64,6 @@ const MAX_PROMPT_LIST_ITEMS = 40;
 const CONFIG_KEY = "default";
 const VERSION_CREATE_MAX_ATTEMPTS = 2;
 const STALE_TASK_PROCESSING_MS = 30 * 60 * 1000;
-const RECOVERY_LOCK_MS = 5 * 60 * 1000;
-const BUSY_GENERATION_STATUSES = [ContractGenerationStatus.PENDING, ContractGenerationStatus.PROCESSING];
 
 const sectionSchema = z.object({
     id: z.string().optional(),
@@ -124,6 +134,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         private readonly billingService: ExtensionBillingService,
         private readonly publicAiModelService: PublicAiModelService,
         private readonly fileUploadService: FileUploadService,
+        private readonly notificationService: ExtensionNotificationService,
         @InjectQueue(CONTRACT_GENERATION_QUEUE)
         private readonly taskQueue: Queue,
     ) {
@@ -131,8 +142,54 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     }
 
     async onModuleInit() {
+        await this.registerNotificationScenes();
         await this.recoverInterruptedGenerationTasks();
         await this.failStaleGenerationTasks("合同生成任务超时，请重新提交");
+    }
+
+    private async registerNotificationScenes() {
+        await this.notificationService.registerScenes(EXTENSION_ID, [
+            {
+                sceneCode: `${EXTENSION_ID}.generate.succeeded`,
+                name: "合同草稿生成完成",
+                description: "用户发起的合同草稿生成任务已完成。",
+                level: "success",
+                channels: ["in_app", "web_push", "wechat_oa_template"],
+                titleTemplate: "合同草稿已完成",
+                contentTemplate: "{{taskName}} 已生成草稿，可继续审查或导出。",
+                linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
+            },
+            {
+                sceneCode: `${EXTENSION_ID}.review.succeeded`,
+                name: "上传合同审查完成",
+                description: "用户上传合同解析与风险审查已完成。",
+                level: "success",
+                channels: ["in_app", "web_push", "wechat_oa_template"],
+                titleTemplate: "合同审查已完成",
+                contentTemplate: "{{taskName}} 已完成风险识别，可查看审查结果。",
+                linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
+            },
+            {
+                sceneCode: `${EXTENSION_ID}.export.succeeded`,
+                name: "合同导出完成",
+                description: "合同 DOCX 文件已构建并上传完成。",
+                level: "success",
+                channels: ["in_app", "web_push", "wechat_oa_template"],
+                titleTemplate: "合同导出完成",
+                contentTemplate: "{{taskName}} 已导出 DOCX，可前往下载。",
+                linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
+            },
+            {
+                sceneCode: `${EXTENSION_ID}.task.failed`,
+                name: "合同任务失败",
+                description: "合同生成、上传审查或导出任务失败。",
+                level: "error",
+                channels: ["in_app", "web_push", "wechat_oa_template"],
+                titleTemplate: "合同任务失败",
+                contentTemplate: "{{taskName}} 处理失败，{{reason}}",
+                linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
+            },
+        ]);
     }
 
     async listTemplates() {
@@ -277,7 +334,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         const task = await this.taskRepo.findOne({ where: { id: taskId } });
         if (!task) return null;
         if (![ContractGenerationStatus.PENDING, ContractGenerationStatus.PROCESSING].includes(task.status)) return task;
-        const expectedJobName = this.resolveTaskJobName(task);
+        const expectedJobName = resolveContractTaskJobName(task);
         if (!expectedJobName || expectedJobName !== jobName) {
             await this.markTaskFailedIfActive(task.id, ContractGenerationStatus.FAILED, "任务类型与队列类型不匹配，请重新提交");
             return this.taskRepo.findOne({ where: { id: task.id } });
@@ -316,9 +373,10 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             const sections = this.normalizeSections(output.sections);
             if (sections.length === 0) throw new Error("AI contract generation returned no sections");
 
-            return await this.taskRepo.manager.transaction(async (entityManager) => {
+            const savedTask = await this.taskRepo.manager.transaction(async (entityManager) => {
                 const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
                 if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+                if (!isContractTaskBusyStatus(currentTask.status)) return currentTask;
                 await entityManager.update(ContractGenerationTask, task.id, {
                     status: ContractGenerationStatus.DRAFT,
                     title: output.title?.trim() || task.title,
@@ -339,6 +397,8 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
                 await this.createVersion(saved, "generate", "AI 初次生成", entityManager);
                 return saved;
             });
+            await this.notifyTaskSucceeded(savedTask, "generate");
+            return savedTask;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             this.logger.error(`Contract generation task ${task.id} failed: ${message}`);
@@ -372,9 +432,10 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             const sections = this.normalizeSections(output.sections);
             if (sections.length === 0) throw new Error("Uploaded contract review returned no sections");
 
-            return await this.taskRepo.manager.transaction(async (entityManager) => {
+            const savedTask = await this.taskRepo.manager.transaction(async (entityManager) => {
                 const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
                 if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+                if (!isContractTaskBusyStatus(currentTask.status)) return currentTask;
                 await entityManager.update(ContractGenerationTask, task.id, {
                     status: ContractGenerationStatus.DRAFT,
                     title: output.title?.trim() || task.title,
@@ -390,6 +451,8 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
                 await this.createVersion(saved, "upload_review", "上传合同审查完成", entityManager);
                 return saved;
             });
+            await this.notifyTaskSucceeded(savedTask, "review");
+            return savedTask;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             await this.refundTaskCreditsIfNeeded(task.id, "上传合同审查失败自动退款");
@@ -403,7 +466,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         try {
             const tasks = await this.taskRepo.find({
                 where: {
-                    status: In(BUSY_GENERATION_STATUSES),
+                    status: In(CONTRACT_TASK_BUSY_STATUSES),
                     updatedAt: LessThan(cutoff),
                 },
                 order: { updatedAt: "ASC" },
@@ -411,7 +474,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             });
             let recoveredCount = 0;
             for (const task of tasks) {
-                const jobName = this.resolveTaskJobName(task);
+                const jobName = resolveContractTaskJobName(task);
                 if (!jobName) continue;
                 const claimedTask = await this.claimTaskForRecovery(task.id, cutoff);
                 if (!claimedTask?.requestPayload) continue;
@@ -433,10 +496,10 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         const cutoff = new Date(Date.now() - STALE_TASK_PROCESSING_MS);
         try {
             const staleTasks = await this.taskRepo.find({
-                where: { status: In(BUSY_GENERATION_STATUSES), updatedAt: LessThan(cutoff) },
+                where: { status: In(CONTRACT_TASK_BUSY_STATUSES), updatedAt: LessThan(cutoff) },
                 take: 100,
             });
-            const recoverableTasks = staleTasks.filter((task) => this.resolveTaskJobName(task));
+            const recoverableTasks = staleTasks.filter((task) => resolveContractTaskJobName(task));
             for (const task of recoverableTasks) {
                 await this.refundTaskCreditsIfNeeded(task.id, message);
                 await this.markTaskFailedIfActive(task.id, ContractGenerationStatus.FAILED, message, "timeoutError");
@@ -459,13 +522,9 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
                 lock: { mode: "pessimistic_write" },
                 withDeleted: true,
             });
-            if (!task || task.deletedAt || !BUSY_GENERATION_STATUSES.includes(task.status) || !task.requestPayload || task.updatedAt < cutoff) return null;
-            if (!this.resolveTaskJobName(task)) return null;
+            if (!canRecoverContractTask(task, cutoff)) return null;
 
             const metadata = task.providerMetadata ?? {};
-            const recoveryLockedAt = typeof metadata.recoveryLockedAt === "string" ? Date.parse(metadata.recoveryLockedAt) : 0;
-            if (recoveryLockedAt && Date.now() - recoveryLockedAt < RECOVERY_LOCK_MS) return null;
-
             const providerMetadata = {
                 ...metadata,
                 recoveredAt: new Date().toISOString(),
@@ -490,18 +549,9 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
                 lock: { mode: "pessimistic_write" },
                 withDeleted: true,
             });
-            if (!task || task.deletedAt || !BUSY_GENERATION_STATUSES.includes(task.status)) return null;
+            if (!canClaimContractTaskForProcessing(task)) return null;
 
             const metadata = task.providerMetadata ?? {};
-            const processingLockedAt = typeof metadata.processingLockedAt === "string" ? Date.parse(metadata.processingLockedAt) : 0;
-            if (
-                task.status === ContractGenerationStatus.PROCESSING &&
-                processingLockedAt &&
-                Date.now() - processingLockedAt < RECOVERY_LOCK_MS
-            ) {
-                return null;
-            }
-
             const providerMetadata = {
                 ...metadata,
                 processingLockedAt: new Date().toISOString(),
@@ -532,27 +582,10 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             );
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Queue contract generation ${id} failed, using local fallback: ${message}`, error);
-            this.runTaskInBackground(id, jobName);
+            this.logger.error(`Queue contract generation ${id} failed: ${message}`, error);
+            await this.markTaskCrashed(id, new Error("AI合同任务队列暂不可用，请稍后重试"));
+            throw HttpErrorFactory.badRequest("AI合同任务队列暂不可用，请稍后重试");
         }
-    }
-
-    private runTaskInBackground(id: string, jobName: (typeof CONTRACT_GENERATION_JOB)[keyof typeof CONTRACT_GENERATION_JOB]) {
-        setTimeout(() => {
-            void this.executeTaskJob(id, jobName).catch((error) => {
-                const message = error instanceof Error ? error.message : String(error);
-                this.logger.error(`Background contract generation ${id} crashed: ${message}`, error);
-                void this.markTaskCrashed(id, error);
-            });
-        }, 0);
-    }
-
-    private resolveTaskJobName(task: ContractGenerationTask) {
-        const jobType = task.providerMetadata?.jobType;
-        if (jobType === CONTRACT_GENERATION_JOB.GENERATE || jobType === CONTRACT_GENERATION_JOB.REVIEW_UPLOAD) {
-            return jobType;
-        }
-        return null;
     }
 
     async markTaskCrashed(taskId: string, error: unknown) {
@@ -581,6 +614,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             return await this.taskRepo.manager.transaction(async (entityManager) => {
                 const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
                 if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+                if (currentTask.status !== ContractGenerationStatus.REVIEWING) return currentTask;
                 await entityManager.update(ContractGenerationTask, task.id, {
                     status: ContractGenerationStatus.DRAFT,
                     riskFindings: this.normalizeRisks(result.output.riskFindings),
@@ -712,15 +746,20 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             if (!task.sections?.length) throw HttpErrorFactory.badRequest("合同暂无可导出的条款");
             const buffer = await buildContractDocx(task, { exportType });
             const upload = await this.fileUploadService.uploadFile(this.createMulterFile(buffer, `${task.id}.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"), request, undefined, { extensionId: EXTENSION_ID });
-            const currentTask = await this.findActiveTaskForWrite(task.id);
-            if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
-            await this.taskRepo.update(task.id, {
-                status: ContractGenerationStatus.SUCCESS,
-                resultUrl: upload.url,
-                errorMessage: null,
-                providerMetadata: { ...(currentTask.providerMetadata ?? task.providerMetadata ?? {}), exportedAt: new Date().toISOString(), exportType, fileId: upload.id, fileName: `${task.id}.docx`, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+            await this.taskRepo.manager.transaction(async (entityManager) => {
+                const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
+                if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
+                if (currentTask.status !== ContractGenerationStatus.EXPORTING) return;
+                await entityManager.update(ContractGenerationTask, task.id, {
+                    status: ContractGenerationStatus.SUCCESS,
+                    resultUrl: upload.url,
+                    errorMessage: null,
+                    providerMetadata: { ...(currentTask.providerMetadata ?? task.providerMetadata ?? {}), exportedAt: new Date().toISOString(), exportType, fileId: upload.id, fileName: `${task.id}.docx`, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+                });
             });
-            return this.getTaskDetail(userId, task.id);
+            const saved = await this.getTaskDetail(userId, task.id);
+            await this.notifyTaskSucceeded(saved, "export");
+            return saved;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             if (claimed) {
@@ -819,7 +858,11 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
 
     private async findActiveTaskForWrite(taskId: string, entityManager?: EntityManager) {
         const repo = entityManager ?? this.taskRepo.manager;
-        const task = await repo.findOne(ContractGenerationTask, { where: { id: taskId }, withDeleted: true });
+        const task = await repo.findOne(ContractGenerationTask, {
+            where: { id: taskId },
+            withDeleted: true,
+            ...(entityManager ? { lock: { mode: "pessimistic_write" as const } } : {}),
+        });
         return task && !task.deletedAt ? task : null;
     }
 
@@ -838,14 +881,78 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     }
 
     private async markTaskFailedIfActive(taskId: string, status: ContractGenerationStatus, message: string, errorKey = "error") {
-        const task = await this.findActiveTaskForWrite(taskId);
+        let failedTask: ContractGenerationTask | null = null;
+        await this.taskRepo.manager.transaction(async (entityManager) => {
+            const task = await this.findActiveTaskForWrite(taskId, entityManager);
+            if (!task) return;
+            if (status === ContractGenerationStatus.FAILED && !isContractTaskBusyStatus(task.status)) return;
+            if (status === ContractGenerationStatus.DRAFT && task.status !== ContractGenerationStatus.REVIEWING) return;
+            if (status === ContractGenerationStatus.EXPORT_FAILED && task.status !== ContractGenerationStatus.EXPORTING) return;
+
+            const providerMetadata: ContractGenerationTask["providerMetadata"] = { ...(task.providerMetadata ?? {}), [errorKey]: message };
+            await entityManager.save(ContractGenerationTask, {
+                id: task.id,
+                status,
+                errorMessage: message,
+                providerMetadata,
+            });
+            failedTask = {
+                ...task,
+                status,
+                errorMessage: message,
+                providerMetadata,
+            };
+        });
+        if (failedTask) {
+            await this.notifyTaskFailed(failedTask, message);
+        }
+    }
+
+    private async notifyTaskSucceeded(
+        task: ContractGenerationTask | null,
+        kind: "generate" | "review" | "export",
+    ) {
         if (!task) return;
-        const providerMetadata: ContractGenerationTask["providerMetadata"] = { ...(task.providerMetadata ?? {}), [errorKey]: message };
-        await this.taskRepo.save({
-            id: task.id,
-            status,
-            errorMessage: message,
-            providerMetadata,
+        const sceneCode =
+            kind === "generate"
+                ? `${EXTENSION_ID}.generate.succeeded`
+                : kind === "review"
+                  ? `${EXTENSION_ID}.review.succeeded`
+                  : `${EXTENSION_ID}.export.succeeded`;
+        await this.notificationService.notifyUser({
+            extensionId: EXTENSION_ID,
+            userId: task.userId,
+            sceneCode,
+            level: "success",
+            linkUrl: `/extension/${EXTENSION_ID}/`,
+            sourceType: kind,
+            sourceId: task.id,
+            data: {
+                taskName: task.title || "合同任务",
+                contractType: task.contractType,
+                status: task.status,
+            },
+        });
+    }
+
+    private async notifyTaskFailed(task: ContractGenerationTask, message: string) {
+        await this.notificationService.notifyUser({
+            extensionId: EXTENSION_ID,
+            userId: task.userId,
+            sceneCode: `${EXTENSION_ID}.task.failed`,
+            level: "error",
+            linkUrl: `/extension/${EXTENSION_ID}/`,
+            sourceType: `${String(task.providerMetadata?.jobType || "task")}:${task.status}`,
+            sourceId: task.id,
+            data: {
+                taskName: task.title || "合同任务",
+                contractType: task.contractType,
+                status: task.status,
+                reason: message || "请稍后重试或联系管理员",
+                billingStatus: task.providerMetadata?.billingStatus,
+                refundedAt: task.providerMetadata?.refundedAt,
+                refundError: task.providerMetadata?.refundError,
+            },
         });
     }
 
@@ -865,13 +972,14 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     private async loadModel(modelId: string, throwOnMissing: true): Promise<AiModel>;
     private async loadModel(modelId: string, throwOnMissing: false): Promise<AiModel | null>;
     private async loadModel(modelId: string, throwOnMissing = true) {
-        const model = await this.modelRepo.findOne({ where: { id: modelId, isActive: true }, relations: { provider: true } });
+        const model = await this.getModelInfo(modelId);
         if (!model || !model.provider || !model.provider.isActive || model.modelType !== "llm") {
             if (!throwOnMissing) return null;
             throw HttpErrorFactory.badRequest("AI 合同需要启用的 LLM 模型");
         }
         return model;
     }
+
 
     private async loadConfiguredModel(throwOnMissing: true): Promise<AiModel>;
     private async loadConfiguredModel(throwOnMissing: false): Promise<AiModel | null>;
@@ -900,9 +1008,17 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     }
 
     private async resolveLanguageModel(model: AiModel) {
-        const providerConfig = this.flattenProviderConfig(await this.publicAiModelService.getProviderConfig(model.id));
+        const providerConfig = normalizeProviderConfig(await this.publicAiModelService.getProviderConfig(model.id));
         const provider = await this.publicAiModelService.getProviderAdapter(model.id, providerConfig);
         return provider(model.model).model;
+    }
+
+    private async getModelInfo(modelId: string): Promise<AiModel | null> {
+        try {
+            return await this.publicAiModelService.getModelInfo(modelId);
+        } catch {
+            return null;
+        }
     }
 
     async listAvailableLlmModels() {
@@ -1278,22 +1394,6 @@ ${content}`;
             Object.assign(accumulator, item);
             return accumulator;
         }, {});
-    }
-
-    private flattenProviderConfig(config: Record<string, unknown>): Record<string, string> {
-        const normalized: Record<string, string> = {};
-        Object.entries(config).forEach(([key, item]) => {
-            if (typeof item === "string") {
-                normalized[key] = item;
-                return;
-            }
-            const value = (item as { value?: unknown } | undefined)?.value;
-            if (typeof value === "string") normalized[key] = value;
-        });
-        return {
-            apiKey: normalized.apiKey || normalized.api_key || normalized.API_KEY || "",
-            baseURL: normalized.baseURL || normalized.baseUrl || normalized.base_url || "",
-        };
     }
 
     private createMulterFile(buffer: Buffer, filename: string, mimetype: string): Express.Multer.File {

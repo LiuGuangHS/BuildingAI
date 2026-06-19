@@ -5,7 +5,7 @@ import { Playground } from "@buildingai/decorators/playground.decorator";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
-import { CreateAstrologyProfileDto, GenerateAstrologyReportDto, QueryAstrologyProfileDto, QueryAstrologyReportDto, UpdateAstrologyProfileDto, UpdateFavoriteDto } from "../../dto";
+import { CreateAstrologyProfileDto, GenerateAstrologyReportDto, QueryAstrologyProfileDto, QueryAstrologyReportDto, UpdateAstrologyProfileDto, UpdateFavoriteDto, UpdateReportFeedbackDto } from "../../dto";
 import { AstrologyFortuneService } from "../../services";
 
 @ExtensionWebController("astrology-fortune")
@@ -40,27 +40,55 @@ export class AstrologyFortuneWebController extends BaseController {
     }
 
     @Post("reports/generate")
-    generateReport(@Playground() user: UserPlayground, @Body() dto: GenerateAstrologyReportDto) {
-        return this.astrologyFortuneService.generateReport(user.id, dto);
+    async generateReport(@Playground() user: UserPlayground, @Body() dto: GenerateAstrologyReportDto) {
+        return this.toPublicReport(await this.astrologyFortuneService.generateReport(user.id, dto));
     }
 
     @Get("reports")
-    listReports(@Playground() user: UserPlayground, @Query() query: QueryAstrologyReportDto) {
-        return this.astrologyFortuneService.listUserReports(user.id, query);
+    async listReports(@Playground() user: UserPlayground, @Query() query: QueryAstrologyReportDto) {
+        const page = await this.astrologyFortuneService.listUserReports(user.id, query);
+        return {
+            ...page,
+            items: page.items.map((item) => this.toPublicReport(item)),
+        };
     }
 
     @Get("reports/:id")
-    reportDetail(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
-        return this.astrologyFortuneService.getReportDetail(user.id, id);
+    async reportDetail(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
+        return this.toPublicReport(await this.astrologyFortuneService.getReportDetail(user.id, id));
     }
 
     @Patch("reports/:id/favorite")
-    updateFavorite(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: UpdateFavoriteDto) {
-        return this.astrologyFortuneService.updateFavorite(user.id, id, dto.isFavorite);
+    async updateFavorite(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: UpdateFavoriteDto) {
+        return this.toPublicReport(await this.astrologyFortuneService.updateFavorite(user.id, id, dto.isFavorite));
+    }
+
+    @Patch("reports/:id/feedback")
+    async updateFeedback(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: UpdateReportFeedbackDto) {
+        return this.toPublicReport(await this.astrologyFortuneService.updateReportFeedback(user.id, id, dto));
     }
 
     @Delete("reports/:id")
     deleteReport(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
         return this.astrologyFortuneService.deleteReport(user.id, id);
+    }
+
+    private toPublicReport(report: Awaited<ReturnType<AstrologyFortuneService["generateReport"]>> | Awaited<ReturnType<AstrologyFortuneService["listUserReports"]>>["items"][number] | Awaited<ReturnType<AstrologyFortuneService["getReportDetail"]>> | Awaited<ReturnType<AstrologyFortuneService["updateFavorite"]>> | Awaited<ReturnType<AstrologyFortuneService["updateReportFeedback"]>>) {
+        const {
+            userId: _userId,
+            modelId: _modelId,
+            providerId: _providerId,
+            requestPayload: _requestPayload,
+            providerMetadata,
+            deletedAt: _deletedAt,
+            ...publicReport
+        } = report;
+        return {
+            ...publicReport,
+            providerMetadata: {
+                feedback: providerMetadata?.feedback,
+                sourceReport: providerMetadata?.sourceReport,
+            },
+        };
     }
 }

@@ -1,4 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@buildingai/ui/components/ui/alert-dialog";
+import { Badge } from "@buildingai/ui/components/ui/badge";
+import { Button } from "@buildingai/ui/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
+import { Input } from "@buildingai/ui/components/ui/input";
+import { Label } from "@buildingai/ui/components/ui/label";
+import { Switch } from "@buildingai/ui/components/ui/switch";
+import { Textarea } from "@buildingai/ui/components/ui/textarea";
 
 import { useAdminContractTemplatesQuery, useCreateAdminContractTemplateMutation, useDeleteAdminContractTemplateMutation, useResetBuiltinContractTemplatesMutation, useUpdateAdminContractTemplateMutation } from "../../services/console";
 import type { ContractTemplate, UpsertContractTemplateParams } from "../../services/types";
@@ -70,7 +88,6 @@ export default function ContractTemplatesConsolePage() {
     }
 
     async function handleDelete(template: ContractTemplate) {
-        if (!window.confirm(`确定删除模板“${template.name}”吗？历史任务会继续保留模板快照。`)) return;
         await deleteMutation.mutateAsync(template.id);
         if (editing?.id === template.id) startCreate();
     }
@@ -98,44 +115,45 @@ export default function ContractTemplatesConsolePage() {
                     <p>维护用户端可选模板、字段结构、默认条款和生成提示。</p>
                 </div>
                 <div className="ec-header-actions">
-                    <button className="ec-button" onClick={handleResetBuiltin} disabled={resetMutation.isPending}>同步内置模板</button>
-                    <button className="ec-button is-primary" onClick={startCreate}>新增模板</button>
+                    <Button variant="outline" onClick={handleResetBuiltin} disabled={resetMutation.isPending}>同步内置模板</Button>
+                    <Button onClick={startCreate}>新增模板</Button>
                 </div>
             </header>
 
             <section className="ec-template-layout">
-                <aside className="ec-card ec-list-panel">
-                    <div className="ec-section-title">
-                        <div>
-                            <h2>模板列表</h2>
-                            <p>共 {templates.length} 个，启用 {activeCount} 个</p>
-                        </div>
-                    </div>
-                    <div className="ec-template-list">
+                <Card className="ec-list-panel">
+                    <CardHeader>
+                        <CardTitle>模板列表</CardTitle>
+                        <CardDescription>共 {templates.length} 个，启用 {activeCount} 个</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3">
                         {templates.map((template) => (
-                            <button key={template.id} className={`ec-list-item ${editing?.id === template.id ? "is-active" : ""}`} onClick={() => setEditing(template)} type="button">
+                            <Button key={template.id} variant={editing?.id === template.id ? "secondary" : "outline"} className="h-auto w-full justify-start p-3 text-left" onClick={() => setEditing(template)} type="button">
                                 <div>
-                                    <strong>{template.name}</strong>
-                                    <span>{template.industry} / {template.contractType}</span>
+                                    <strong className="block">{template.name}</strong>
+                                    <span className="block text-xs text-muted-foreground">{template.industry} / {template.contractType}</span>
                                 </div>
-                                <p>{template.description}</p>
-                                <div className="ec-tag-row">
-                                    <span className={`ec-tag ${template.isActive ? "is-success" : ""}`}>{template.isActive ? "启用" : "停用"}</span>
-                                    {template.isBuiltin && <span className="ec-tag">内置</span>}
+                                <p className="my-2 line-clamp-2 text-left text-xs text-muted-foreground">{template.description}</p>
+                                <div className="flex gap-2">
+                                    <Badge variant={template.isActive ? "default" : "outline"}>{template.isActive ? "启用" : "停用"}</Badge>
+                                    {template.isBuiltin ? <Badge variant="outline">内置</Badge> : null}
                                 </div>
-                            </button>
+                            </Button>
                         ))}
-                    </div>
-                </aside>
+                    </CardContent>
+                </Card>
 
-                <section className="ec-card">
-                    <div className="ec-section-title">
-                        <div>
-                            <h2>{editing ? editing.name : "新增模板"}</h2>
-                            <p>{editing ? "编辑当前模板配置" : "创建一个新的合同生成模板"}</p>
+                <Card>
+                    <CardHeader>
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                            <div>
+                                <CardTitle>{editing ? editing.name : "新增模板"}</CardTitle>
+                                <CardDescription>{editing ? "编辑当前模板配置" : "创建一个新的合同生成模板"}</CardDescription>
+                            </div>
+                            {message ? <Badge variant={message.includes("失败") || message.includes("不正确") ? "destructive" : "default"}>{message}</Badge> : null}
                         </div>
-                        {message && <span className={`ec-message ${message.includes("失败") || message.includes("不正确") ? "is-danger" : "is-success"}`}>{message}</span>}
-                    </div>
+                    </CardHeader>
+                    <CardContent className="grid gap-6">
 
                     <div className="ec-form-grid">
                         <Field label="模板名称" value={form.name} onChange={(name) => setForm({ ...form, name })} />
@@ -144,50 +162,73 @@ export default function ContractTemplatesConsolePage() {
                         <Field label="排序" type="number" value={String(form.sortOrder ?? 0)} onChange={(value) => setForm({ ...form, sortOrder: Number(value) || 0 })} />
                     </div>
 
-                    <label className="ec-field">
-                        <span>描述</span>
-                        <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
-                    </label>
-
-                    <section className="ec-subsection">
-                        <div className="ec-subsection-head">
-                            <div>
-                                <h3>高级字段 JSON</h3>
-                                <p>字段会渲染为用户端填写表单。结构错误时后端会拒绝保存。</p>
-                            </div>
-                            <button className="ec-button" onClick={formatFieldsJson}>格式化</button>
-                        </div>
-                        <textarea className="ec-code-editor" value={fieldsText} onChange={(event) => setFieldsText(event.target.value)} />
-                    </section>
-
-                    <section className="ec-subsection">
-                        <h3>默认条款</h3>
-                        <textarea className="ec-large-text" value={sectionsText} onChange={(event) => setSectionsText(event.target.value)} />
-                        <p>每行一条，生成合同时作为默认条款结构。</p>
-                    </section>
-
-                    <section className="ec-subsection">
-                        <h3>AI 提示</h3>
-                        <textarea className="ec-large-text" value={form.promptTemplate ?? ""} onChange={(event) => setForm({ ...form, promptTemplate: event.target.value })} />
-                        <p>用于约束生成风格、输出边界和业务注意事项。</p>
-                    </section>
-
-                    <section className="ec-publish-row">
-                        <div>
-                            <h3>发布状态</h3>
-                            <p>启用后用户端可以选择该模板。</p>
-                        </div>
-                        <label>
-                            <input type="checkbox" checked={form.isActive ?? true} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} />
-                            启用模板
-                        </label>
-                    </section>
-
-                    <div className="ec-actions">
-                        {editing && <button className="ec-button is-danger" onClick={() => handleDelete(editing)} disabled={deleteMutation.isPending}>删除模板</button>}
-                        <button className="ec-button is-primary" onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>{editing ? "保存模板" : "创建模板"}</button>
+                    <div className="grid gap-2">
+                        <Label>描述</Label>
+                        <Textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
                     </div>
-                </section>
+
+                    <section className="grid gap-3">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                            <div>
+                                <h3 className="text-base font-medium">高级字段 JSON</h3>
+                                <p className="text-sm text-muted-foreground">字段会渲染为用户端填写表单。结构错误时后端会拒绝保存。</p>
+                            </div>
+                            <Button variant="outline" onClick={formatFieldsJson}>格式化</Button>
+                        </div>
+                        <Textarea className="min-h-40 font-mono text-xs" value={fieldsText} onChange={(event) => setFieldsText(event.target.value)} />
+                    </section>
+
+                    <section className="grid gap-2">
+                        <h3 className="text-base font-medium">默认条款</h3>
+                        <Textarea className="min-h-40" value={sectionsText} onChange={(event) => setSectionsText(event.target.value)} />
+                        <p className="text-sm text-muted-foreground">每行一条，生成合同时作为默认条款结构。</p>
+                    </section>
+
+                    <section className="grid gap-2">
+                        <h3 className="text-base font-medium">AI 提示</h3>
+                        <Textarea className="min-h-40" value={form.promptTemplate ?? ""} onChange={(event) => setForm({ ...form, promptTemplate: event.target.value })} />
+                        <p className="text-sm text-muted-foreground">用于约束生成风格、输出边界和业务注意事项。</p>
+                    </section>
+
+                    <section className="flex items-center justify-between gap-4 rounded-md border p-4">
+                        <div>
+                            <h3 className="text-base font-medium">发布状态</h3>
+                            <p className="text-sm text-muted-foreground">启用后用户端可以选择该模板。</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                            <Switch checked={form.isActive ?? true} onCheckedChange={(checked) => setForm({ ...form, isActive: checked })} />
+                            启用模板
+                        </div>
+                    </section>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                        {editing ? (
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="destructive" disabled={deleteMutation.isPending}>删除模板</Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>删除模板</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            确定删除模板“{editing.name}”吗？历史任务会继续保留模板快照。
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>取消</AlertDialogCancel>
+                                        <AlertDialogAction variant="destructive" onClick={() => handleDelete(editing)}>
+                                            确认删除
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        ) : null}
+                        <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending} loading={createMutation.isPending || updateMutation.isPending}>
+                            {editing ? "保存模板" : "创建模板"}
+                        </Button>
+                    </div>
+                    </CardContent>
+                </Card>
             </section>
         </main>
     );
@@ -198,5 +239,10 @@ function toForm(template: ContractTemplate): UpsertContractTemplateParams {
 }
 
 function Field({ label, type = "text", value, onChange }: { label: string; type?: string; value: string; onChange: (value: string) => void }) {
-    return <label className="ec-field"><span>{label}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+    return (
+        <div className="grid gap-2">
+            <Label>{label}</Label>
+            <Input type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+        </div>
+    );
 }

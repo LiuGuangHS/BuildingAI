@@ -1,7 +1,11 @@
 import { QueueModule, UploadModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import { AccountLog, AiModel, File, StorageConfig } from "@buildingai/db/entities";
-import { AiPublicModule, ExtensionBillingModule } from "@buildingai/extension-sdk";
+import {
+    AiPublicModule,
+    ExtensionBillingModule,
+    ExtensionNotificationModule,
+} from "@buildingai/extension-sdk";
 import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
 
@@ -17,6 +21,7 @@ import { CONTRACT_GENERATION_QUEUE } from "./services/contract-queue.constants";
         TypeOrmModule.forFeature([ContractGenerationTask, ContractGenerationConfig, ContractGenerationVersion, ContractTemplateEntity, AiModel, AccountLog, File, StorageConfig]),
         AiPublicModule,
         ExtensionBillingModule,
+        ExtensionNotificationModule,
         UploadModule,
         QueueModule,
         BullModule.registerQueue({ name: CONTRACT_GENERATION_QUEUE }),

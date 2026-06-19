@@ -1,4 +1,20 @@
 import { useMemo, useState } from "react";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@buildingai/ui/components/ui/alert-dialog";
+import { Badge } from "@buildingai/ui/components/ui/badge";
+import { Button } from "@buildingai/ui/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
+import { Input } from "@buildingai/ui/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 
 import { useAdminContractTaskDetailQuery, useAdminContractTasksQuery, useDeleteAdminContractTaskMutation } from "../../services/console";
 import type { ContractGenerationStatus, ContractGenerationTask } from "../../services/types";
@@ -28,7 +44,6 @@ export default function ContractTasksConsolePage() {
     const tasks = taskPage?.items ?? [];
 
     async function handleDelete(task: ContractGenerationTask) {
-        if (!window.confirm(`确定删除任务“${task.title}”吗？处理中任务会被后端拒绝删除。`)) return;
         await deleteMutation.mutateAsync(task.id);
         if (selectedTaskId === task.id) setSelectedTaskId("");
     }
@@ -54,51 +69,86 @@ export default function ContractTasksConsolePage() {
             </header>
 
             <section className="ec-task-layout">
-                <aside className="ec-card ec-list-panel">
-                    <div className="ec-filter-bar">
-                        <input value={keyword} onChange={(event) => updateKeyword(event.target.value)} placeholder="搜索标题或提示词" />
-                        <select value={status} onChange={(event) => updateStatus(event.target.value)}>
-                            {allStatuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                        </select>
-                    </div>
-                    <div className="ec-list-meta">
-                        <span>{isFetching ? "加载中..." : `共 ${taskPage?.total ?? 0} 条`}</span>
-                        <span>第 {taskPage?.page ?? page} / {taskPage?.totalPages || 1} 页</span>
-                    </div>
-                    <div className="ec-task-list">
-                        {tasks.map((task) => (
-                            <button key={task.id} className={`ec-list-item ${selectedTaskId === task.id ? "is-active" : ""}`} onClick={() => setSelectedTaskId(task.id)} type="button">
-                                <div>
-                                    <strong>{task.title}</strong>
-                                    <span>{statusText(task.status)}</span>
-                                </div>
-                                <p>{task.industry || "未分类"} / {task.contractType}</p>
-                                <div className="ec-task-meta">
-                                    <span>{formatDate(task.createdAt)}</span>
-                                    <span>风险 {task.riskFindings?.length ?? 0}</span>
-                                </div>
-                            </button>
-                        ))}
-                        {tasks.length === 0 && <div className="ec-empty">没有匹配的任务。</div>}
-                    </div>
-                    <div className="ec-pagination">
-                        <button className="ec-button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>上一页</button>
-                        <button className="ec-button" disabled={page >= (taskPage?.totalPages || 1)} onClick={() => setPage((value) => value + 1)}>下一页</button>
-                    </div>
-                </aside>
+                <Card className="ec-list-panel">
+                    <CardHeader>
+                        <CardTitle>任务列表</CardTitle>
+                        <CardDescription>{isFetching ? "加载中..." : `共 ${taskPage?.total ?? 0} 条`} · 第 {taskPage?.page ?? page} / {taskPage?.totalPages || 1} 页</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-4">
+                        <div className="grid gap-3">
+                            <Input value={keyword} onChange={(event) => updateKeyword(event.target.value)} placeholder="搜索标题或提示词" />
+                            <Select value={status} onValueChange={updateStatus}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {allStatuses.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid gap-2">
+                            {tasks.map((task) => (
+                                <Button
+                                    key={task.id}
+                                    variant={selectedTaskId === task.id ? "secondary" : "outline"}
+                                    className="h-auto w-full justify-start p-3 text-left"
+                                    onClick={() => setSelectedTaskId(task.id)}
+                                    type="button"
+                                >
+                                    <span className="grid w-full gap-2">
+                                        <span className="flex items-center justify-between gap-2">
+                                            <strong className="truncate">{task.title}</strong>
+                                            <Badge variant={statusVariant(task.status)}>{statusText(task.status)}</Badge>
+                                        </span>
+                                        <span className="text-muted-foreground text-xs">{task.industry || "未分类"} / {task.contractType}</span>
+                                        <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                                            <span>{formatDate(task.createdAt)}</span>
+                                            <span>风险 {task.riskFindings?.length ?? 0}</span>
+                                        </span>
+                                    </span>
+                                </Button>
+                            ))}
+                            {tasks.length === 0 ? <div className="ec-empty">没有匹配的任务。</div> : null}
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                            <Button variant="outline" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>上一页</Button>
+                            <Badge variant="outline">{taskPage?.page ?? page} / {taskPage?.totalPages || 1}</Badge>
+                            <Button variant="outline" disabled={page >= (taskPage?.totalPages || 1)} onClick={() => setPage((value) => value + 1)}>下一页</Button>
+                        </div>
+                    </CardContent>
+                </Card>
 
-                <section className="ec-card ec-task-detail">
+                <Card className="ec-task-detail">
+                    <CardContent>
                     {!detail ? (
                         <div className="ec-empty is-large">选择左侧任务查看详情。</div>
                     ) : (
                         <>
                             <div className="ec-detail-head">
                                 <div>
-                                    <span className={`ec-status-pill ${statusClass(detail.status)}`}>{statusText(detail.status)}</span>
+                                    <Badge variant={statusVariant(detail.status)}>{statusText(detail.status)}</Badge>
                                     <h2>{detail.title}</h2>
                                     <p>用户：<span className="ec-mono">{detail.userId}</span> / 创建：{formatDate(detail.createdAt)}</p>
                                 </div>
-                                <button className="ec-button is-danger" onClick={() => handleDelete(detail)} disabled={deleteMutation.isPending || isBusyStatus(detail.status)}>删除任务</button>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="destructive" disabled={deleteMutation.isPending || isBusyStatus(detail.status)}>删除任务</Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>删除任务</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                确定删除任务“{detail.title}”吗？处理中任务会被后端拒绝删除。
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>取消</AlertDialogCancel>
+                                            <AlertDialogAction variant="destructive" onClick={() => handleDelete(detail)}>
+                                                确认删除
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
                             </div>
 
                             {detail.errorMessage && <div className="ec-banner is-danger">失败原因：{detail.errorMessage}</div>}
@@ -145,24 +195,33 @@ export default function ContractTasksConsolePage() {
                             </article>
                         </>
                     )}
-                </section>
+                    </CardContent>
+                </Card>
             </section>
         </main>
     );
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {
-    return <div className="ec-metric-card"><strong>{value}</strong><span>{label}</span></div>;
+    return (
+        <Card size="sm">
+            <CardContent>
+                <strong className="text-2xl">{value}</strong>
+                <span className="block text-sm text-muted-foreground">{label}</span>
+            </CardContent>
+        </Card>
+    );
 }
 
 function statusText(status: string) {
     return { pending: "等待中", processing: "生成中", draft: "草稿", reviewing: "审查中", exporting: "导出中", success: "已导出", failed: "失败", export_failed: "导出失败" }[status] ?? status;
 }
 
-function statusClass(status: string) {
-    if (["failed", "export_failed"].includes(status)) return "is-danger";
-    if (["pending", "processing", "reviewing", "exporting"].includes(status)) return "is-warning";
-    return "is-success";
+function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
+    if (["failed", "export_failed"].includes(status)) return "destructive";
+    if (["pending", "processing", "reviewing", "exporting"].includes(status)) return "secondary";
+    if (status === "draft") return "outline";
+    return "default";
 }
 
 function riskLevelText(level: string) {

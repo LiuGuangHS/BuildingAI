@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiHttpClient } from "../base";
-import type { AstrologyProfile, AstrologyProfileInput, AstrologyReport, GenerateAstrologyReportParams, PaginatedResponse, QueryAstrologyReportsParams } from "../types";
+import type { AstrologyProfile, AstrologyProfileInput, AstrologyReport, GenerateAstrologyReportParams, PaginatedResponse, QueryAstrologyReportsParams, UpdateReportFeedbackParams } from "../types";
 
 const PROFILE_QUERY_KEY = ["echoflow-astrology-fortune", "profiles"] as const;
 const REPORT_QUERY_KEY = ["echoflow-astrology-fortune", "reports"] as const;
+const quietQueryOptions = { retry: false, staleTime: 30_000 } as const;
 
 export function createAstrologyProfile(params: AstrologyProfileInput) {
     return apiHttpClient.post<AstrologyProfile>("/astrology-fortune/profiles", params);
@@ -19,7 +20,7 @@ export function deleteAstrologyProfile(profileId: string) {
 }
 
 export function listAstrologyProfiles() {
-    return apiHttpClient.get<PaginatedResponse<AstrologyProfile>>("/astrology-fortune/profiles", { params: { pageSize: 50 } });
+    return apiHttpClient.get<PaginatedResponse<AstrologyProfile>>("/astrology-fortune/profiles", { params: { pageSize: 50 }, silent: true });
 }
 
 export function generateAstrologyReport(params: GenerateAstrologyReportParams) {
@@ -27,11 +28,15 @@ export function generateAstrologyReport(params: GenerateAstrologyReportParams) {
 }
 
 export function listAstrologyReports(params?: QueryAstrologyReportsParams) {
-    return apiHttpClient.get<PaginatedResponse<AstrologyReport>>("/astrology-fortune/reports", { params });
+    return apiHttpClient.get<PaginatedResponse<AstrologyReport>>("/astrology-fortune/reports", { params, silent: true });
 }
 
 export function updateReportFavorite(reportId: string, isFavorite: boolean) {
     return apiHttpClient.patch<AstrologyReport>(`/astrology-fortune/reports/${reportId}/favorite`, { isFavorite });
+}
+
+export function updateReportFeedback(reportId: string, params: UpdateReportFeedbackParams) {
+    return apiHttpClient.patch<AstrologyReport>(`/astrology-fortune/reports/${reportId}/feedback`, params);
 }
 
 export function deleteAstrologyReport(reportId: string) {
@@ -39,7 +44,7 @@ export function deleteAstrologyReport(reportId: string) {
 }
 
 export function useAstrologyProfilesQuery() {
-    return useQuery({ queryKey: PROFILE_QUERY_KEY, queryFn: listAstrologyProfiles });
+    return useQuery({ queryKey: PROFILE_QUERY_KEY, queryFn: listAstrologyProfiles, ...quietQueryOptions });
 }
 
 export function useCreateAstrologyProfileMutation() {
@@ -75,6 +80,7 @@ export function useAstrologyReportsQuery(params?: QueryAstrologyReportsParams) {
     return useQuery({
         queryKey: [...REPORT_QUERY_KEY, params],
         queryFn: () => listAstrologyReports(params),
+        ...quietQueryOptions,
         refetchInterval: (query) => (query.state.data?.items.some((report) => report.status === "pending" || report.status === "processing") ? 3000 : false),
     });
 }
@@ -83,6 +89,14 @@ export function useUpdateReportFavoriteMutation() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: ({ reportId, isFavorite }: { reportId: string; isFavorite: boolean }) => updateReportFavorite(reportId, isFavorite),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: REPORT_QUERY_KEY }),
+    });
+}
+
+export function useUpdateReportFeedbackMutation() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ reportId, params }: { reportId: string; params: UpdateReportFeedbackParams }) => updateReportFeedback(reportId, params),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: REPORT_QUERY_KEY }),
     });
 }

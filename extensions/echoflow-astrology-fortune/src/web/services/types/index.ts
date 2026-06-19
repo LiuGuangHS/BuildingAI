@@ -40,8 +40,8 @@ export type AstrologyReport = {
     id: string;
     userId: string;
     profileId?: string | null;
-    modelId: string;
-    providerId: string;
+    modelId?: string;
+    providerId?: string;
     reportType: AstrologyReportType;
     question?: string | null;
     status: AstrologyReportStatus;
@@ -52,8 +52,26 @@ export type AstrologyReport = {
     isFavorite: boolean;
     costCredits: number | string;
     errorMessage?: string | null;
+    providerMetadata?: (Record<string, unknown> & {
+        feedback?: {
+            rating: "useful" | "too_generic" | "inaccurate" | "too_long";
+            note?: string;
+            updatedAt?: string;
+        };
+        sourceReport?: {
+            id?: string;
+            reportType?: AstrologyReportType;
+            title?: string | null;
+        };
+    }) | null;
+    requestPayload?: Record<string, unknown> | null;
     createdAt: string;
     updatedAt: string;
+};
+
+export type UpdateReportFeedbackParams = {
+    rating: "useful" | "too_generic" | "inaccurate" | "too_long";
+    note?: string;
 };
 
 export type AstrologyReportStats = {
@@ -110,6 +128,7 @@ export type GenerateAstrologyReportParams = {
     focusArea?: string;
     currentState?: string;
     language?: string;
+    sourceReportId?: string;
 };
 
 export type QueryAstrologyReportsParams = {

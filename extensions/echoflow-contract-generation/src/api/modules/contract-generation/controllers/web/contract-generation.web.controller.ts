@@ -26,18 +26,18 @@ export class ContractGenerationWebController extends BaseController {
     }
 
     @Post("generate")
-    generate(@Playground() user: UserPlayground, @Body() dto: GenerateContractDto) {
-        return this.contractGenerationService.generate(user.id, dto);
+    async generate(@Playground() user: UserPlayground, @Body() dto: GenerateContractDto) {
+        return this.toPublicTask(await this.contractGenerationService.generate(user.id, dto));
     }
 
     @Post("review-upload")
-    reviewUpload(@Playground() user: UserPlayground, @Body() dto: ReviewUploadedContractDto) {
-        return this.contractGenerationService.reviewUploadedContract(user.id, dto);
+    async reviewUpload(@Playground() user: UserPlayground, @Body() dto: ReviewUploadedContractDto) {
+        return this.toPublicTask(await this.contractGenerationService.reviewUploadedContract(user.id, dto));
     }
 
     @Post("tasks/:id/review")
-    review(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
-        return this.contractGenerationService.reviewTask(user.id, id);
+    async review(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
+        return this.toPublicTask(await this.contractGenerationService.reviewTask(user.id, id));
     }
 
     @Post("tasks/:id/rewrite-clause")
@@ -46,13 +46,13 @@ export class ContractGenerationWebController extends BaseController {
     }
 
     @Patch("tasks/:id/content")
-    updateContent(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: UpdateContractContentDto) {
-        return this.contractGenerationService.updateTaskContent(user.id, id, dto);
+    async updateContent(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: UpdateContractContentDto) {
+        return this.toPublicTask(await this.contractGenerationService.updateTaskContent(user.id, id, dto));
     }
 
     @Patch("tasks/:id/risk-actions")
-    updateRiskAction(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: UpdateRiskActionDto) {
-        return this.contractGenerationService.updateRiskAction(user.id, id, dto);
+    async updateRiskAction(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: UpdateRiskActionDto) {
+        return this.toPublicTask(await this.contractGenerationService.updateRiskAction(user.id, id, dto));
     }
 
     @Get("tasks/:id/versions")
@@ -61,27 +61,55 @@ export class ContractGenerationWebController extends BaseController {
     }
 
     @Post("tasks/:id/versions/:versionId/restore")
-    restoreVersion(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Param("versionId", UUIDValidationPipe) versionId: string) {
-        return this.contractGenerationService.restoreTaskVersion(user.id, id, versionId);
+    async restoreVersion(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Param("versionId", UUIDValidationPipe) versionId: string) {
+        return this.toPublicTask(await this.contractGenerationService.restoreTaskVersion(user.id, id, versionId));
     }
 
     @Post("tasks/:id/export")
-    exportTask(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: ExportContractDto, @Req() request: Request) {
-        return this.contractGenerationService.exportTask(user.id, id, request, dto);
+    async exportTask(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: ExportContractDto, @Req() request: Request) {
+        return this.toPublicTask(await this.contractGenerationService.exportTask(user.id, id, request, dto));
     }
 
     @Get("tasks")
-    list(@Playground() user: UserPlayground, @Query() query: QueryContractTaskDto) {
-        return this.contractGenerationService.getUserTasks(user.id, query);
+    async list(@Playground() user: UserPlayground, @Query() query: QueryContractTaskDto) {
+        const page = await this.contractGenerationService.getUserTasks(user.id, query);
+        return {
+            ...page,
+            items: page.items.map((item) => this.toPublicTask(item)),
+        };
     }
 
     @Get("tasks/:id")
-    detail(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
-        return this.contractGenerationService.getTaskDetail(user.id, id);
+    async detail(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
+        return this.toPublicTask(await this.contractGenerationService.getTaskDetail(user.id, id));
     }
 
     @Delete("tasks/:id")
     remove(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
         return this.contractGenerationService.deleteTask(user.id, id);
+    }
+
+    private toPublicTask(task: Awaited<ReturnType<ContractGenerationService["generate"]>> | Awaited<ReturnType<ContractGenerationService["reviewUploadedContract"]>> | Awaited<ReturnType<ContractGenerationService["reviewTask"]>> | Awaited<ReturnType<ContractGenerationService["updateTaskContent"]>> | Awaited<ReturnType<ContractGenerationService["updateRiskAction"]>> | Awaited<ReturnType<ContractGenerationService["restoreTaskVersion"]>> | Awaited<ReturnType<ContractGenerationService["exportTask"]>> | Awaited<ReturnType<ContractGenerationService["getTaskDetail"]>>) {
+        const {
+            userId: _userId,
+            modelId: _modelId,
+            providerId: _providerId,
+            requestPayload: _requestPayload,
+            providerMetadata,
+            deletedAt: _deletedAt,
+            ...publicTask
+        } = task;
+        return {
+            ...publicTask,
+            providerMetadata: {
+                templateName: providerMetadata?.templateName,
+                language: providerMetadata?.language,
+                stance: providerMetadata?.stance,
+                exportedAt: providerMetadata?.exportedAt,
+                exportType: providerMetadata?.exportType,
+                billingStatus: providerMetadata?.billingStatus,
+                refundedAt: providerMetadata?.refundedAt,
+            },
+        };
     }
 }
