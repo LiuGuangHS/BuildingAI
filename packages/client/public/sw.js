@@ -48,6 +48,7 @@ self.addEventListener("notificationclick", (event) => {
     const parsedUrl = new URL(rawUrl, self.location.origin);
     if (
       (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+      parsedUrl.origin === self.location.origin &&
       !parsedUrl.username &&
       !parsedUrl.password &&
       !rawUrl.trim().startsWith("//")
