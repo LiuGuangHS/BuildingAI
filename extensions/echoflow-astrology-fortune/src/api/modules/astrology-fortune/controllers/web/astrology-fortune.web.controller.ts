@@ -88,6 +88,7 @@ export class AstrologyFortuneWebController extends BaseController {
             providerMetadata: {
                 feedback: providerMetadata?.feedback,
                 sourceReport: providerMetadata?.sourceReport,
+                generationContext: providerMetadata?.generationContext,
             },
         };
     }

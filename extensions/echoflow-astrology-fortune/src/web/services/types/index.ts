@@ -38,10 +38,7 @@ export type AstrologyReportResult = {
 
 export type AstrologyReport = {
     id: string;
-    userId: string;
     profileId?: string | null;
-    modelId?: string;
-    providerId?: string;
     reportType: AstrologyReportType;
     question?: string | null;
     status: AstrologyReportStatus;
@@ -63,10 +60,25 @@ export type AstrologyReport = {
             reportType?: AstrologyReportType;
             title?: string | null;
         };
+        generationContext?: {
+            reportType?: AstrologyReportType;
+            focusArea?: string;
+            currentState?: string;
+            question?: string;
+            language?: string;
+            sourceReportId?: string;
+            hasTargetProfile?: boolean;
+        };
     }) | null;
-    requestPayload?: Record<string, unknown> | null;
     createdAt: string;
     updatedAt: string;
+};
+
+export type ConsoleAstrologyReport = AstrologyReport & {
+    userId: string;
+    modelId?: string;
+    providerId?: string;
+    requestPayload?: Record<string, unknown> | null;
 };
 
 export type UpdateReportFeedbackParams = {

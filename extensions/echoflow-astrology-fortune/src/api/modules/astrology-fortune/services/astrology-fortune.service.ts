@@ -19,6 +19,7 @@ import { z } from "zod";
 import { AstrologyFortuneSetting, AstrologyProfile, AstrologyReport, AstrologyReportStatus, AstrologyReportType, type AstrologyReportResult } from "../../../db/entities";
 import { CreateAstrologyProfileDto, GenerateAstrologyReportDto, QueryAstrologyProfileDto, QueryAstrologyReportDto, UpdateAstrologyFortuneSettingDto, UpdateAstrologyProfileDto, UpdateReportFeedbackDto } from "../dto";
 import { ASTROLOGY_REPORT_JOB, ASTROLOGY_REPORT_QUEUE } from "./astrology-queue.constants";
+import { buildAstrologyReportGenerationContext } from "./astrology-report-public-metadata";
 import {
     ASTROLOGY_REPORT_BUSY_STATUSES,
     ASTROLOGY_REPORT_STALE_PROCESSING_MS,
@@ -178,6 +179,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
             errorMessage: null,
             providerMetadata: {
                 requestedAt: new Date().toISOString(),
+                generationContext: buildAstrologyReportGenerationContext(normalizedDto),
                 ...(sourceReport
                     ? {
                           sourceReport: {

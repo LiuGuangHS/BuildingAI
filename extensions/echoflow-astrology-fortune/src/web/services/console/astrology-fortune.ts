@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { consoleHttpClient } from "../base";
-import type { AiModelOption, AstrologyFortuneSetting, AstrologyProfile, AstrologyReport, AstrologyReportStats, PaginatedResponse, QueryAstrologyProfilesParams, QueryAstrologyReportsParams, UpdateAstrologyFortuneSettingParams } from "../types";
+import type { AiModelOption, AstrologyFortuneSetting, AstrologyProfile, ConsoleAstrologyReport, AstrologyReportStats, PaginatedResponse, QueryAstrologyProfilesParams, QueryAstrologyReportsParams, UpdateAstrologyFortuneSettingParams } from "../types";
 
 const SETTING_QUERY_KEY = ["echoflow-astrology-fortune", "console", "settings"] as const;
 const MODEL_QUERY_KEY = ["echoflow-astrology-fortune", "console", "llm-models"] as const;
@@ -21,7 +21,7 @@ export function listAvailableLlmModels() {
 }
 
 export function listConsoleAstrologyReports(params?: QueryAstrologyReportsParams) {
-    return consoleHttpClient.get<PaginatedResponse<AstrologyReport>>("/astrology-fortune/reports", { params });
+    return consoleHttpClient.get<PaginatedResponse<ConsoleAstrologyReport>>("/astrology-fortune/reports", { params });
 }
 
 export function getConsoleAstrologyReportStats(params?: QueryAstrologyReportsParams) {
@@ -29,7 +29,7 @@ export function getConsoleAstrologyReportStats(params?: QueryAstrologyReportsPar
 }
 
 export function getConsoleAstrologyReport(reportId: string) {
-    return consoleHttpClient.get<AstrologyReport>(`/astrology-fortune/reports/${reportId}`);
+    return consoleHttpClient.get<ConsoleAstrologyReport>(`/astrology-fortune/reports/${reportId}`);
 }
 
 export function deleteConsoleAstrologyReport(reportId: string) {

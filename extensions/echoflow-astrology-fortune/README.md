@@ -18,6 +18,7 @@
 |---|---|---|
 | 用户档案 | ready | 保存出生信息、星座生肖、长期档案和上下文。 |
 | 报告生成 | ready | 按报告类型创建异步任务，成功写结构化结果、摘要和模型快照。 |
+| 生成上下文 | ready | Web 公开 `generationContext`，记录报告类型、关注方向、当前状态、问题、语言和是否包含目标对象；不暴露原始目标对象、模型、Provider 或请求载荷。 |
 | 报告类型 | ready | 支持每日运势、性格洞察、情感配对、事业财富和问题解读等类型。 |
 | 继续追问 | ready | 不新增聊天实体，追问会回到“问问”工作区复用报告生成入口。 |
 | 质量反馈 | ready | 轻量反馈写入报告 metadata，字段受限、可回显、可审计。 |
@@ -53,6 +54,7 @@
 |---|---|
 | `astrology-fortune.module.ts` | 导入主站 AI、计费和队列能力，注册报告服务。 |
 | `astrology-fortune.service.ts` | 档案、报告任务、LLM 调用、结构化结果、扣费退款、超时回收和删除保护。 |
+| `astrology-report-public-metadata.ts` | 构造用户端可展示的公开生成上下文，避免前端从 `tags` 或私有 metadata 猜测分析依据。 |
 | `dto/astrology-fortune.dto.ts` | 用户端和管理端请求/响应约束。 |
 | `src/web/constants/report-types.ts` | 用户端报告类型、展示文案和分析范围。 |
 
@@ -93,9 +95,22 @@
 | P1 | 今日面板 | 关注领域、今日状态、模板问题和最近今日报告摘要。 |
 | P1 | 关系面板 | 对方信息、关系场景、信息可信度、分析范围和关系报告预览。 |
 | P1 | 报告消费 | 摘要优先，其次行动项、风险提醒、观察信号、继续追问和反馈。 |
+| P1 | 生成依据链路 | 用户端历史、报告卡和详情优先读取后端公开 `generationContext`，展示范围、状态、问题和追问来源。 |
+| P1 | 档案质量提示 | 档案列表和工具栏展示 AI 依据完整度、缺项和当前价格组，提醒用户补全出生信息会提升报告颗粒度。 |
 | P2 | 报告导出/分享 | 先考虑复制文本或下载文本；PDF、对比报告和资产库后置。 |
 
 暂不做插件级用户中心、独立首页 Hero、全局数据看板、复杂分享中心和完整报告资产库；这些容易和主系统能力重复，或把插件做成独立应用。
+
+### 2026-06-20 设计审查结论
+
+| 审查项 | 结论 |
+|---|---|
+| 插件边界 | 用户端继续作为主系统 iframe 内的业务面板，不重复账号、头像、全局导航、余额入口或完整应用壳。 |
+| AI 亮点 | 智能感落在问题质量、AI 解读范围、生成依据、档案完整度、行动建议、风险提醒、继续追问和反馈闭环。 |
+| 视觉密度 | 桌面端采用左侧输入/任务、右侧报告/准备度；移动端收敛为单列，内部 Tab 横向滚动。 |
+| 数据链路 | 报告卡、历史和详情优先读取 Web 公开 `generationContext`，不从私有 request payload 或未脱敏 metadata 推断上下文。 |
+| 公开类型 | Web `AstrologyReport` 不包含 `userId`、`modelId`、`providerId`、`requestPayload`；Console 通过 `ConsoleAstrologyReport` 单独扩展排障字段。 |
+| 视觉约束 | 复用主系统 token、Button、Tabs、Dialog 和表单组件；插件 CSS 只控制布局、业务分组、状态和响应式。 |
 
 ## 数据与存储
 
@@ -120,6 +135,7 @@
 
 ```bash
 pnpm --filter echoflow-astrology-fortune check-types
+pnpm --filter echoflow-astrology-fortune test
 pnpm --filter echoflow-astrology-fortune build:api
 pnpm --filter echoflow-astrology-fortune build:web
 pnpm --filter echoflow-astrology-fortune build:publish
@@ -131,7 +147,7 @@ pnpm --filter echoflow-astrology-fortune build:publish
 
 | 项目 | 状态 |
 |---|---|
-| 单测 | 当前 package 未定义 `test` 脚本；需要补报告生成、计费幂等、超时回收、反馈和退款测试。 |
+| 单测 | 已覆盖 AI SDK 边界、通知规则、报告回收规则和公开生成上下文；仍需补报告生成、计费幂等、反馈和退款集成测试。 |
 | Redis/Worker | 需要真实 smoke 成功、失败、超时、删除保护和多实例恢复。 |
 | 真实 LLM | 需要主站真实模型、Secret、余额和测试档案覆盖报告生成与失败退款。 |
 | Web 构建 | 需在当前 Node 22 / pnpm 10 环境重新确认构建链路。 |
