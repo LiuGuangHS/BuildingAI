@@ -11,9 +11,9 @@ import {
     ExtensionBillingService,
     ExtensionNotificationService,
     PublicAiModelService,
+    buildDefinedWhere,
     normalizeProviderConfig,
 } from "@buildingai/extension-sdk";
-import { buildWhere } from "@buildingai/utils";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import type { Queue } from "bullmq";
@@ -493,7 +493,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
         const succeeded = record.status === ImageGenerationStatus.SUCCEEDED;
         await this.notificationService.notifyUser({
-            extensionId: EXTENSION_ID,
             userId: record.userId,
             sceneCode: succeeded
                 ? `${EXTENSION_ID}.generation.succeeded`
@@ -513,7 +512,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     }
 
     async list(query: QueryGenerationDto, userId: string) {
-        const where = buildWhere<ImageGeneration>({
+        const where = buildDefinedWhere<FindOptionsWhere<ImageGeneration>>({
             userId,
             prompt: query.keyword ? Like(`%${query.keyword}%`) : undefined,
             status: query.status,
@@ -536,7 +535,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     }
 
     async listAll(query: QueryGenerationDto) {
-        const where = buildWhere<ImageGeneration>({
+        const where = buildDefinedWhere<FindOptionsWhere<ImageGeneration>>({
             prompt: query.keyword ? Like(`%${query.keyword}%`) : undefined,
             status: query.status,
             modelConfigId: query.modelId,

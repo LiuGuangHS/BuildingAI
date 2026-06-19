@@ -8,4 +8,5 @@ export { ExtensionNotificationService, type ExtensionNotifyUserInput, type Exten
 export { PublicUserService } from "./services/user.service";
 export { defineBuildingAITsupConfig } from "./tsup";
 export { assertPublicHttpUrl, isPrivateOrReservedIp, normalizePublicHttpUrl, type PublicHttpUrlOptions, } from "./utils/public-http-url";
+export { buildDefinedWhere } from "./utils/where";
 //# sourceMappingURL=index.d.ts.map

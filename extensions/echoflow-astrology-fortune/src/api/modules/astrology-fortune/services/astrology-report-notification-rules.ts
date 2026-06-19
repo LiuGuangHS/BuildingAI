@@ -32,7 +32,6 @@ export function getAstrologyReportDisplayName(reportType: string) {
 
 export function buildAstrologyReportSucceededNotification(report: NotificationReportLike) {
     return {
-        extensionId: ASTROLOGY_FORTUNE_EXTENSION_ID,
         userId: report.userId,
         sceneCode: ASTROLOGY_REPORT_SUCCEEDED_SCENE,
         level: "success" as const,
@@ -50,7 +49,6 @@ export function buildAstrologyReportSucceededNotification(report: NotificationRe
 
 export function buildAstrologyReportFailedNotification(report: NotificationReportLike, message: string) {
     return {
-        extensionId: ASTROLOGY_FORTUNE_EXTENSION_ID,
         userId: report.userId,
         sceneCode: ASTROLOGY_REPORT_FAILED_SCENE,
         level: "error" as const,

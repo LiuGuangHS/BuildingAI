@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.normalizePublicHttpUrl = exports.isPrivateOrReservedIp = exports.assertPublicHttpUrl = exports.defineBuildingAITsupConfig = exports.PublicUserService = exports.ExtensionNotificationService = exports.ExtensionNotificationModule = exports.ExtensionBillingService = exports.ExtensionBillingModule = exports.PublicAiModelService = exports.normalizeProviderConfig = exports.AiPublicModule = void 0;
+exports.buildDefinedWhere = exports.normalizePublicHttpUrl = exports.isPrivateOrReservedIp = exports.assertPublicHttpUrl = exports.defineBuildingAITsupConfig = exports.PublicUserService = exports.ExtensionNotificationService = exports.ExtensionNotificationModule = exports.ExtensionBillingService = exports.ExtensionBillingModule = exports.PublicAiModelService = exports.normalizeProviderConfig = exports.AiPublicModule = void 0;
 var ai_public_module_1 = require("./modules/ai/ai-public.module");
 Object.defineProperty(exports, "AiPublicModule", { enumerable: true, get: function () { return ai_public_module_1.AiPublicModule; } });
 var provider_config_1 = require("./modules/ai/provider-config");
@@ -23,3 +23,5 @@ var public_http_url_1 = require("./utils/public-http-url");
 Object.defineProperty(exports, "assertPublicHttpUrl", { enumerable: true, get: function () { return public_http_url_1.assertPublicHttpUrl; } });
 Object.defineProperty(exports, "isPrivateOrReservedIp", { enumerable: true, get: function () { return public_http_url_1.isPrivateOrReservedIp; } });
 Object.defineProperty(exports, "normalizePublicHttpUrl", { enumerable: true, get: function () { return public_http_url_1.normalizePublicHttpUrl; } });
+var where_1 = require("./utils/where");
+Object.defineProperty(exports, "buildDefinedWhere", { enumerable: true, get: function () { return where_1.buildDefinedWhere; } });

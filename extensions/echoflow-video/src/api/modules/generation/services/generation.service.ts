@@ -1029,7 +1029,6 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
 
         const succeeded = record.status === VideoGenerationStatus.SUCCEEDED;
         await this.notificationService.notifyUser({
-            extensionId: EXTENSION_ID,
             userId: record.userId,
             sceneCode: succeeded
                 ? `${EXTENSION_ID}.generation.succeeded`

@@ -3,7 +3,7 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Like, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { buildWhere } from "@buildingai/utils";
+import { buildDefinedWhere } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 
 import { ImagePromptTemplate } from "../../../db/entities/image-prompt-template.entity";
@@ -19,7 +19,7 @@ export class TemplateService extends BaseService<ImagePromptTemplate> {
     }
 
     async list(query: QueryTemplateDto, webOnly = false) {
-        const where = buildWhere<ImagePromptTemplate>({
+        const where = buildDefinedWhere<FindOptionsWhere<ImagePromptTemplate>>({
             title: query.keyword ? Like(`%${query.keyword}%`) : undefined,
             category: query.category,
             enabled: webOnly ? true : query.enabled,

@@ -24,3 +24,4 @@ export {
     normalizePublicHttpUrl,
     type PublicHttpUrlOptions,
 } from "./utils/public-http-url";
+export { buildDefinedWhere } from "./utils/where";

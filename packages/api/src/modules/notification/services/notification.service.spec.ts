@@ -8,11 +8,18 @@ import {
     normalizeWechatTemplateConfig,
     FIELD_LIMITS,
 } from "./notification-normalize.util";
+import { getExtensionIdentifierFromStack } from "@buildingai/core/modules";
+import { ExtensionNotificationService } from "../../../../../@buildingai/extension-sdk/src/modules/notification/extension-notification.service";
 
 jest.mock("@buildingai/errors", () => ({
     HttpErrorFactory: {
         badRequest: (message: string) => new Error(message),
     },
+}));
+
+jest.mock("@buildingai/core/modules", () => ({
+    EXTENSION_NOTIFICATION_PORT: Symbol.for("EXTENSION_NOTIFICATION_PORT"),
+    getExtensionIdentifierFromStack: jest.fn(),
 }));
 
 describe("notification normalization helpers", () => {
@@ -82,5 +89,68 @@ describe("notification normalization helpers", () => {
             },
         });
         expect(() => normalizeWechatTemplateConfig({ url: "data:text/html,hello" })).toThrow();
+    });
+});
+
+describe("extension notification SDK boundary", () => {
+    const mockedGetExtensionIdentifierFromStack = getExtensionIdentifierFromStack as jest.MockedFunction<
+        typeof getExtensionIdentifierFromStack
+    >;
+
+    beforeEach(() => {
+        mockedGetExtensionIdentifierFromStack.mockReset();
+        mockedGetExtensionIdentifierFromStack.mockReturnValue("echoflow-video");
+    });
+
+    it("rejects registering scenes under another extension namespace", async () => {
+        const notificationPort = {
+            registerScenes: jest.fn(),
+            notifyUser: jest.fn(),
+        };
+        const service = new ExtensionNotificationService(notificationPort);
+
+        await expect(
+            service.registerScenes("echoflow-image", [
+                {
+                    sceneCode: "echoflow-image.generation.succeeded",
+                    name: "图片生成完成",
+                    description: "图片生成完成",
+                    level: "success",
+                    titleTemplate: "图片生成完成",
+                    contentTemplate: "图片生成完成",
+                },
+            ]),
+        ).rejects.toThrow(
+            'Notification extensionId "echoflow-image" does not match caller extension "echoflow-video"',
+        );
+        expect(notificationPort.registerScenes).not.toHaveBeenCalled();
+    });
+
+    it("ignores caller supplied extensionId when sending notifications", async () => {
+        const notificationPort = {
+            registerScenes: jest.fn(),
+            notifyUser: jest.fn().mockResolvedValue({ notificationId: "notification-1" }),
+        };
+        const service = new ExtensionNotificationService(notificationPort);
+
+        await expect(
+            service.notifyUser({
+                extensionId: "echoflow-image",
+                userId: "user-1",
+                sceneCode: "echoflow-video.generation.succeeded",
+                title: "视频生成完成",
+            } as Parameters<ExtensionNotificationService["notifyUser"]>[0] & { extensionId: string }),
+        ).resolves.toEqual({ notificationId: "notification-1" });
+
+        expect(notificationPort.notifyUser).toHaveBeenCalledWith(
+            "echoflow-video",
+            expect.objectContaining({
+                sceneCode: "echoflow-video.generation.succeeded",
+                type: "echoflow-video",
+                data: expect.objectContaining({
+                    extensionId: "echoflow-video",
+                }),
+            }),
+        );
     });
 });

@@ -10,9 +10,7 @@ import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
 export type ExtensionRegisterNotificationSceneInput = RegisterNotificationSceneInput;
 
-export type ExtensionNotifyUserInput = NotifyUserInput & {
-    extensionId?: string;
-};
+export type ExtensionNotifyUserInput = NotifyUserInput;
 
 const DEFAULT_NOTIFICATION_CHANNELS: NonNullable<RegisterNotificationSceneInput["channels"]> = ["in_app", "web_push"];
 
@@ -30,10 +28,11 @@ export class ExtensionNotificationService {
         extensionIdOrScenes: string | RegisterNotificationSceneInput[],
         maybeScenes?: RegisterNotificationSceneInput[],
     ) {
+        const resolvedExtensionId = this.resolveExtensionId();
         const extensionId =
             typeof extensionIdOrScenes === "string"
-                ? extensionIdOrScenes
-                : this.resolveExtensionId();
+                ? this.assertExplicitExtensionId(resolvedExtensionId, extensionIdOrScenes)
+                : resolvedExtensionId;
         const scenes =
             typeof extensionIdOrScenes === "string" ? maybeScenes : extensionIdOrScenes;
 
@@ -51,7 +50,7 @@ export class ExtensionNotificationService {
     }
 
     async notifyUser(input: ExtensionNotifyUserInput): Promise<NotifyUserResult> {
-        const extensionId = input.extensionId || this.resolveExtensionId();
+        const extensionId = this.resolveExtensionId();
         const normalizedInput = this.normalizeNotification(extensionId, input);
 
         if (!this.notificationPort) {
@@ -70,6 +69,15 @@ export class ExtensionNotificationService {
             );
             return { skipped: true, reason: message };
         }
+    }
+
+    private assertExplicitExtensionId(resolvedExtensionId: string, explicitExtensionId: string) {
+        if (explicitExtensionId !== resolvedExtensionId) {
+            throw new Error(
+                `Notification extensionId "${explicitExtensionId}" does not match caller extension "${resolvedExtensionId}"`,
+            );
+        }
+        return explicitExtensionId;
     }
 
     private normalizeScene(extensionId: string, scene: RegisterNotificationSceneInput): RegisterNotificationSceneInput {

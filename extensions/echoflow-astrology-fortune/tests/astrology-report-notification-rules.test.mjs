@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-    ASTROLOGY_FORTUNE_EXTENSION_ID,
     ASTROLOGY_REPORT_FAILED_SCENE,
     ASTROLOGY_REPORT_LINK_URL,
     ASTROLOGY_REPORT_SUCCEEDED_SCENE,
@@ -27,7 +26,7 @@ describe("astrology report notification rules", () => {
     it("keeps terminal notifications traceable to a report source", () => {
         const notification = buildAstrologyReportSucceededNotification(report());
 
-        assert.equal(notification.extensionId, ASTROLOGY_FORTUNE_EXTENSION_ID);
+        assert.equal("extensionId" in notification, false);
         assert.equal(notification.sceneCode, ASTROLOGY_REPORT_SUCCEEDED_SCENE);
         assert.equal(notification.linkUrl, ASTROLOGY_REPORT_LINK_URL);
         assert.equal(notification.sourceType, "report");

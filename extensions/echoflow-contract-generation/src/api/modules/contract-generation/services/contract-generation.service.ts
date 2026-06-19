@@ -920,7 +920,6 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
                   ? `${EXTENSION_ID}.review.succeeded`
                   : `${EXTENSION_ID}.export.succeeded`;
         await this.notificationService.notifyUser({
-            extensionId: EXTENSION_ID,
             userId: task.userId,
             sceneCode,
             level: "success",
@@ -937,7 +936,6 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
 
     private async notifyTaskFailed(task: ContractGenerationTask, message: string) {
         await this.notificationService.notifyUser({
-            extensionId: EXTENSION_ID,
             userId: task.userId,
             sceneCode: `${EXTENSION_ID}.task.failed`,
             level: "error",
