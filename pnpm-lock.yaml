@@ -891,6 +891,9 @@ importers:
 
   extensions/echoflow-image:
     dependencies:
+      '@buildingai/ai-sdk':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/ai-sdk
       '@buildingai/base':
         specifier: workspace:*
         version: link:../../packages/@buildingai/base

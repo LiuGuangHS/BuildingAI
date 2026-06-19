@@ -1,6 +1,5 @@
 "use client";
 
-import { LucideIcon } from "@buildingai/ui/components/lucide-icon";
 import {
   Collapsible,
   CollapsibleContent,
@@ -22,10 +21,62 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@buildingai/ui/components/ui/sidebar";
-import { ChevronRight } from "lucide-react";
+import {
+  BarChart3,
+  Bell,
+  Bot,
+  Brush,
+  Calendar,
+  ChevronRight,
+  Clapperboard,
+  CircleHelp,
+  FileText,
+  History,
+  Image,
+  KeyRound,
+  Landmark,
+  LayoutDashboard,
+  List,
+  ListChecks,
+  Settings,
+  Settings2,
+  Shield,
+  ShieldCheck,
+  Sparkles,
+  type LucideIcon,
+  Users,
+  Video,
+  WalletCards,
+} from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 import type { ExtensionMenuItem } from "../types";
+
+const menuIconMap: Record<string, LucideIcon> = {
+  "bar-chart-3": BarChart3,
+  bell: Bell,
+  bot: Bot,
+  brush: Brush,
+  calendar: Calendar,
+  clapperboard: Clapperboard,
+  "circle-help": CircleHelp,
+  "file-text": FileText,
+  history: History,
+  image: Image,
+  "key-round": KeyRound,
+  landmark: Landmark,
+  "layout-dashboard": LayoutDashboard,
+  list: List,
+  "list-checks": ListChecks,
+  settings: Settings,
+  "settings-2": Settings2,
+  shield: Shield,
+  "shield-check": ShieldCheck,
+  sparkles: Sparkles,
+  users: Users,
+  video: Video,
+  "wallet-cards": WalletCards,
+};
 
 /**
  * Normalize path by removing trailing slash
@@ -33,6 +84,13 @@ import type { ExtensionMenuItem } from "../types";
 const normalizePath = (path: string) => {
   return path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
 };
+
+function MenuIcon({ name }: { name: ExtensionMenuItem["icon"] }) {
+  if (!name) return null;
+
+  const Icon = menuIconMap[name] ?? CircleHelp;
+  return <Icon className="size-4 shrink-0" aria-hidden="true" />;
+}
 
 function NavMenuItem({ menu }: { menu: ExtensionMenuItem }) {
   const location = useLocation();
@@ -57,7 +115,7 @@ function NavMenuItem({ menu }: { menu: ExtensionMenuItem }) {
           <HoverCard openDelay={0} closeDelay={0}>
             <HoverCardTrigger asChild>
               <SidebarMenuButton isActive={isActive}>
-                {menu.icon && <LucideIcon name={menu.icon} />}
+                <MenuIcon name={menu.icon} />
                 <span>{menu.title}</span>
               </SidebarMenuButton>
             </HoverCardTrigger>
@@ -91,7 +149,7 @@ function NavMenuItem({ menu }: { menu: ExtensionMenuItem }) {
         <SidebarMenuItem>
           <CollapsibleTrigger asChild>
             <SidebarMenuButton tooltip={menu.title}>
-              {menu.icon && <LucideIcon name={menu.icon} />}
+              <MenuIcon name={menu.icon} />
               <span>{menu.title}</span>
               <SidebarMenuAction asChild className="[[data-state=open]_>_&]:rotate-90">
                 <div>
@@ -126,7 +184,7 @@ function NavMenuItem({ menu }: { menu: ExtensionMenuItem }) {
     <SidebarMenuItem>
       <SidebarMenuButton asChild tooltip={menu.title} isActive={normalizedPathname === fullPath}>
         <Link to={fullPath} onClick={handleLinkClick}>
-          {menu.icon && <LucideIcon name={menu.icon} />}
+          <MenuIcon name={menu.icon} />
           <span>{menu.title}</span>
         </Link>
       </SidebarMenuButton>
