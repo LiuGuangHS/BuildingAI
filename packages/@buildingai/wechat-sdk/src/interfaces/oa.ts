@@ -12,3 +12,18 @@ export const MsgType = {
     // Miniprogram: "miniprogram",
 } as const;
 export type MsgtypeKey = (typeof MsgType)[keyof typeof MsgType];
+
+export type OaTemplateMessageData = Record<
+    string,
+    {
+        value: string;
+        color?: string;
+    }
+>;
+
+export type OaTemplateMessagePayload = {
+    touser: string;
+    template_id: string;
+    url?: string;
+    data: OaTemplateMessageData;
+};

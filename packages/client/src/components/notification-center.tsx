@@ -5,7 +5,7 @@ import {
   useNotificationsQuery,
   useNotificationUnreadCountQuery,
 } from "@buildingai/services";
-import { useAuthStore } from "@buildingai/stores";
+import { useAuthStore, useConfigStore } from "@buildingai/stores";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@buildingai/ui/components/ui/popover";
@@ -39,7 +39,11 @@ function getTargetUrl(linkUrl?: string | null) {
   if (!linkUrl) return null;
 
   try {
-    return new URL(linkUrl, window.location.origin);
+    const targetUrl = new URL(linkUrl, window.location.origin);
+    if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") return null;
+    if (targetUrl.username || targetUrl.password) return null;
+    if (linkUrl.trim().startsWith("//")) return null;
+    return targetUrl;
   } catch {
     return null;
   }
@@ -58,13 +62,14 @@ function NotificationRow({
   const unread = !item.readAt;
 
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
       disabled={disabled}
       onClick={() => onOpen(item)}
       className={cn(
-        "hover:bg-muted/70 focus-visible:ring-ring/50 flex w-full gap-3 rounded-md p-3 text-left transition-colors outline-none focus-visible:ring-[3px]",
-        disabled && "pointer-events-none opacity-60",
+        "h-auto w-full justify-start gap-3 rounded-md p-3 text-left whitespace-normal",
+        "hover:bg-muted/70 focus-visible:ring-ring/50 focus-visible:ring-[3px]",
       )}
     >
       <span className={cn("mt-1 size-2 rounded-full bg-transparent", unread && "bg-primary")} />
@@ -85,19 +90,25 @@ function NotificationRow({
           <NotificationTime value={item.createdAt} />
         </span>
       </span>
-    </button>
+    </Button>
   );
 }
 
-export function NotificationCenter() {
+export function NotificationCenter({
+  placement = "floating",
+}: {
+  placement?: "floating" | "inline";
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const settingsDialog = useSettingsDialog();
   const { isLogin } = useAuthStore((state) => state.authActions);
+  const { websiteConfig } = useConfigStore((state) => state.config);
   const [open, setOpen] = useState(false);
+  const siteName = websiteConfig?.webinfo?.name || "BuildingAI";
 
   const unreadCountQuery = useNotificationUnreadCountQuery({
-    refetchInterval: 60_000,
+    refetchInterval: 15_000,
   });
   const notificationsQuery = useNotificationsQuery(
     { page: 1, pageSize: 8, readStatus: "all" },
@@ -127,6 +138,15 @@ export function NotificationCenter() {
     void queryClient.invalidateQueries({ queryKey: ["notifications"] });
   }, [open, queryClient]);
 
+  useEffect(() => {
+    const handleFocus = () => {
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [queryClient]);
+
   if (!isLogin()) return null;
 
   const unreadCount = unreadCountQuery.data?.count ?? 0;
@@ -152,95 +172,103 @@ export function NotificationCenter() {
     }
   };
 
-  return (
-    <div className="pointer-events-none fixed top-3 right-3 z-40">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
+  const content = (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="bg-background/90 pointer-events-auto relative shadow-sm backdrop-blur"
+          aria-label="通知中心"
+        >
+          <Bell className="size-4" />
+          {unreadCount > 0 && (
+            <Badge
+              className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 text-[10px]"
+              variant="default"
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </Badge>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={placement === "inline" ? 10 : 6}
+        className="pointer-events-auto flex max-h-[min(640px,calc(100vh-96px))] w-[calc(100vw-24px)] max-w-[380px] flex-col gap-0 overflow-hidden p-0"
+      >
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div>
+            <div className="text-sm font-medium">通知中心</div>
+            <div className="text-muted-foreground text-xs">
+              {unreadCount > 0 ? `${unreadCount} 条未读通知` : "暂无未读通知"}
+            </div>
+          </div>
           <Button
             type="button"
-            size="icon"
-            variant="outline"
-            className="bg-background/90 pointer-events-auto relative shadow-sm backdrop-blur"
-            aria-label="通知中心"
+            size="sm"
+            variant="ghost"
+            disabled={unreadCount === 0}
+            loading={markAllReadMutation.isPending}
+            onClick={() => markAllReadMutation.mutate()}
           >
-            <Bell className="size-4" />
-            {unreadCount > 0 && (
-              <Badge
-                className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 text-[10px]"
-                variant="default"
-              >
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </Badge>
-            )}
+            <CheckCheck className="size-4" />
+            全部已读
           </Button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="pointer-events-auto w-[360px] gap-0 p-0">
-          <div className="flex items-center justify-between border-b px-4 py-3">
-            <div>
-              <div className="text-sm font-medium">通知中心</div>
-              <div className="text-muted-foreground text-xs">
-                {unreadCount > 0 ? `${unreadCount} 条未读通知` : "暂无未读通知"}
-              </div>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={unreadCount === 0}
-              loading={markAllReadMutation.isPending}
-              onClick={() => markAllReadMutation.mutate()}
-            >
-              <CheckCheck className="size-4" />
-              全部已读
-            </Button>
-          </div>
-          <ScrollArea className="max-h-[420px]">
-            <div className="p-2">
-              {notificationsQuery.isLoading ? (
-                <div className="space-y-2 p-2">
-                  {Array.from({ length: 4 }).map((_, index) => (
-                    <div key={index} className="space-y-2 rounded-md p-2">
-                      <Skeleton className="h-4 w-40" />
-                      <Skeleton className="h-3 w-64" />
-                      <Skeleton className="h-3 w-20" />
-                    </div>
-                  ))}
-                </div>
-              ) : notifications.length ? (
-                notifications.map((item) => (
-                  <NotificationRow
-                    key={item.id}
-                    item={item}
-                    disabled={markReadMutation.isPending}
-                    onOpen={handleOpenNotification}
-                  />
-                ))
-              ) : (
-                <div className="flex flex-col items-center justify-center px-8 py-12 text-center">
-                  <Inbox className="text-muted-foreground mb-3 size-8" />
-                  <div className="text-sm font-medium">暂无通知</div>
-                  <div className="text-muted-foreground mt-1 text-xs">
-                    长任务状态、系统消息会在这里显示。
+        </div>
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="p-2">
+            {notificationsQuery.isLoading ? (
+              <div className="space-y-2 p-2">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={index} className="space-y-2 rounded-md p-2">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-3 w-64" />
+                    <Skeleton className="h-3 w-20" />
                   </div>
+                ))}
+              </div>
+            ) : notifications.length ? (
+              notifications.map((item) => (
+                <NotificationRow
+                  key={item.id}
+                  item={item}
+                  disabled={markReadMutation.isPending}
+                  onOpen={handleOpenNotification}
+                />
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center px-8 py-12 text-center">
+                <Inbox className="text-muted-foreground mb-3 size-8" />
+                <div className="text-sm font-medium">暂无通知</div>
+                <div className="text-muted-foreground mt-1 text-xs">
+                  {siteName} 的任务状态、系统消息会在这里显示。
                 </div>
-              )}
-            </div>
-          </ScrollArea>
-          <div className="border-t p-2">
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full"
-              onClick={() => {
-                setOpen(false);
-                settingsDialog.open("notice");
-              }}
-            >
-              通知设置
-            </Button>
+              </div>
+            )}
           </div>
-        </PopoverContent>
-      </Popover>
-    </div>
+        </ScrollArea>
+        <div className="bg-background border-t p-2">
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            onClick={() => {
+              setOpen(false);
+              settingsDialog.open("notice");
+            }}
+          >
+            通知设置
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
+
+  if (placement === "inline") {
+    return <div className="pointer-events-auto">{content}</div>;
+  }
+
+  return <div className="pointer-events-none fixed right-4 bottom-4 z-40">{content}</div>;
 }

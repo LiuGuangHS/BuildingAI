@@ -338,13 +338,25 @@
                 "sourceType": 1,
                 "children": [
                     {
+                        "name": "通知管理",
+                        "code": "notification-management",
+                        "path": "notification-management",
+                        "icon": "",
+                        "component": "/console/notice/notification-management/index",
+                        "permissionCode": "notification:notification-scenes-list",
+                        "sort": 0,
+                        "isHidden": 0,
+                        "type": 2,
+                        "sourceType": 1
+                    },
+                    {
                         "name": "短信配置",
                         "code": "sms-config",
                         "path": "sms",
                         "icon": "",
                         "component": "/console/notice/sms/index",
                         "permissionCode": "notice:sms-config-detail",
-                        "sort": 0,
+                        "sort": 10,
                         "isHidden": 0,
                         "type": 2,
                         "sourceType": 1
@@ -356,7 +368,7 @@
                         "icon": "",
                         "component": "/console/notice/notification-settings/index",
                         "permissionCode": "notice:sms-scene-settings-detail",
-                        "sort": 10,
+                        "sort": 20,
                         "isHidden": 0,
                         "type": 2,
                         "sourceType": 1

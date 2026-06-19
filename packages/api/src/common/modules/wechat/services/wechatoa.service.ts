@@ -9,6 +9,7 @@ import { isEnabled } from "@buildingai/utils";
 import { WechatOaClient } from "@buildingai/wechat-sdk";
 import { ActionName } from "@buildingai/wechat-sdk/interfaces/oa";
 import { MsgType } from "@buildingai/wechat-sdk/interfaces/oa";
+import type { OaTemplateMessagePayload } from "@buildingai/wechat-sdk/interfaces/oa";
 import { AuthService } from "@common/modules/auth/services/auth.service";
 import { WxOaConfigService } from "@modules/channel/services/wxoaconfig.service";
 import { LoginSettingsConfig } from "@modules/user/dto/login-settings.dto";
@@ -367,7 +368,7 @@ export class WechatOaService {
             // 步骤3: 处理用户已存在的情况（登录流程）
             if (existingUser) {
                 if (!isEnabled(existingUser.status)) {
-                    await this.sendTemplateMessage(openid, "账号已被停用，请联系管理员处理");
+                    await this.sendCustomerTextMessage(openid, "账号已被停用，请联系管理员处理");
                     return { is_scan, error: "账号已被停用，请联系管理员处理" };
                 }
                 // 更新用户的公众号 openid（如果缺失）
@@ -383,7 +384,7 @@ export class WechatOaService {
 
                 // 执行登录
                 const result = await this.authService.loginByUser(existingUser);
-                await this.sendTemplateMessage(openid, "登录成功");
+                await this.sendCustomerTextMessage(openid, "登录成功");
 
                 // 标记为已完成，避免重复处理
                 await this.redisService.set(
@@ -431,7 +432,7 @@ export class WechatOaService {
                     { where: { openid } },
                 );
             }
-            await this.sendTemplateMessage(openid, "注册并登录成功");
+            await this.sendCustomerTextMessage(openid, "注册并登录成功");
 
             // 标记为已完成
             await this.redisService.set(
@@ -486,7 +487,7 @@ export class WechatOaService {
         }
         const existingByOpenid = await this.authService.findOne({ where: { openid } });
         if (existingByOpenid && existingByOpenid.id !== userId) {
-            await this.sendTemplateMessage(openid, "该微信已被其他账号绑定");
+            await this.sendCustomerTextMessage(openid, "该微信已被其他账号绑定");
             return { is_scan: true, error: "该微信已被其他账号绑定" };
         }
 
@@ -499,7 +500,7 @@ export class WechatOaService {
             JSON.stringify({ ...scene, is_processing: false, is_completed: true }),
             60,
         );
-        await this.sendTemplateMessage(openid, "绑定成功");
+        await this.sendCustomerTextMessage(openid, "绑定成功");
         return { is_scan: true, success: true };
     }
     /**
@@ -547,7 +548,7 @@ export class WechatOaService {
             const { access_token } = await this.getAccessByRedis();
 
             // 发送模板消息
-            return this.wechatOaClient.sendTemplateMessage(
+            return this.wechatOaClient.sendCustomerMessage(
                 access_token,
                 openid,
                 MsgType.Text,
@@ -625,13 +626,13 @@ export class WechatOaService {
      * @returns 发送结果
      * @throws 当获取access_token失败或发送消息失败时抛出异常
      */
-    private async sendTemplateMessage(openid: string, content: string) {
+    private async sendCustomerTextMessage(openid: string, content: string) {
         try {
             // 获取有效的access_token
             const { access_token } = await this.getAccessByRedis();
 
             // 调用微信客户端发送模板消息
-            return this.wechatOaClient.sendTemplateMessage(
+            return this.wechatOaClient.sendCustomerMessage(
                 access_token,
                 openid,
                 MsgType.Text,
@@ -870,5 +871,16 @@ export class WechatOaService {
             await this.authService.updateById(userId, { unionid });
         }
         return { message: "success" };
+    }
+
+    async sendOfficialAccountTemplateMessage(payload: OaTemplateMessagePayload) {
+        try {
+            const { appId, token, encodingAESKey } = await this.wxoaconfigService.getConfig();
+            this.wechatOaClient = new WechatOaClient(token, encodingAESKey, appId);
+            const { access_token } = await this.getAccessByRedis();
+            return this.wechatOaClient.sendTemplateMessage(access_token, payload);
+        } catch (error) {
+            throw HttpErrorFactory.internal(error.message);
+        }
     }
 }

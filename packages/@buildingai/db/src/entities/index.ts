@@ -44,6 +44,8 @@ export { NoticeSetting } from "./notice-setting.entity";
 export { Payconfig } from "./payconfig.entity";
 export { Permission, PermissionType } from "./permission.entity";
 export { Notification } from "./notification.entity";
+export { NotificationDelivery } from "./notification-delivery.entity";
+export { NotificationScene } from "./notification-scene.entity";
 export { PushSubscription } from "./push-subscription.entity";
 export { Recharge } from "./recharge.entity";
 export { RechargeOrder } from "./recharge-order.entity";

@@ -5,7 +5,6 @@ import MainLayout from "@buildingai/ui/layouts/main/index";
 import DefaultLayout from "@buildingai/ui/layouts/styles/default/index";
 import { createBrowserRouter } from "react-router-dom";
 
-import { NotificationCenter } from "@/components/notification-center";
 import AgentsIndexPage from "@/pages/agents";
 import AgentChatPage from "@/pages/agents/detail/chat";
 import AgentConfigurationPage from "@/pages/agents/detail/configuration";
@@ -32,7 +31,6 @@ export const router = createBrowserRouter([
   {
     element: (
       <>
-        <NotificationCenter />
         <MainLayout />
       </>
     ),

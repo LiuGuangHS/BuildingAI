@@ -1,12 +1,14 @@
 import {
   useCreateTestNotificationMutation,
+  useNotificationPreferencesQuery,
   useNotificationPushPublicKeyQuery,
   useNotificationPushStatusQuery,
   useNotificationsQuery,
   useSubscribeNotificationPushMutation,
+  useUpdateNotificationPreferencesMutation,
   useUnsubscribeNotificationPushMutation,
 } from "@buildingai/services";
-import { useAuthStore } from "@buildingai/stores";
+import { useAuthStore, useConfigStore } from "@buildingai/stores";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
@@ -44,6 +46,8 @@ function serializeSubscription(subscription: PushSubscription) {
 
 const NoticeSetting = () => {
   const { isLogin } = useAuthStore((state) => state.authActions);
+  const { websiteConfig } = useConfigStore((state) => state.config);
+  const siteName = websiteConfig?.webinfo?.name || "BuildingAI";
   const pushSupported = useMemo(
     () =>
       typeof window !== "undefined" &&
@@ -59,7 +63,11 @@ const NoticeSetting = () => {
 
   const pushStatusQuery = useNotificationPushStatusQuery({ enabled: pushSupported });
   const pushPublicKeyQuery = useNotificationPushPublicKeyQuery({ enabled: pushSupported });
-  const notificationsQuery = useNotificationsQuery({ page: 1, pageSize: 5 }, { enabled: isLogin() });
+  const preferencesQuery = useNotificationPreferencesQuery({ enabled: isLogin() });
+  const notificationsQuery = useNotificationsQuery(
+    { page: 1, pageSize: 5 },
+    { enabled: isLogin() },
+  );
   const subscribeMutation = useSubscribeNotificationPushMutation({
     onSuccess: () => toast.success("应用通知已开启"),
   });
@@ -68,6 +76,10 @@ const NoticeSetting = () => {
   });
   const testMutation = useCreateTestNotificationMutation({
     onSuccess: () => toast.success("测试通知已发送"),
+  });
+  const updatePreferencesMutation = useUpdateNotificationPreferencesMutation({
+    onSuccess: () => toast.success("通知偏好已保存"),
+    onError: (error: Error) => toast.error(error.message || "保存通知偏好失败"),
   });
 
   const enablePush = async () => {
@@ -120,6 +132,16 @@ const NoticeSetting = () => {
     }
   };
 
+  const handleSceneChange = (sceneCode: string, checked: boolean) => {
+    const current = new Set(preferencesQuery.data?.disabledScenes || []);
+    if (checked) {
+      current.delete(sceneCode);
+    } else {
+      current.add(sceneCode);
+    }
+    updatePreferencesMutation.mutate({ disabledScenes: [...current] });
+  };
+
   const enabled = Boolean(pushStatusQuery.data?.enabled);
   const busy =
     pushStatusQuery.isLoading ||
@@ -138,13 +160,17 @@ const NoticeSetting = () => {
               : "当前环境不支持浏览器通知，需要 HTTPS 或 localhost。"
           }
         >
-          <Switch checked={enabled} disabled={!pushSupported || busy} onCheckedChange={handlePushChange} />
+          <Switch
+            checked={enabled}
+            disabled={!pushSupported || busy}
+            onCheckedChange={handlePushChange}
+          />
         </SettingItem>
         <SettingItem
           title="通知权限"
           description={
             permission === "granted"
-              ? "浏览器已允许 EchoFlowAI 发送通知。"
+              ? `浏览器已允许 ${siteName} 发送通知。`
               : permission === "denied"
                 ? "浏览器已阻止通知，需要在浏览器站点设置中手动允许。"
                 : "首次开启时浏览器会请求通知权限。"
@@ -168,11 +194,50 @@ const NoticeSetting = () => {
         </SettingItem>
       </SettingItemGroup>
 
+      <SettingItemGroup label="通知场景">
+        {preferencesQuery.isLoading ? (
+          <>
+            <SettingItem
+              title={<Skeleton className="h-4 w-32" />}
+              description={<Skeleton className="h-3 w-56" />}
+            />
+            <SettingItem
+              title={<Skeleton className="h-4 w-28" />}
+              description={<Skeleton className="h-3 w-48" />}
+            />
+          </>
+        ) : preferencesQuery.isError ? (
+          <SettingItem title="通知偏好加载失败" description="稍后重新打开设置再试。" />
+        ) : preferencesQuery.data?.scenes.length ? (
+          preferencesQuery.data.scenes.map((scene) => (
+            <SettingItem
+              key={scene.sceneCode}
+              title={scene.name}
+              description={scene.description || scene.sceneCode}
+            >
+              <Switch
+                checked={scene.enabled}
+                disabled={updatePreferencesMutation.isPending}
+                onCheckedChange={(checked) => handleSceneChange(scene.sceneCode, checked)}
+              />
+            </SettingItem>
+          ))
+        ) : (
+          <SettingItem title="暂无可配置场景" description="管理员启用可配置通知场景后会显示在这里。" />
+        )}
+      </SettingItemGroup>
+
       <SettingItemGroup label="最近通知">
         {notificationsQuery.isLoading ? (
           <>
-            <SettingItem title={<Skeleton className="h-4 w-32" />} description={<Skeleton className="h-3 w-48" />} />
-            <SettingItem title={<Skeleton className="h-4 w-28" />} description={<Skeleton className="h-3 w-40" />} />
+            <SettingItem
+              title={<Skeleton className="h-4 w-32" />}
+              description={<Skeleton className="h-3 w-48" />}
+            />
+            <SettingItem
+              title={<Skeleton className="h-4 w-28" />}
+              description={<Skeleton className="h-3 w-40" />}
+            />
           </>
         ) : notificationsQuery.data?.items.length ? (
           notificationsQuery.data.items.map((item) => (

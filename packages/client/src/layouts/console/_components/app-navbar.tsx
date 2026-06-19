@@ -17,6 +17,8 @@ import { RotateCcw } from "lucide-react";
 import { Fragment, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 
+import { NotificationCenter } from "@/components/notification-center";
+
 interface BreadcrumbTrailItem {
   name: string;
   path: string;
@@ -64,7 +66,7 @@ const AppNavbar = () => {
   }, [userInfo?.menus, location.pathname]);
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+    <header className="flex h-16 shrink-0 items-center justify-between gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
       <div className="flex items-center gap-3 px-4">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -120,6 +122,9 @@ const AppNavbar = () => {
             })}
           </BreadcrumbList>
         </Breadcrumb>
+      </div>
+      <div className="flex items-center gap-2 px-4">
+        <NotificationCenter placement="inline" />
       </div>
     </header>
   );

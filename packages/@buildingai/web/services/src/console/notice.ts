@@ -128,3 +128,119 @@ export function useUpdateSmsConfigStatusMutation(provider: "aliyun" | "tencent",
         ...options,
     });
 }
+
+export type NotificationScene = {
+    id: string;
+    sceneCode: string;
+    extensionId?: string | null;
+    name: string;
+    description?: string | null;
+    isEnabled: boolean;
+    level: string;
+    channels: string[];
+    titleTemplate: string;
+    contentTemplate?: string | null;
+    linkUrlTemplate?: string | null;
+    wechatTemplate?: Record<string, any> | null;
+    userConfigurable: boolean;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type UpdateNotificationSceneDto = Partial<
+    Pick<
+        NotificationScene,
+        | "isEnabled"
+        | "level"
+        | "channels"
+        | "titleTemplate"
+        | "contentTemplate"
+        | "linkUrlTemplate"
+        | "wechatTemplate"
+        | "userConfigurable"
+    >
+>;
+
+export type NotificationChannelStatus = {
+    channel: string;
+    name: string;
+    enabled: boolean;
+    ready: boolean;
+    description: string;
+};
+
+export type NotificationDelivery = {
+    id: string;
+    notificationId: string;
+    userId: string;
+    sceneCode: string;
+    extensionId?: string | null;
+    sourceType?: string | null;
+    sourceId?: string | null;
+    channel: string;
+    status: string;
+    attempts: number;
+    providerMessageId?: string | null;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    payload?: Record<string, any> | null;
+    sentAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type NotificationDeliveryListResponse = {
+    items: NotificationDelivery[];
+    total: number;
+    page: number;
+    pageSize: number;
+};
+
+export function useNotificationScenesQuery(options?: QueryOptionsUtil<NotificationScene[]>) {
+    return useQuery<NotificationScene[]>({
+        queryKey: ["notification", "scenes"],
+        queryFn: () => consoleHttpClient.get<NotificationScene[]>("/notification/scenes"),
+        ...options,
+    });
+}
+
+export function useUpdateNotificationSceneMutation(sceneCode: string, options?: any) {
+    return useMutation<NotificationScene, Error, UpdateNotificationSceneDto>({
+        mutationFn: (data) =>
+            consoleHttpClient.patch<NotificationScene>(
+                `/notification/scenes/${sceneCode}`,
+                data,
+            ),
+        ...options,
+    });
+}
+
+export function useTestNotificationSceneMutation(sceneCode: string, options?: any) {
+    return useMutation<any, Error, { userId?: string; channels?: string[] }>({
+        mutationFn: (data) =>
+            consoleHttpClient.post<any>(`/notification/scenes/${sceneCode}/test`, data),
+        ...options,
+    });
+}
+
+export function useNotificationChannelsQuery(options?: QueryOptionsUtil<NotificationChannelStatus[]>) {
+    return useQuery<NotificationChannelStatus[]>({
+        queryKey: ["notification", "channels"],
+        queryFn: () => consoleHttpClient.get<NotificationChannelStatus[]>("/notification/channels"),
+        ...options,
+    });
+}
+
+export function useNotificationDeliveriesQuery(
+    params?: { page?: number; pageSize?: number; extensionId?: string; sceneCode?: string; channel?: string; status?: string; userId?: string },
+    options?: QueryOptionsUtil<NotificationDeliveryListResponse>,
+) {
+    return useQuery<NotificationDeliveryListResponse>({
+        queryKey: ["notification", "deliveries", params],
+        queryFn: () =>
+            consoleHttpClient.get<NotificationDeliveryListResponse>("/notification/deliveries", {
+                params,
+            }),
+        ...options,
+    });
+}

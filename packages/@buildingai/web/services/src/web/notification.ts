@@ -38,6 +38,19 @@ export type NotificationPushStatusResponse = {
     subscriptionCount: number;
 };
 
+export type NotificationPreferenceScene = {
+    sceneCode: string;
+    name: string;
+    description?: string | null;
+    enabled: boolean;
+    channels: string[];
+};
+
+export type NotificationPreferencesResponse = {
+    disabledScenes: string[];
+    scenes: NotificationPreferenceScene[];
+};
+
 export type NotificationPushSubscriptionPayload = {
     endpoint: string;
     expirationTime?: number | null;
@@ -46,6 +59,34 @@ export type NotificationPushSubscriptionPayload = {
         auth: string;
     };
 };
+
+export function useNotificationPreferencesQuery(options?: {
+    enabled?: boolean;
+}): UseQueryResult<NotificationPreferencesResponse, unknown> {
+    const { isLogin } = useAuthStore((state) => state.authActions);
+    return useQuery<NotificationPreferencesResponse>({
+        queryKey: ["notifications", "preferences"],
+        queryFn: () => apiHttpClient.get<NotificationPreferencesResponse>("/notifications/preferences"),
+        enabled: isLogin() && options?.enabled !== false,
+        ...options,
+    });
+}
+
+export function useUpdateNotificationPreferencesMutation(options?: any) {
+    const queryClient = useQueryClient();
+    return useMutation<NotificationPreferencesResponse, Error, { disabledScenes: string[] }>({
+        mutationFn: (payload) =>
+            apiHttpClient.patch<NotificationPreferencesResponse>(
+                "/notifications/preferences",
+                payload,
+            ),
+        ...options,
+        onSuccess: (...args) => {
+            void queryClient.invalidateQueries({ queryKey: ["notifications", "preferences"] });
+            options?.onSuccess?.(...args);
+        },
+    });
+}
 
 export function useNotificationsQuery(
     params?: { page?: number; pageSize?: number; readStatus?: "all" | "read" | "unread" },

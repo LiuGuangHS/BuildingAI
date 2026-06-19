@@ -5,6 +5,7 @@ import { parseStringPromise } from "xml2js";
 
 import { ActionNametype } from "../interfaces/oa";
 import { MsgType, type MsgtypeKey } from "../interfaces/oa";
+import type { OaTemplateMessagePayload } from "../interfaces/oa";
 
 /**
  * 微信公众号服务
@@ -174,7 +175,7 @@ export class WechatOaClient {
      * @returns 发送结果
      * @throws WechatApiError 当API调用失败或返回错误时抛出异常
      */
-    async sendTemplateMessage(
+    async sendCustomerMessage(
         access_token: string,
         openid: string,
         msgtype: MsgtypeKey = MsgType.Text,
@@ -194,6 +195,22 @@ export class WechatOaClient {
             },
             {
                 timeout: 10000, // 10秒超时
+            },
+        );
+
+        return data;
+    }
+
+    async sendTemplateMessage(access_token: string, payload: OaTemplateMessagePayload) {
+        const { data } = await axios.post<{
+            errcode: number;
+            errmsg?: string;
+            msgid?: number;
+        }>(
+            `https://api.weixin.qq.com/cgi-bin/message/template/send?access_token=${access_token}`,
+            payload,
+            {
+                timeout: 10000,
             },
         );
 

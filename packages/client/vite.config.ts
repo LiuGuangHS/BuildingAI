@@ -2,10 +2,12 @@ import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import path from "path";
+import { fileURLToPath } from "url";
 // import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
+const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -21,7 +23,7 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
     alias: {
-      "@": path.resolve(__dirname, "src"),
+      "@": path.resolve(dirname, "src"),
     },
     dedupe: ["react", "react-dom", "@tanstack/react-query"],
   },

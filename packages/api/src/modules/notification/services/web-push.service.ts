@@ -2,48 +2,146 @@ import { PushSubscription } from "@buildingai/db/entities";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { DictService } from "@buildingai/dict";
+import { HttpErrorFactory } from "@buildingai/errors";
 import { Injectable, Logger } from "@nestjs/common";
-import { createPrivateKey, createSign, generateKeyPairSync } from "crypto";
-import type { JsonWebKey as NodeJsonWebKey } from "crypto";
+import { lookup } from "node:dns/promises";
+import type { LookupAddress } from "node:dns";
+import { isIP } from "node:net";
+import webPush from "web-push";
+import type { PushSubscription as WebPushSubscription } from "web-push";
 
 import { SubscribePushDto, UnsubscribePushDto } from "../dto/notification.dto";
 
+export type WebPushNotificationPayload = {
+    title: string;
+    body?: string | null;
+    url?: string | null;
+    icon?: string | null;
+    notificationId?: string;
+};
+
+export type WebPushSendResult = {
+    subscriptionCount: number;
+    sentCount: number;
+    failedCount: number;
+    disabledCount: number;
+    failures: Array<{
+        endpoint: string;
+        statusCode?: number;
+        message: string;
+    }>;
+};
+
 type VapidKeys = {
     publicKey: string;
-    publicJwk: NodeJsonWebKey;
-    privateJwk: NodeJsonWebKey;
+    privateKey: string;
+};
+
+type LegacyVapidKeys = {
+    publicKey?: string;
+    privateJwk?: {
+        d?: string;
+    };
 };
 
 const DICT_GROUP = "notification";
 const VAPID_KEYS_KEY = "webPushVapidKeys";
 const VAPID_SUBJECT = "mailto:support@echoflow.com";
-
-function base64UrlEncode(input: Buffer | string) {
-    return Buffer.from(input)
-        .toString("base64")
-        .replace(/\+/g, "-")
-        .replace(/\//g, "_")
-        .replace(/=+$/g, "");
-}
-
-function base64UrlDecode(input: string) {
-    const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-    return Buffer.from(padded, "base64");
-}
+const MAX_PUSH_ENDPOINT_LENGTH = 2048;
 
 function generateVapidKeys(): VapidKeys {
-    const pair = generateKeyPairSync("ec", { namedCurve: "P-256" });
-    const publicJwk = pair.publicKey.export({ format: "jwk" }) as NodeJsonWebKey;
-    const privateJwk = pair.privateKey.export({ format: "jwk" }) as NodeJsonWebKey;
-    const x = base64UrlDecode(publicJwk.x || "");
-    const y = base64UrlDecode(publicJwk.y || "");
+    return webPush.generateVAPIDKeys();
+}
 
+function toWebPushSubscription(subscription: PushSubscription): WebPushSubscription {
     return {
-        publicKey: base64UrlEncode(Buffer.concat([Buffer.from([4]), x, y])),
-        publicJwk,
-        privateJwk,
+        endpoint: subscription.endpoint,
+        keys: {
+            auth: subscription.auth,
+            p256dh: subscription.p256dh,
+        },
     };
+}
+
+function normalizeHostname(hostname: string) {
+    return hostname.trim().toLowerCase().replace(/\.$/, "");
+}
+
+function isPrivateOrReservedIpv4(address: string) {
+    const parts = address.split(".").map((part) => Number(part));
+    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+        return true;
+    }
+
+    const [a, b] = parts;
+    return (
+        a === 0 ||
+        a === 10 ||
+        a === 127 ||
+        a === 169 && b === 254 ||
+        a === 172 && b >= 16 && b <= 31 ||
+        a === 192 && b === 168 ||
+        a >= 224
+    );
+}
+
+function isPrivateOrReservedIpv6(address: string) {
+    const normalized = address.toLowerCase();
+    return (
+        normalized === "::" ||
+        normalized === "::1" ||
+        normalized.startsWith("fc") ||
+        normalized.startsWith("fd") ||
+        normalized.startsWith("fe80:") ||
+        normalized.startsWith("ff")
+    );
+}
+
+function isPrivateOrReservedIp(address: string) {
+    const mapped = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+    if (mapped) return isPrivateOrReservedIpv4(mapped[1]);
+    const family = isIP(address);
+    if (family === 4) return isPrivateOrReservedIpv4(address);
+    if (family === 6) return isPrivateOrReservedIpv6(address);
+    return true;
+}
+
+async function assertSafePushEndpoint(endpoint: string) {
+    if (endpoint.length > MAX_PUSH_ENDPOINT_LENGTH) {
+        throw HttpErrorFactory.badRequest("浏览器通知订阅地址过长");
+    }
+
+    let url: URL;
+    try {
+        url = new URL(endpoint);
+    } catch {
+        throw HttpErrorFactory.badRequest("浏览器通知订阅地址无效");
+    }
+
+    if (url.protocol !== "https:") {
+        throw HttpErrorFactory.badRequest("浏览器通知订阅地址必须使用 HTTPS");
+    }
+    if (url.username || url.password) {
+        throw HttpErrorFactory.badRequest("浏览器通知订阅地址不能包含凭据");
+    }
+
+    const hostname = normalizeHostname(url.hostname);
+    if (!hostname || hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) {
+        throw HttpErrorFactory.badRequest("浏览器通知订阅地址不能指向本机或内网");
+    }
+    if (isIP(hostname) && isPrivateOrReservedIp(hostname)) {
+        throw HttpErrorFactory.badRequest("浏览器通知订阅地址不能指向本机或内网");
+    }
+
+    let addresses: LookupAddress[];
+    try {
+        addresses = await lookup(hostname, { all: true, verbatim: true });
+    } catch {
+        throw HttpErrorFactory.badRequest("浏览器通知订阅地址无法解析");
+    }
+    if (!addresses.length || addresses.some((item) => isPrivateOrReservedIp(item.address))) {
+        throw HttpErrorFactory.badRequest("浏览器通知订阅地址不能指向本机或内网");
+    }
 }
 
 @Injectable()
@@ -72,7 +170,13 @@ export class WebPushService {
         };
     }
 
+    countEnabledSubscriptions() {
+        return this.pushSubscriptionRepository.count({ where: { isEnabled: true } });
+    }
+
     async subscribe(userId: string, dto: SubscribePushDto, userAgent?: string) {
+        await assertSafePushEndpoint(dto.endpoint);
+
         const existing = await this.pushSubscriptionRepository.findOne({
             where: { endpoint: dto.endpoint },
         });
@@ -112,21 +216,57 @@ export class WebPushService {
     }
 
     async sendWakeup(userId: string) {
+        const siteName = await this.dictService.get<string>("name", "BuildingAI", "webinfo");
+        return this.sendNotification(userId, {
+            title: siteName,
+            body: "任务状态已更新",
+            url: "/",
+        });
+    }
+
+    async sendNotification(userId: string, payload: WebPushNotificationPayload): Promise<WebPushSendResult> {
         const subscriptions = await this.pushSubscriptionRepository.find({
             where: { userId, isEnabled: true },
         });
 
-        await Promise.all(subscriptions.map((subscription) => this.sendEmptyPush(subscription)));
+        const results = await Promise.all(
+            subscriptions.map((subscription) => this.sendPush(subscription, payload)),
+        );
+
+        return {
+            subscriptionCount: subscriptions.length,
+            sentCount: results.filter((item) => item.sent).length,
+            failedCount: results.filter((item) => !item.sent).length,
+            disabledCount: results.filter((item) => item.disabled).length,
+            failures: results
+                .filter((item) => !item.sent)
+                .map((item) => ({
+                    endpoint: item.endpoint,
+                    statusCode: item.statusCode,
+                    message: item.message || "Web Push 发送失败",
+                })),
+        };
     }
 
     private async getVapidKeys(): Promise<VapidKeys> {
-        const existing = await this.dictService.get<VapidKeys | null>(
+        const existing = await this.dictService.get<(VapidKeys & LegacyVapidKeys) | null>(
             VAPID_KEYS_KEY,
             null,
             DICT_GROUP,
         );
-        if (existing?.publicKey && existing?.privateJwk) {
+        if (existing?.publicKey && existing?.privateKey) {
             return existing;
+        }
+        if (existing?.publicKey && existing?.privateJwk?.d) {
+            const migrated = {
+                publicKey: existing.publicKey,
+                privateKey: existing.privateJwk.d,
+            };
+            await this.dictService.set(VAPID_KEYS_KEY, migrated, {
+                group: DICT_GROUP,
+                description: "PWA Web Push VAPID keys",
+            });
+            return migrated;
         }
 
         const keys = generateVapidKeys();
@@ -137,63 +277,54 @@ export class WebPushService {
         return keys;
     }
 
-    private async createVapidAuthorization(endpoint: string) {
-        const keys = await this.getVapidKeys();
-        const aud = new URL(endpoint).origin;
-        const header = base64UrlEncode(JSON.stringify({ alg: "ES256", typ: "JWT" }));
-        const payload = base64UrlEncode(
-            JSON.stringify({
-                aud,
-                exp: Math.floor(Date.now() / 1000) + 12 * 60 * 60,
-                sub: VAPID_SUBJECT,
-            }),
-        );
-        const signer = createSign("SHA256");
-        signer.update(`${header}.${payload}`);
-        signer.end();
-        const signature = signer.sign({
-            key: createPrivateKey({ key: keys.privateJwk, format: "jwk" }),
-            dsaEncoding: "ieee-p1363",
-        });
-        const token = `${header}.${payload}.${base64UrlEncode(signature)}`;
-
-        return `vapid t=${token}, k=${keys.publicKey}`;
-    }
-
-    private async sendEmptyPush(subscription: PushSubscription) {
+    private async sendPush(subscription: PushSubscription, payload: WebPushNotificationPayload) {
         try {
-            const response = await fetch(subscription.endpoint, {
-                method: "POST",
-                headers: {
-                    Authorization: await this.createVapidAuthorization(subscription.endpoint),
-                    TTL: "2419200",
+            await assertSafePushEndpoint(subscription.endpoint);
+            const keys = await this.getVapidKeys();
+            webPush.setVapidDetails(VAPID_SUBJECT, keys.publicKey, keys.privateKey);
+
+            await webPush.sendNotification(
+                toWebPushSubscription(subscription),
+                JSON.stringify(payload),
+                {
+                    TTL: 2_419_200,
                 },
-            });
-
-            if (response.status === 404 || response.status === 410) {
-                await this.pushSubscriptionRepository.update(subscription.id, {
-                    isEnabled: false,
-                    failedAt: new Date(),
-                    failureCount: subscription.failureCount + 1,
-                });
-                return;
-            }
-
-            if (!response.ok) {
-                throw new Error(`Web Push failed: ${response.status} ${response.statusText}`);
-            }
+            );
 
             await this.pushSubscriptionRepository.update(subscription.id, {
                 lastUsedAt: new Date(),
                 failedAt: null,
                 failureCount: 0,
             });
+            return {
+                endpoint: subscription.endpoint,
+                sent: true,
+                disabled: false,
+            };
         } catch (error) {
+            const statusCode =
+                typeof error === "object" &&
+                error !== null &&
+                "statusCode" in error &&
+                typeof error.statusCode === "number"
+                    ? error.statusCode
+                    : null;
+            const shouldDisable = statusCode === 404 || statusCode === 410;
+
             await this.pushSubscriptionRepository.update(subscription.id, {
+                isEnabled: shouldDisable ? false : subscription.isEnabled,
                 failedAt: new Date(),
                 failureCount: subscription.failureCount + 1,
             });
-            this.logger.warn(error instanceof Error ? error.message : String(error));
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.warn(message);
+            return {
+                endpoint: subscription.endpoint,
+                sent: false,
+                disabled: shouldDisable,
+                statusCode: statusCode ?? undefined,
+                message,
+            };
         }
     }
 }

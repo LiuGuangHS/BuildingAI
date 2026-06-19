@@ -7,6 +7,7 @@ import {
     QueryNotificationDto,
     SubscribePushDto,
     UnsubscribePushDto,
+    UpdateNotificationPreferencesDto,
 } from "../../dto/notification.dto";
 import { NotificationService } from "../../services/notification.service";
 import { WebPushService } from "../../services/web-push.service";
@@ -41,6 +42,19 @@ export class NotificationWebController {
     @Post("test")
     async createTest(@Playground() user: UserPlayground) {
         return this.notificationService.createTestNotification(user.id);
+    }
+
+    @Get("preferences")
+    async getPreferences(@Playground() user: UserPlayground) {
+        return this.notificationService.getUserPreferences(user.id);
+    }
+
+    @Patch("preferences")
+    async updatePreferences(
+        @Playground() user: UserPlayground,
+        @Body() dto: UpdateNotificationPreferencesDto,
+    ) {
+        return this.notificationService.updateUserPreferences(user.id, dto);
     }
 
     @Get("push/public-key")
