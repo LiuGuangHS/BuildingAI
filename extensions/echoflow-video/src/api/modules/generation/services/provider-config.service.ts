@@ -1,5 +1,4 @@
 import { BaseService } from "@buildingai/base";
-import { MODEL_TYPES } from "@buildingai/ai-sdk";
 import { SecretService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
@@ -14,6 +13,7 @@ import { VideoConfigAudit } from "../../../db/entities/video-config-audit.entity
 import { UpdateProviderConfigDto } from "../dto";
 
 const HAPPYHORSE_PROVIDER = "happyhorse";
+const LLM_MODEL_TYPE = "llm";
 
 @Injectable()
 export class ProviderConfigService extends BaseService<VideoProviderConfig> {
@@ -124,7 +124,7 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
 
     async listPromptOptimizerModels() {
         const models = await this.aiModelRepository.find({
-            where: { modelType: MODEL_TYPES.LLM, isActive: true } as FindOptionsWhere<AiModel>,
+            where: { modelType: LLM_MODEL_TYPE, isActive: true } as FindOptionsWhere<AiModel>,
             relations: ["provider"],
             order: { sortOrder: "DESC", createdAt: "DESC" },
             take: 100,
