@@ -1,4 +1,5 @@
 import { uploadFileAuto, type UploadFileResult } from "@buildingai/services/shared";
+import { createRequestId } from "@buildingai/http";
 import { Alert, AlertDescription, AlertTitle } from "@buildingai/ui/components/ui/alert";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
@@ -13,7 +14,6 @@ import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
-import { createRequestKey } from "../lib/request-key";
 import { useWebEstimateVideoBillingMutation, useWebOptimizePromptMutation, useWebPromptOptimizerOptionsQuery } from "../services";
 import type {
     CreateVideoParams,
@@ -192,7 +192,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             promptOptimizationStyle: promptOptimizationSource ? promptStyle : undefined,
             promptOptimizerModelId,
             model: modelId,
-            requestKey: createRequestKey(),
+            requestKey: createRequestId(),
             resolution,
             duration: Number(duration) || 5,
             ratio: supportsRatio ? ratio : undefined,
@@ -217,7 +217,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             model: selectedModel?.model ?? modelId,
             style: promptStyle,
             modelId: optimizerModelId || undefined,
-            requestKey: createRequestKey("prompt-opt"),
+            requestKey: `prompt-opt-${createRequestId()}`,
             ratio: supportsRatio ? ratio : undefined,
             resolution,
         });

@@ -1,5 +1,6 @@
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
+import { createRequestId } from "@buildingai/http";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
@@ -16,7 +17,6 @@ import {
     type ImageSourceRecord,
 } from "../services/types/generation";
 import type { ImagePromptTemplate } from "../services/types/template";
-import { createRequestKey } from "../lib/request-key";
 import { ReferenceImageUpload } from "./reference-image-upload";
 
 interface GenerationFormProps {
@@ -154,7 +154,7 @@ export function GenerationForm({
         style,
         responseFormat,
         mode: effectiveMode,
-        requestKey: includeRequestKey ? createRequestKey() : undefined,
+        requestKey: includeRequestKey ? createRequestId() : undefined,
         source: includeClientMetadata ? selectedModel?.source : undefined,
         pluginConfigId: includeClientMetadata ? selectedModel?.pluginConfigId : undefined,
     });
