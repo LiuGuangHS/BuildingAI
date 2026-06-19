@@ -44,8 +44,9 @@ test("image runtime services reuse main-system query helpers", async () => {
     for (const file of [GENERATION_SERVICE_FILE, TEMPLATE_SERVICE_FILE]) {
         const source = await readFile(file, "utf8");
 
-        assert.match(source, /import\s+\{\s*buildWhere\s*\}\s+from\s+"@buildingai\/utils"/);
+        assert.match(source, /buildDefinedWhere/);
+        assert.match(source, /@buildingai\/extension-sdk/);
+        assert.doesNotMatch(source, /@buildingai\/utils/);
         assert.doesNotMatch(source, /Object\.fromEntries\(Object\.entries/);
-        assert.doesNotMatch(source, /function\s+build(?:Generation|Template)Where/);
     }
 });

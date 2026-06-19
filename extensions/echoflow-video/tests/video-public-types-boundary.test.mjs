@@ -7,6 +7,7 @@ const GENERATION_FORM_FILE = new URL("../src/web/components/generation-form.tsx"
 const INDEX_PAGE_FILE = new URL("../src/web/pages/index.tsx", import.meta.url);
 const REQUEST_KEY_FILE = new URL("../src/web/lib/request-key.ts", import.meta.url);
 const TEMPLATE_SERVICE_FILE = new URL("../src/api/modules/generation/services/template.service.ts", import.meta.url);
+const PROVIDER_CONFIG_SERVICE_FILE = new URL("../src/api/modules/generation/services/provider-config.service.ts", import.meta.url);
 
 function extractInterface(source, name) {
     const start = source.indexOf(`export interface ${name}`);
@@ -55,7 +56,15 @@ test("video web generation uses main system request ids", async () => {
 test("video runtime services do not import app-only utility helpers", async () => {
     const source = await readFile(TEMPLATE_SERVICE_FILE, "utf8");
 
-    assert.match(source, /import\s+\{\s*buildWhere\s*\}\s+from\s+"@buildingai\/utils"/);
+    assert.match(source, /buildDefinedWhere/);
+    assert.match(source, /@buildingai\/extension-sdk/);
+    assert.doesNotMatch(source, /@buildingai\/utils/);
     assert.doesNotMatch(source, /Object\.fromEntries\(Object\.entries/);
-    assert.doesNotMatch(source, /function\s+buildTemplateWhere/);
+});
+
+test("video provider configuration does not import the low-level ai sdk for constants", async () => {
+    const source = await readFile(PROVIDER_CONFIG_SERVICE_FILE, "utf8");
+
+    assert.doesNotMatch(source, /@buildingai\/ai-sdk/);
+    assert.match(source, /const\s+LLM_MODEL_TYPE\s*=\s*"llm"/);
 });
