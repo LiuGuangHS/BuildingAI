@@ -1,12 +1,5 @@
 "use client";
 
-import {
-  CircleCheckIcon,
-  InfoIcon,
-  Loader2Icon,
-  OctagonXIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
 import { useTheme } from "./../theme-provider";
@@ -19,11 +12,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       icons={{
-        success: <CircleCheckIcon className="size-4" />,
-        info: <InfoIcon className="size-4" />,
-        warning: <TriangleAlertIcon className="size-4" />,
-        error: <OctagonXIcon className="size-4" />,
-        loading: <Loader2Icon className="size-4 animate-spin" />,
+        success: <ToastStatusIcon tone="success" label="成功" />,
+        info: <ToastStatusIcon tone="info" label="提示" />,
+        warning: <ToastStatusIcon tone="warning" label="警告" />,
+        error: <ToastStatusIcon tone="error" label="错误" />,
+        loading: <ToastStatusIcon tone="loading" label="加载中" />,
       }}
       style={
         {
@@ -42,5 +35,26 @@ const Toaster = ({ ...props }: ToasterProps) => {
     />
   );
 };
+
+function ToastStatusIcon({
+  tone,
+  label,
+}: {
+  tone: "success" | "info" | "warning" | "error" | "loading";
+  label: string;
+}) {
+  const glyph = tone === "success" ? "✓" : tone === "info" ? "i" : tone === "warning" ? "!" : "×";
+
+  return (
+    <span
+      aria-label={label}
+      role="img"
+      data-tone={tone}
+      className="inline-flex size-4 items-center justify-center rounded-full bg-primary text-[10px] leading-none font-bold text-primary-foreground data-[tone=error]:bg-destructive data-[tone=info]:bg-sky-500 data-[tone=loading]:animate-spin data-[tone=loading]:border-2 data-[tone=loading]:border-primary data-[tone=loading]:border-t-transparent data-[tone=loading]:bg-transparent data-[tone=loading]:text-transparent data-[tone=warning]:bg-amber-500"
+    >
+      {tone === "loading" ? null : glyph}
+    </span>
+  );
+}
 
 export { Toaster };
