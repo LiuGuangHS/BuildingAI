@@ -106,13 +106,18 @@ services:
             SERVER_PORT: ${SERVER_PORT:-4090}
             QUICK_START_MODE: ${QUICK_START_MODE:-false}
             NPM_REGISTRY_URL: ${NPM_REGISTRY_URL:-}
+            DB_TYPE: ${DB_TYPE:-postgres}
             DB_USERNAME: ${DB_USERNAME:-postgres}
             DB_PASSWORD: ${DB_PASSWORD:-postgres}
             DB_DATABASE: ${DB_DATABASE:-buildingai}
-            DB_HOST: postgres
-            DB_PORT: 5432
-            REDIS_HOST: redis
-            REDIS_PORT: 6379
+            # Read from .env; loopback hosts are remapped to compose services in command below
+            DB_HOST: ${DB_HOST:-postgres}
+            DB_PORT: ${DB_PORT:-5432}
+            DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-false}
+            DB_DEV_SYNCHRONIZE: ${DB_DEV_SYNCHRONIZE:-true}
+            DB_LOGGING: ${DB_LOGGING:-true}
+            REDIS_HOST: ${REDIS_HOST:-redis}
+            REDIS_PORT: ${REDIS_PORT:-6379}
             REDIS_PASSWORD: ${REDIS_PASSWORD:-}
         command: |
             sh -c '
@@ -139,6 +144,16 @@ services:
             if [ -n "$NPM_REGISTRY_URL" ]; then
                 pnpm config set registry "$NPM_REGISTRY_URL"
             fi
+            fi
+
+            # localhost inside a container is the container itself, not host Postgres/Redis
+            if [ "$DB_HOST" = "localhost" ] || [ "$DB_HOST" = "127.0.0.1" ]; then
+            export DB_HOST=postgres
+            echo "🔀 DB_HOST localhost -> postgres (Docker network)"
+            fi
+            if [ "$REDIS_HOST" = "localhost" ] || [ "$REDIS_HOST" = "127.0.0.1" ]; then
+            export REDIS_HOST=redis
+            echo "🔀 REDIS_HOST localhost -> redis (Docker network)"
             fi
 
             echo "🎯 Starting BuildingAI..."

@@ -120,6 +120,7 @@
         "class-transformer": "catalog:api",
         "class-validator": "catalog:api",
         "cli-table3": "catalog:",
+        "cos-nodejs-sdk-v5": "catalog:",
         "cpy-cli": "^6.0.0",
         "cron": "4.3.5",
         "dotenv": "catalog:",
