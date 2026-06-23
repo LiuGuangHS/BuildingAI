@@ -9,11 +9,11 @@ import { useNavigate } from "react-router-dom";
 
 import { ErrorState } from "../components/error-state";
 import { HistoryList } from "../components/history-list";
-import { useWebVideoListQuery } from "../services";
+import { useWebVideoListQuery, useWebVideoModelOptionsQuery } from "../services";
 import type { VideoGenerationBillingStatus, VideoGenerationStatus } from "../services/types/generation";
 
 export default function WebHistoryPage() {
-    useDocumentHead({ title: "我的视频历史 - AI视频工作台" });
+    useDocumentHead({ title: "我的视频历史 - 视频生成" });
     const navigate = useNavigate();
     const [page, setPage] = useState(1);
     const [keyword, setKeyword] = useState("");
@@ -24,6 +24,7 @@ export default function WebHistoryPage() {
     const [dateTo, setDateTo] = useState("");
     const [sortBy, setSortBy] = useState<"createdAt" | "updatedAt" | "completedAt" | "billingAmount">("createdAt");
     const pageSize = 12;
+    const { data: models = [] } = useWebVideoModelOptionsQuery();
 
     const { data, isLoading, isError, refetch } = useWebVideoListQuery({
         page,
@@ -39,7 +40,7 @@ export default function WebHistoryPage() {
     });
 
     return (
-        <div className="min-h-screen space-y-6 p-4 md:p-6">
+        <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-3 md:p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                     <Button variant="ghost" className="mb-2 w-fit" onClick={() => navigate("/")}>
@@ -48,7 +49,7 @@ export default function WebHistoryPage() {
                     </Button>
                     <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
                         <Film className="size-5 text-primary" />
-                        我的生成历史
+                        我的视频历史
                     </h1>
                 </div>
             </div>
@@ -90,15 +91,9 @@ export default function WebHistoryPage() {
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">全部模型</SelectItem>
-                            <SelectItem value="doubao-seedance-2-0-260128">Seedance 2.0</SelectItem>
-                            <SelectItem value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</SelectItem>
-                            <SelectItem value="kling-text2video">可灵文生视频</SelectItem>
-                            <SelectItem value="kling-image2video">可灵图生视频</SelectItem>
-                            <SelectItem value="kling-multi-image2video">可灵多图参考</SelectItem>
-                            <SelectItem value="happyhorse-1.0-t2v">文生视频</SelectItem>
-                            <SelectItem value="happyhorse-1.0-i2v">图生视频</SelectItem>
-                            <SelectItem value="happyhorse-1.0-r2v">参考图生视频</SelectItem>
-                            <SelectItem value="happyhorse-1.0-video-edit">视频编辑</SelectItem>
+                            {models.map((model) => (
+                                <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                     <Input type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} />
@@ -123,7 +118,7 @@ export default function WebHistoryPage() {
                         items={data?.items || []}
                         loading={isLoading}
                         showDelete={false}
-                        detailBasePath=".."
+                        detailBasePath="/"
                     />
                     {data && data.total > pageSize && (
                         <div className="flex justify-center gap-2">

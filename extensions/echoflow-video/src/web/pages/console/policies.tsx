@@ -9,6 +9,7 @@ import { Save } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { ConsolePage } from "../../components/console-page";
 import {
     useConsoleVideoModelConfigsQuery,
     useConsoleVideoPoliciesQuery,
@@ -49,7 +50,7 @@ export default function ConsoleVideoPoliciesPage() {
     };
 
     return (
-        <div className="space-y-5 p-4 md:p-6">
+        <ConsolePage>
             <div>
                 <h1 className="text-2xl font-semibold tracking-tight">风控限流</h1>
                 <p className="text-muted-foreground mt-1 text-sm">控制提示词长度、素材数量、并发任务和每日提交上限。</p>
@@ -81,7 +82,7 @@ export default function ConsoleVideoPoliciesPage() {
                     onSave={handleSave}
                 />
             </div>
-        </div>
+        </ConsolePage>
     );
 }
 

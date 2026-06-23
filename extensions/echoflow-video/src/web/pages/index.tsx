@@ -2,8 +2,7 @@ import { useDocumentHead } from "@buildingai/hooks";
 import { createRequestId } from "@buildingai/http";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
-import { Card, CardContent } from "@buildingai/ui/components/ui/card";
-import { Clapperboard, Film, History, Sparkles } from "lucide-react";
+import { Film, History, RefreshCw, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -19,10 +18,10 @@ import {
     useWebVideoModelOptionsQuery,
     useWebVideoStatusQuery,
 } from "../services";
-import type { CreateVideoParams } from "../services/types/generation";
+import type { CreateVideoParams, VideoGeneration } from "../services/types/generation";
 
 export default function AIVideoIndexPage() {
-    useDocumentHead({ title: "AI视频工作台" });
+    useDocumentHead({ title: "视频生成" });
 
     const [currentId, setCurrentId] = useState<string | undefined>();
     const [formInitialValues, setFormInitialValues] = useState<Partial<CreateVideoParams>>();
@@ -33,12 +32,13 @@ export default function AIVideoIndexPage() {
     const {
         data: historyData,
         isLoading: historyLoading,
-    } = useWebVideoListQuery({ page: 1, pageSize: 6 }, { enabled: false });
+    } = useWebVideoListQuery({ page: 1, pageSize: 6 });
 
     const createMutation = useWebCreateVideoMutation();
     const { data: currentGeneration } = useWebVideoStatusQuery(currentId);
-    const disabledReason = !modelsLoading && models.length === 0
-        ? "管理员尚未为视频模型配置可用接入点。"
+    const availableModelCount = models.filter((model) => model.available && model.enabled && model.configured).length;
+    const disabledReason = !modelsLoading && availableModelCount === 0
+        ? "视频生成功能暂未开放，请稍后再来。"
         : undefined;
 
     useEffect(() => {
@@ -54,28 +54,22 @@ export default function AIVideoIndexPage() {
             const requestKey = createRequestId();
             const gen = await createMutation.mutateAsync({ ...data, requestKey });
             setCurrentId(gen.id);
-            toast.success("任务已提交，正在生成视频...");
+            toast.success("任务已提交，视频会排队生成");
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "任务提交失败");
         }
     };
 
-    const handleReuse = (generation: {
-        prompt: string;
-        originalPrompt?: string;
-        promptOptimizationSource?: "ai" | "local";
-        promptOptimizationStyle?: string;
-        promptOptimizerModelId?: string;
-        model: string;
-        media?: CreateVideoParams["media"];
-        parameters: {
-            resolution?: string;
-            duration?: number;
-            ratio?: string;
-            watermark?: boolean;
-            audio_setting?: string;
-        };
-    }) => {
+    const handleReuse = (generation: Pick<VideoGeneration,
+        | "prompt"
+        | "originalPrompt"
+        | "promptOptimizationSource"
+        | "promptOptimizationStyle"
+        | "promptOptimizerModelId"
+        | "model"
+        | "media"
+        | "parameters"
+    >) => {
         setFormInitialValues({
             prompt: generation.prompt,
             originalPrompt: generation.originalPrompt,
@@ -94,72 +88,68 @@ export default function AIVideoIndexPage() {
     };
 
     return (
-        <div className="min-h-screen space-y-6 p-4 md:p-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <Badge variant="secondary" className="mb-2 shadow-sm">EchoFlow Video</Badge>
-                    <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight md:text-3xl">
-                        <Film className="size-6 text-primary" />
-                        AI视频工作台
+        <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-3 md:p-4">
+            <div className="flex flex-col gap-3 rounded-lg border bg-background/80 p-4 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                    <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight md:text-2xl">
+                        <Film className="size-5 text-primary" />
+                        视频生成
                     </h1>
-                    <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
-                        选择生成方式、上传素材、提交任务，右侧实时查看结果和最近作品。
+                    <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                        输入画面想法或上传参考素材，提交后进入队列生成；完成后可在结果区和历史中查看。
                     </p>
                 </div>
-                <div className="grid grid-cols-2 gap-2 md:w-80">
-                    <Card>
-                        <CardContent className="flex items-center gap-2 p-3">
-                            <Sparkles className="size-4 text-primary" />
-                            <span className="text-xs text-muted-foreground">{models.length || 9} 个模型</span>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardContent className="flex items-center gap-2 p-3">
-                            <History className="size-4 text-primary" />
-                            <span className="text-xs text-muted-foreground">自动轮询</span>
-                        </CardContent>
-                    </Card>
+                <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3 md:w-auto">
+                    <Badge variant={availableModelCount ? "default" : "secondary"} className="gap-1.5 px-2.5 py-1">
+                        <Sparkles className="size-3.5" />
+                        {modelsLoading ? "读取生成规格" : availableModelCount ? `${availableModelCount} 个规格可用` : "暂未开放"}
+                    </Badge>
+                    <Badge variant="outline" className="gap-1.5 px-2.5 py-1">
+                        <RefreshCw className="size-3.5" />
+                        异步生成
+                    </Badge>
+                    <Badge variant="outline" className="gap-1.5 px-2.5 py-1">
+                        <ShieldCheck className="size-3.5" />
+                        上传校验
+                    </Badge>
                 </div>
-                <Button variant="outline" className="w-fit" onClick={() => navigate("studio")}>
-                    <Clapperboard className="size-4" />
-                    短视频制作
-                </Button>
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(440px,0.85fr)]">
-                <div className="space-y-6">
-                    <GenerationForm
-                        loading={createMutation.isPending}
-                        models={models}
-                        modelsLoading={modelsLoading}
-                        disabledReason={disabledReason}
-                        promptTemplates={(templateData?.items ?? []).map((item) => ({
-                            label: item.title,
-                            prompt: item.prompt,
-                        }))}
-                        initialValues={formInitialValues}
-                        onSubmit={handleSubmit}
-                    />
-                </div>
+            <div className="grid gap-4 xl:grid-cols-[minmax(360px,0.92fr)_minmax(520px,1.35fr)]">
+                <GenerationForm
+                    loading={createMutation.isPending}
+                    models={models}
+                    modelsLoading={modelsLoading}
+                    disabledReason={disabledReason}
+                    promptTemplates={(templateData?.items ?? []).map((item) => ({
+                        label: item.title,
+                        prompt: item.prompt,
+                    }))}
+                    initialValues={formInitialValues}
+                    onSubmit={handleSubmit}
+                />
 
-                <div className="space-y-6">
-                    <VideoResult
-                        generation={currentGeneration}
-                        isLoading={createMutation.isPending}
-                        onReuse={handleReuse}
-                    />
-                    <HistoryList
-                        items={historyData?.items || []}
-                        loading={historyLoading}
-                        showDelete={false}
-                        detailBasePath=""
-                    />
-                    <Button variant="outline" className="w-full" onClick={() => navigate("history")}>
+                <VideoResult
+                    generation={currentGeneration}
+                    isLoading={createMutation.isPending}
+                    onReuse={handleReuse}
+                />
+            </div>
+
+            <HistoryList
+                items={historyData?.items || []}
+                loading={historyLoading}
+                showDelete={false}
+                detailBasePath=""
+                variant="strip"
+                onReuse={handleReuse}
+                action={(
+                    <Button variant="ghost" size="sm" onClick={() => navigate("history")}>
                         <History className="size-4" />
-                        查看全部历史
+                        查看全部
                     </Button>
-                </div>
-            </div>
+                )}
+            />
         </div>
     );
 }

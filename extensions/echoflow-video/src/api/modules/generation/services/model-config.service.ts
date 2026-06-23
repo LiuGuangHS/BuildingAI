@@ -2,12 +2,12 @@ import { BaseService } from "@buildingai/base";
 import { SecretService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
-import { Repository } from "@buildingai/db/typeorm";
+import { In, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import {
     assertPublicHttpUrl,
-    normalizeProviderConfig,
     normalizePublicHttpUrl,
+    resolveProviderEndpointCredential,
 } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 
@@ -18,6 +18,10 @@ import {
     type VideoModelEndpoint,
 } from "../../../db/entities/video-model-config.entity";
 import {
+    VideoGeneration,
+    VideoGenerationStatus,
+} from "../../../db/entities/video-generation.entity";
+import {
     CreateVideoModelConfigDto,
     QueryVideoModelConfigDto,
     UpdateVideoModelConfigDto,
@@ -25,10 +29,10 @@ import {
 } from "../dto";
 import {
     BUILT_IN_VIDEO_MODEL_CONFIGS,
+    DEFAULT_VIDEO_GATEWAY_BASE_URL,
     getBuiltInVideoModel,
     type BuiltInVideoModelConfig,
 } from "./video-model-catalog";
-import { defaultHappyHorseClientOptions } from "./happyhorse-client";
 
 export interface ResolvedVideoModelConfig {
     id?: string;
@@ -54,6 +58,8 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     constructor(
         @InjectRepository(VideoModelConfig)
         private readonly modelConfigRepository: Repository<VideoModelConfig>,
+        @InjectRepository(VideoGeneration)
+        private readonly generationRepository: Repository<VideoGeneration>,
         private readonly secretService: SecretService,
     ) {
         super(modelConfigRepository);
@@ -159,7 +165,11 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     async updateConfig(id: string, dto: UpdateVideoModelConfigDto) {
         const config = await this.findByIdOrFail(id);
         this.assertSupportedModelConfig(config.model);
-        Object.assign(config, await this.normalizeOperationalConfig(dto, config));
+        const normalized = await this.normalizeOperationalConfig(dto, config);
+        if (this.disablesRuntimeModel(config, normalized)) {
+            await this.assertNoActiveGenerations(config.id);
+        }
+        Object.assign(config, normalized);
         const saved = await this.modelConfigRepository.save(config);
         return this.toOperationalView(saved);
     }
@@ -191,22 +201,11 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     }
 
     async resolveEndpointCredential(endpoint: VideoModelEndpoint) {
-        if (!endpoint.secretId) {
-            throw HttpErrorFactory.badRequest("请先为接入点选择主站密钥");
-        }
-        const secretConfig = await this.secretService.getConfigKeyValuePairs(endpoint.secretId);
-        const values = normalizeProviderConfig(secretConfig);
-        const apiKey = values.apiKey;
-        const baseUrl = endpoint.baseUrlOverride ||
-            values.baseURL ||
-            defaultHappyHorseClientOptions.baseUrl;
-        if (!apiKey) {
-            throw HttpErrorFactory.badRequest("主站密钥中未找到 apiKey/api_key 字段");
-        }
-        return {
-            apiKey,
-            baseUrl: await assertPublicHttpUrl(baseUrl, { label: "Base URL" }),
-        };
+        return resolveProviderEndpointCredential(endpoint, {
+            defaultBaseUrl: DEFAULT_VIDEO_GATEWAY_BASE_URL,
+            label: "Base URL",
+            secretConfigResolver: (secretId) => this.secretService.getConfigKeyValuePairs(secretId),
+        });
     }
 
     async resolveRuntimeEndpoint(config: ResolvedVideoModelConfig) {
@@ -312,7 +311,10 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
             visibleToUser: config.visibleToUser,
             capabilities: defaultConfig.capabilities,
             defaultParams: this.normalizeDefaultParams(config.defaultParams, defaultConfig),
-            endpoints: this.normalizeEndpointConfigs(config.endpoints?.length ? config.endpoints : defaultConfig.endpoints, []),
+            endpoints: this.normalizeEndpointConfigs(
+                config.endpoints?.length ? config.endpoints : defaultConfig.endpoints,
+                [],
+            ),
             submitPath: defaultConfig.submitPath,
             pollPath: defaultConfig.pollPath,
             sortOrder: config.sortOrder ?? defaultConfig.sortOrder,
@@ -322,9 +324,19 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     private toOperationalView(config: VideoModelConfig): VideoModelConfig {
         const resolved = this.toResolvedConfig(config);
         return {
-            ...config,
-            ...resolved,
+            id: resolved.id,
+            provider: resolved.provider,
+            model: resolved.model,
+            displayName: resolved.displayName,
+            description: resolved.description,
+            enabled: resolved.enabled,
+            visibleToUser: resolved.visibleToUser,
+            capabilities: resolved.capabilities,
+            defaultParams: resolved.defaultParams,
             endpoints: this.maskEndpoints(resolved.endpoints),
+            sortOrder: resolved.sortOrder,
+            createdAt: config.createdAt,
+            updatedAt: config.updatedAt,
         };
     }
 
@@ -400,11 +412,47 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     }
 
     private maskEndpoints(endpoints: VideoModelEndpoint[]): VideoModelEndpoint[] {
-        return endpoints.map((endpoint) => ({ ...endpoint }));
+        return endpoints.map((endpoint) => ({
+            id: endpoint.id,
+            name: endpoint.name,
+            secretId: endpoint.secretId,
+            secretName: endpoint.secretName,
+            baseUrlOverride: endpoint.baseUrlOverride,
+            enabled: endpoint.enabled,
+            priority: endpoint.priority,
+            requestTimeoutMs: endpoint.requestTimeoutMs,
+            testTimeoutMs: endpoint.testTimeoutMs,
+            maxRetries: endpoint.maxRetries,
+            retryDelayMs: endpoint.retryDelayMs,
+        }));
     }
 
     private hasUsableEndpoint(config: ResolvedVideoModelConfig): boolean {
         return (config.endpoints ?? []).some((endpoint) => endpoint.enabled && endpoint.secretId);
+    }
+
+    private disablesRuntimeModel(existing: VideoModelConfig, next: ReturnType<ModelConfigService["toResolvedConfig"]> | Awaited<ReturnType<ModelConfigService["normalizeOperationalConfig"]>>) {
+        if (existing.enabled && !next.enabled) return true;
+        if (existing.visibleToUser && !next.visibleToUser) return true;
+        const hadUsableEndpoint = this.hasUsableEndpoint(this.toResolvedConfig(existing));
+        const nextResolved = this.toResolvedConfig({
+            ...existing,
+            ...next,
+        } as VideoModelConfig);
+        return hadUsableEndpoint && !this.hasUsableEndpoint(nextResolved);
+    }
+
+    private async assertNoActiveGenerations(modelConfigId?: string) {
+        if (!modelConfigId) return;
+        const activeCount = await this.generationRepository.count({
+            where: {
+                modelConfigId,
+                status: In([VideoGenerationStatus.PENDING, VideoGenerationStatus.PROCESSING]),
+            } as FindOptionsWhere<VideoGeneration>,
+        });
+        if (activeCount > 0) {
+            throw HttpErrorFactory.badRequest("该视频模型仍有视频任务处理中，完成或失败后才能停用、隐藏或移除接入点");
+        }
     }
 
     private normalizeInteger(value: number, min: number, max: number, label: string): number {

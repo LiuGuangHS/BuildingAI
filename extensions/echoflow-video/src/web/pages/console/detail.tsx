@@ -4,13 +4,14 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Ban, ChevronDown, ChevronRight, Clock, Copy, Download, Film, KeyRound, RefreshCw, RotateCcw, Save, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { ConsolePage } from "../../components/console-page";
 import {
-    queryClient,
     useCancelVideoMutation,
     useMarkVideoStatusMutation,
     useRefreshVideoStatusMutation,
@@ -90,9 +91,10 @@ function JsonPanel({ title, data }: { title: string; data?: Record<string, unkno
 }
 
 export default function DetailPage() {
-    useDocumentHead({ title: "视频详情 - AI视频工作台" });
+    useDocumentHead({ title: "视频详情" });
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
 
     const { data: generation, isLoading, isError } = useVideoDetailQuery(id ?? "", { enabled: !!id });
     const [adminRemark, setAdminRemark] = useState("");
@@ -137,23 +139,23 @@ export default function DetailPage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen space-y-6 p-4 md:p-6">
+            <ConsolePage>
                 <Skeleton className="h-10 w-32" />
                 <Skeleton className="h-64 w-full rounded-xl" />
                 <Skeleton className="h-40 w-full rounded-xl" />
-            </div>
+            </ConsolePage>
         );
     }
 
     if (isError || !generation) {
         return (
-            <div className="min-h-screen p-4 md:p-6">
+            <ConsolePage>
                 <Button variant="ghost" onClick={() => navigate("/console/history")}>
                     <ArrowLeft className="size-4" />
                     返回历史
                 </Button>
                 <p className="text-center text-muted-foreground mt-12">记录不存在或加载失败</p>
-            </div>
+            </ConsolePage>
         );
     }
 
@@ -162,7 +164,7 @@ export default function DetailPage() {
     const duration = formatDuration(startedAt, completedAt);
 
     return (
-        <div className="min-h-screen space-y-6 p-4 md:p-6">
+        <ConsolePage>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <Button variant="ghost" className="w-fit" onClick={() => navigate("/console/history")}>
                     <ArrowLeft className="size-4" />
@@ -480,7 +482,7 @@ export default function DetailPage() {
                     )}
                 </div>
             </div>
-        </div>
+        </ConsolePage>
     );
 }
 

@@ -1,26 +1,31 @@
 import { useDocumentHead } from "@buildingai/hooks";
+import { Alert, AlertDescription, AlertTitle } from "@buildingai/ui/components/ui/alert";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
-import { ArrowLeft, Clock, Copy, Download, Film, RefreshCw, RotateCcw } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, ArrowLeft, Clock, Copy, Download, ExternalLink, Film, History, RefreshCw, RotateCcw, VideoOff } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
-    queryClient,
+    formatDuration,
+    formatFileSize,
+    formatFullDateTime,
+    getBillingLabel,
+    getBillingTrustMessage,
+    getGenerationModeLabel,
+    getMediaTypeLabel,
+    getPromptSourceLabel,
+    getStatusLabel,
+} from "../lib/video-labels";
+import { writeReuseParams } from "../lib/reuse-params-storage";
+import {
     useWebRefreshVideoStatusMutation,
     useWebVideoDetailQuery,
 } from "../services";
 import type { VideoGeneration } from "../services/types/generation";
-import { writeReuseParams } from "../lib/reuse-params-storage";
-
-const statusLabel: Record<string, string> = {
-    pending: "排队中",
-    processing: "生成中",
-    succeeded: "已完成",
-    failed: "失败",
-};
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
     pending: "secondary",
@@ -29,24 +34,11 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "o
     failed: "destructive",
 };
 
-const modelLabel: Record<string, string> = {
-    "happyhorse-1.0-i2v": "图生视频 (i2v)",
-    "happyhorse-1.0-r2v": "参考图生视频 (r2v)",
-    "happyhorse-1.0-t2v": "文生视频 (t2v)",
-    "happyhorse-1.0-video-edit": "视频编辑 (video-edit)",
-};
-
-const billingLabel: Record<string, string> = {
-    pending: "待扣费",
-    deducted: "已扣费",
-    refunded: "已退款",
-    failed: "扣费失败",
-};
-
 export default function WebDetailPage() {
-    useDocumentHead({ title: "视频详情 - AI视频工作台" });
+    useDocumentHead({ title: "视频详情 - 视频生成" });
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { data: generation, isLoading, isError } = useWebVideoDetailQuery(id ?? "", { enabled: !!id });
     const refreshMutation = useWebRefreshVideoStatusMutation({
         onSuccess: (result) => {
@@ -57,20 +49,68 @@ export default function WebDetailPage() {
     });
 
     if (isLoading) {
-        return <div className="min-h-screen p-4 md:p-6"><Skeleton className="h-64 w-full rounded-xl" /></div>;
+        return (
+            <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-3 md:p-4">
+                <Button variant="ghost" className="w-fit" onClick={() => navigate(-1)}>
+                    <ArrowLeft className="size-4" />
+                    返回
+                </Button>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                            <Film className="size-5 text-primary" />
+                            正在读取视频任务
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid gap-3">
+                        <Skeleton className="h-56 w-full rounded-lg" />
+                        <Skeleton className="h-4 w-2/3" />
+                        <Skeleton className="h-4 w-1/3" />
+                    </CardContent>
+                </Card>
+            </div>
+        );
     }
 
     if (isError || !generation) {
         return (
-            <div className="min-h-screen p-4 md:p-6">
-                <Button variant="ghost" onClick={() => navigate(-1)}><ArrowLeft className="size-4" />返回</Button>
-                <p className="text-center text-muted-foreground mt-12">记录不存在</p>
+            <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-3 md:p-4">
+                <Button variant="ghost" className="w-fit" onClick={() => navigate(-1)}>
+                    <ArrowLeft className="size-4" />
+                    返回
+                </Button>
+                <Card className="max-w-2xl">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                            <VideoOff className="size-5 text-muted-foreground" />
+                            没有找到视频任务
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Alert>
+                            <AlertTitle>任务可能已删除或链接无效</AlertTitle>
+                            <AlertDescription>
+                                视频生成是异步任务，历史记录只展示当前账号可访问的任务。你可以回到工作台重新提交，或查看历史记录确认任务状态。
+                            </AlertDescription>
+                        </Alert>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                            <Button type="button" onClick={() => navigate("/")}>
+                                <Film className="size-4" />
+                                返回工作台
+                            </Button>
+                            <Button type="button" variant="outline" onClick={() => navigate("/history")}>
+                                <History className="size-4" />
+                                查看历史
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen space-y-6 p-4 md:p-6">
+        <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-3 md:p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <Button variant="ghost" className="w-fit" onClick={() => navigate(-1)}>
                     <ArrowLeft className="size-4" />
@@ -129,6 +169,31 @@ function VideoPanel({ generation }: { generation: VideoGeneration }) {
         );
     }
 
+    if (generation.status === "succeeded" && !generation.videoUrl) {
+        return (
+            <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Film className="size-5" />视频</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex aspect-video flex-col items-center justify-center gap-3 rounded-lg bg-slate-950 p-6 text-center text-white">
+                        <AlertCircle className="size-12 text-slate-300" />
+                        <p className="text-sm font-medium">任务完成但未返回视频地址</p>
+                        <p className="max-w-md text-xs leading-5 text-slate-300">
+                            当前任务已结束，但暂时没有可播放的视频文件。请稍后刷新状态或回到历史记录再次查看。
+                        </p>
+                    </div>
+                    <Alert>
+                        <AlertCircle className="size-4" />
+                        <AlertTitle>暂未返回视频地址</AlertTitle>
+                        <AlertDescription>
+                            这通常表示上游结果还没有写回可播放文件，插件不会暴露供应商原始响应。你可以稍后刷新状态。
+                        </AlertDescription>
+                    </Alert>
+                    <ReuseButton generation={generation} />
+                </CardContent>
+            </Card>
+        );
+    }
+
     return (
         <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><Film className="size-5" />视频</CardTitle></CardHeader>
@@ -152,19 +217,24 @@ function DetailPanel({ generation }: { generation: VideoGeneration }) {
             <Card>
                 <CardHeader><CardTitle className="text-lg">详情</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
-                    <div><span className="text-xs text-muted-foreground">状态</span><Badge variant={statusVariant[generation.status] ?? "secondary"} className="ml-2">{statusLabel[generation.status] ?? generation.status}</Badge></div>
-                    <div><span className="text-xs text-muted-foreground">扣费</span><p className="text-sm">{billingLabel[generation.billingStatus] ?? generation.billingStatus} · {generation.billingAmount} 算力</p></div>
-                    <div><span className="text-xs text-muted-foreground">模型</span><p className="text-sm">{modelLabel[generation.model] ?? generation.model}</p></div>
-                    <div><span className="text-xs text-muted-foreground">提示词</span><p className="text-sm leading-relaxed">{generation.prompt}</p></div>
+                    <div><span className="text-xs text-muted-foreground">状态</span><Badge variant={statusVariant[generation.status] ?? "secondary"} className="ml-2">{getStatusLabel(generation.status)}</Badge></div>
+                    <div>
+                        <span className="text-xs text-muted-foreground">扣费</span>
+                        <p className="text-sm">{getBillingLabel(generation.billingStatus)} · {generation.billingAmount} 算力</p>
+                        <p className="text-muted-foreground text-xs">{getBillingTrustMessage(generation)}</p>
+                    </div>
+                    <div><span className="text-xs text-muted-foreground">生成方式</span><p className="text-sm">{getGenerationModeLabel(generation)}</p></div>
+                    <div><span className="text-xs text-muted-foreground">模型</span><p className="break-words text-sm">{generation.modelName || generation.model}</p></div>
+                    <div><span className="text-xs text-muted-foreground">提示词</span><p className="break-words text-sm leading-relaxed">{generation.prompt}</p></div>
                     {generation.originalPrompt && generation.originalPrompt !== generation.prompt && (
-                        <div><span className="text-xs text-muted-foreground">原始提示词</span><p className="text-sm leading-relaxed">{generation.originalPrompt}</p></div>
+                        <div><span className="text-xs text-muted-foreground">原始提示词</span><p className="break-words text-sm leading-relaxed">{generation.originalPrompt}</p></div>
                     )}
                     {generation.promptOptimizationSource && (
-                        <div><span className="text-xs text-muted-foreground">提示词优化</span><p className="text-sm">{generation.promptOptimizationSource === "ai" ? "AI 优化" : "本地规则"} · {generation.promptOptimizationStyle ?? "默认"}</p></div>
+                        <div><span className="text-xs text-muted-foreground">提示词优化</span><p className="text-sm">{getPromptSourceLabel(generation.promptOptimizationSource)} · {generation.promptOptimizationStyle ?? "默认"}</p></div>
                     )}
                     {generation.failureCategory && <div><span className="text-xs text-muted-foreground">失败分类</span><p className="text-sm">{generation.failureCategory}</p></div>}
-                    <div><span className="text-xs text-muted-foreground">创建时间</span><p className="text-sm">{new Date(generation.createdAt).toLocaleString("zh-CN")}</p></div>
-                    {generation.completedAt && <div><span className="text-xs text-muted-foreground">完成时间</span><p className="text-sm">{new Date(generation.completedAt).toLocaleString("zh-CN")}</p></div>}
+                    <div><span className="text-xs text-muted-foreground">创建时间</span><p className="text-sm">{formatFullDateTime(generation.createdAt)}</p></div>
+                    {generation.completedAt && <div><span className="text-xs text-muted-foreground">完成时间</span><p className="text-sm">{formatFullDateTime(generation.completedAt)}</p></div>}
                     {duration && <div><span className="text-xs text-muted-foreground">耗时</span><p className="text-sm">{duration}</p></div>}
                     <ReuseButton generation={generation} />
                 </CardContent>
@@ -176,10 +246,10 @@ function DetailPanel({ generation }: { generation: VideoGeneration }) {
                         {generation.statusEvents.map((event, index) => (
                             <div key={`${event.at}-${index}`} className="flex gap-3 text-sm">
                                 <Clock className="mt-0.5 size-4 text-muted-foreground" />
-                                <div>
-                                    <p className="font-medium">{statusLabel[event.status] ?? event.status}</p>
-                                    <p className="text-muted-foreground text-xs">{new Date(event.at).toLocaleString("zh-CN")} · {event.source ?? "system"}</p>
-                                    {event.message && <p className="text-muted-foreground mt-1 text-xs">{event.message}</p>}
+                                <div className="min-w-0">
+                                    <p className="font-medium">{getStatusLabel(event.status)}</p>
+                                    <p className="text-muted-foreground text-xs">{formatFullDateTime(event.at)}</p>
+                                    {event.message && <p className="text-muted-foreground mt-1 break-words text-xs">{event.message}</p>}
                                 </div>
                             </div>
                         ))}
@@ -192,13 +262,28 @@ function DetailPanel({ generation }: { generation: VideoGeneration }) {
                     <CardContent className="space-y-2">
                         {generation.media.map((item, index) => (
                             <div key={`${item.url}-${index}`} className="flex flex-wrap items-center gap-2 text-sm">
-                                <Badge variant="outline">{mediaTypeLabel(item.type)}</Badge>
-                                {item.fileName && <span className="max-w-[180px] truncate">{item.fileName}</span>}
-                                {item.size != null && <span className="text-muted-foreground text-xs">{formatFileSize(item.size)}</span>}
-                                {item.mimeType && <span className="text-muted-foreground text-xs">{item.mimeType}</span>}
-                                <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-primary max-w-full truncate hover:underline">
-                                    {item.url}
-                                </a>
+                                <div className="size-14 overflow-hidden rounded-md bg-muted flex shrink-0 items-center justify-center">
+                                    {item.type === "video" ? (
+                                        <video src={item.url} muted className="size-full object-cover" />
+                                    ) : (
+                                        <img src={item.url} alt="" className="size-full object-cover" />
+                                    )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Badge variant="outline">{getMediaTypeLabel(item.type)}</Badge>
+                                        {item.fileName && <span className="max-w-[180px] truncate">{item.fileName}</span>}
+                                    </div>
+                                    <p className="text-muted-foreground truncate text-xs">
+                                        {[formatFileSize(item.size), item.mimeType].filter(Boolean).join(" · ") || "平台素材"}
+                                    </p>
+                                </div>
+                                <Button asChild variant="ghost" size="sm" className="shrink-0">
+                                    <a href={item.url} target="_blank" rel="noopener noreferrer">
+                                        <ExternalLink className="size-3.5" />
+                                        查看素材
+                                    </a>
+                                </Button>
                             </div>
                         ))}
                     </CardContent>
@@ -215,26 +300,13 @@ function DetailPanel({ generation }: { generation: VideoGeneration }) {
                     }).map(([label, value]) => value ? (
                         <div key={label} className="flex justify-between gap-3 text-sm">
                             <span className="text-muted-foreground">{label}</span>
-                            <span>{value}</span>
+                            <span className="min-w-0 break-words text-right">{value}</span>
                         </div>
                     ) : null)}
                 </CardContent>
             </Card>
         </div>
     );
-}
-
-function mediaTypeLabel(type: string) {
-    if (type === "first_frame") return "首帧";
-    if (type === "reference_image") return "参考图";
-    if (type === "video") return "视频";
-    return type;
-}
-
-function formatFileSize(size: number) {
-    if (size < 1024) return `${size} B`;
-    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function ReuseButton({ generation }: { generation: VideoGeneration }) {
@@ -267,13 +339,4 @@ function ReuseButton({ generation }: { generation: VideoGeneration }) {
             复制参数再生成
         </Button>
     );
-}
-
-function formatDuration(startedAt?: string, completedAt?: string) {
-    if (!startedAt || !completedAt) return null;
-    const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
-    if (ms < 0) return null;
-    const seconds = Math.floor(ms / 1000);
-    if (seconds < 60) return `${seconds} 秒`;
-    return `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
 }

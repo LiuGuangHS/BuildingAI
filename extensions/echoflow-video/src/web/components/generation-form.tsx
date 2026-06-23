@@ -1,5 +1,5 @@
-import { uploadFileAuto, type UploadFileResult } from "@buildingai/services/shared";
 import { createRequestId } from "@buildingai/http";
+import { uploadFileAuto, type UploadFileResult } from "@buildingai/services/shared";
 import { Alert, AlertDescription, AlertTitle } from "@buildingai/ui/components/ui/alert";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
@@ -9,11 +9,43 @@ import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
-import { AlertCircle, ImageIcon, Info, Link, Loader2, Plus, Sparkles, Trash2, Upload, Video } from "lucide-react";
-import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
-import { useEffect } from "react";
+import {
+    AlertCircle,
+    CheckCircle2,
+    Clapperboard,
+    Film,
+    ImageIcon,
+    Info,
+    Loader2,
+    ShieldCheck,
+    Sparkles,
+    Upload,
+    Video,
+    WandSparkles,
+    X,
+} from "lucide-react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import {
+    getBillingLabel,
+    getMediaTypeLabel,
+    getPromptSourceLabel,
+    promptStyleLabel,
+} from "../lib/video-labels";
+import {
+    type MaterialSlot,
+    type VideoGenerationMode,
+    getCompatibleModels,
+    getDefaultMode,
+    getMaterialSlots,
+    getMediaIssueForMode,
+    getModeDefinition,
+    getModeOptions,
+    inferModeFromMedia,
+    modelSupportsMode,
+    sanitizeMediaForMode,
+} from "../lib/video-mode";
 import { useWebEstimateVideoBillingMutation, useWebOptimizePromptMutation, useWebPromptOptimizerOptionsQuery } from "../services";
 import type {
     CreateVideoParams,
@@ -33,14 +65,15 @@ interface GenerationFormProps {
 }
 
 const DEFAULT_TEMPLATES = [
-    { label: "自然风光", prompt: "Sunrise over a calm ocean, waves gently lapping the shore, cinematic lighting, 4k" },
-    { label: "城市夜景", prompt: "A futuristic city at night with neon lights and flying cars, cyberpunk style, 4k" },
-    { label: "动物世界", prompt: "A majestic lion walking through the savanna at golden hour, documentary style, 4k" },
-    { label: "美食制作", prompt: "Close-up shot of a chef cooking pasta in a professional kitchen, shallow depth of field, 4k" },
+    { label: "自然风光", prompt: "日出时分的雪山湖泊，远处山峰被金色阳光照亮，湖面平静如镜，航拍视角，电影感。" },
+    { label: "城市夜景", prompt: "未来城市夜景，霓虹灯映在雨后街道上，车辆光轨穿过高楼之间，镜头缓慢推进。" },
+    { label: "产品展示", prompt: "一款科技产品在柔和棚拍光下旋转展示，干净背景，细节清晰，商业广告质感。" },
+    { label: "人物镜头", prompt: "年轻创作者在工作室里调整镜头，窗外自然光进入房间，浅景深，真实纪录片风格。" },
 ];
 
 export function GenerationForm({ loading, models, modelsLoading, disabledReason, promptTemplates, initialValues, onSubmit }: GenerationFormProps) {
     const templates = promptTemplates?.length ? promptTemplates : DEFAULT_TEMPLATES;
+    const [mode, setMode] = useState<VideoGenerationMode>("text");
     const [prompt, setPrompt] = useState("");
     const [originalPrompt, setOriginalPrompt] = useState<string>();
     const [promptOptimizationSource, setPromptOptimizationSource] = useState<"ai" | "local">();
@@ -53,57 +86,90 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
     const [watermark, setWatermark] = useState(true);
     const [promptStyle, setPromptStyle] = useState<PromptOptimizationStyle>("cinematic");
     const [optimizerModelId, setOptimizerModelId] = useState("");
-    const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+    const [uploadingSlotId, setUploadingSlotId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string>();
-    const fileInputsRef = useRef<Array<HTMLInputElement | null>>([]);
+    const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
     const estimateMutation = useWebEstimateVideoBillingMutation();
     const { data: optimizerOptions } = useWebPromptOptimizerOptionsQuery();
+    const modeOptions = useMemo(() => getModeOptions(models), [models]);
+    const compatibleModels = useMemo(() => getCompatibleModels(mode, models), [mode, models]);
+    const selectedModel = compatibleModels.find((item) => item.id === modelId) ?? compatibleModels[0];
+    const materialSlots = useMemo(() => getMaterialSlots(mode, selectedModel), [mode, selectedModel]);
+    const mediaIssue = getMediaIssueForMode(mode, selectedModel, media);
+    const resolutions = selectedModel?.capabilities?.resolutions?.length ? selectedModel.capabilities.resolutions : ["720P", "1080P"];
+    const ratios = selectedModel?.capabilities?.ratios?.length ? selectedModel.capabilities.ratios : ["16:9", "9:16", "1:1"];
+    const durationMin = selectedModel?.capabilities?.duration?.min ?? 1;
+    const durationMax = selectedModel?.capabilities?.duration?.max ?? 30;
+    const supportsRatio = ratios.length > 0;
+    const estimatedPower = estimateMutation.data?.amount;
+    const billingEstimateLabel = getBillingEstimateLabel({
+        amount: estimatedPower,
+        isPending: estimateMutation.isPending,
+        isError: estimateMutation.isError,
+    });
+    const canSubmit = !disabledReason
+        && !loading
+        && uploadingSlotId === null
+        && Boolean(prompt.trim())
+        && Boolean(selectedModel)
+        && !mediaIssue;
+    const controlsDisabled = Boolean(disabledReason) || Boolean(loading) || !selectedModel;
+    const modeControlsDisabled = Boolean(disabledReason) || Boolean(loading);
+    const modeHasNoCompatibleModels = models.length > 0 && compatibleModels.length === 0;
+
     const optimizePromptMutation = useWebOptimizePromptMutation({
         onSuccess: (result) => {
             setOriginalPrompt(result.originalPrompt);
             setPromptOptimizationSource(result.source);
             setPromptOptimizerModelId(result.modelId);
             setPrompt(result.optimizedPrompt);
-            if (result.source === "ai") {
-                toast.success(
-                    result.consumedPower
-                        ? `提示词已优化，消耗 ${result.consumedPower} 算力`
-                        : "提示词已优化",
-                );
-            } else {
-                toast.success(result.warning || "已使用本地规则优化提示词");
-            }
+            toast.success(result.source === "ai" && result.consumedPower
+                ? `提示词已优化，消耗 ${result.consumedPower} 算力`
+                : result.warning || "提示词已优化");
         },
         onError: (error) => {
             toast.error(error.message || "提示词优化失败");
         },
     });
 
-    const selectedModel = models.find((m) => m.id === modelId);
-    const mediaTypes = selectedModel?.mediaTypes ?? [];
-    const mediaIssue = getMediaIssue(selectedModel, media);
-    const resolutions = selectedModel?.capabilities?.resolutions?.length ? selectedModel.capabilities.resolutions : ["720P", "1080P"];
-    const ratios = selectedModel?.capabilities?.ratios?.length ? selectedModel.capabilities.ratios : ["16:9", "9:16", "1:1"];
-    const durationMin = selectedModel?.capabilities?.duration?.min ?? 1;
-    const durationMax = selectedModel?.capabilities?.duration?.max ?? 30;
-    const supportsRatio = ratios.length > 0;
-    const fallbackEstimatedPower = estimatePower(selectedModel, resolution, Number(duration) || 5);
-    const estimatedPower = estimateMutation.data?.amount ?? fallbackEstimatedPower;
+    useEffect(() => {
+        if (!models.length) return;
+        setMode((current) => getDefaultMode(models, current));
+    }, [models]);
+
+    useEffect(() => {
+        if (!selectedModel) {
+            setModelId("");
+            return;
+        }
+        if (selectedModel.id !== modelId) {
+            setModelId(selectedModel.id);
+        }
+        applyModelDefaults(selectedModel);
+    }, [selectedModel?.id]);
+
+    useEffect(() => {
+        setMedia((current) => sanitizeMediaForMode(mode, current));
+        setUploadError(undefined);
+    }, [mode]);
 
     useEffect(() => {
         if (!initialValues) return;
+        const initialModel = models.find((item) => item.id === initialValues.model);
+        const initialMode = inferModeFromMedia(initialValues.media, initialModel);
+        setMode(getDefaultMode(models, initialMode));
         if (initialValues.prompt) setPrompt(initialValues.prompt);
         if (initialValues.originalPrompt) setOriginalPrompt(initialValues.originalPrompt);
         if (initialValues.promptOptimizationSource) setPromptOptimizationSource(initialValues.promptOptimizationSource);
         if (initialValues.promptOptimizerModelId) setPromptOptimizerModelId(initialValues.promptOptimizerModelId);
-        if (initialValues.model) setModelId(initialValues.model);
-        if (initialValues.media) setMedia(initialValues.media);
+        if (initialValues.model && (!initialModel || modelSupportsMode(initialModel, initialMode))) setModelId(initialValues.model);
+        if (initialValues.media) setMedia(sanitizeMediaForMode(initialMode, initialValues.media));
         if (initialValues.resolution) setResolution(initialValues.resolution);
         if (initialValues.duration) setDuration(String(initialValues.duration));
         if (initialValues.ratio) setRatio(initialValues.ratio);
         if (typeof initialValues.watermark === "boolean") setWatermark(initialValues.watermark);
         if (initialValues.promptOptimizationStyle) setPromptStyle(initialValues.promptOptimizationStyle as PromptOptimizationStyle);
-    }, [initialValues]);
+    }, [initialValues, models]);
 
     useEffect(() => {
         if (!optimizerOptions?.models?.length) {
@@ -120,6 +186,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
 
     useEffect(() => {
         if (!selectedModel) return;
+        if (!selectedModel.modelConfigId || !selectedModel.model) return;
         const durationValue = Number(duration) || selectedModel.defaultParams?.duration || 5;
         estimateMutation.mutate({
             modelConfigId: selectedModel.modelConfigId,
@@ -129,61 +196,90 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
         });
     }, [duration, resolution, selectedModel?.id]);
 
-    const handleAddMedia = () => {
-        if (mediaTypes.length === 0) return;
-        const defaultType = mediaTypes[0] as VideoMediaItem["type"];
-        setMedia([...media, { type: defaultType, url: "" }]);
+    const applyModelDefaults = (model: VideoModelOption) => {
+        const defaults = model.defaultParams;
+        if (defaults?.resolution) setResolution(defaults.resolution);
+        if (defaults?.duration) setDuration(String(defaults.duration));
+        if (defaults?.ratio) setRatio(defaults.ratio);
+        if (typeof defaults?.watermark === "boolean") setWatermark(defaults.watermark);
     };
 
-    const handleMediaTypeChange = (index: number, value: string) => {
-        const updated = media.map((item, itemIndex) =>
-            itemIndex === index ? { type: value as VideoMediaItem["type"], url: "" } : item,
-        );
-        setMedia(updated);
+    const handleModeChange = (nextMode: VideoGenerationMode) => {
+        const option = modeOptions.find((item) => item.id === nextMode);
+        if (!option?.available) return;
+        setMode(nextMode);
+        const nextModels = getCompatibleModels(nextMode, models);
+        const currentModel = models.find((item) => item.id === modelId);
+        if (!currentModel || !modelSupportsMode(currentModel, nextMode)) {
+            const nextModel = nextModels[0];
+            setModelId(nextModel?.id ?? "");
+            if (nextModel) applyModelDefaults(nextModel);
+        }
     };
 
-    const handleMediaUploaded = (index: number, result: UploadFileResult, file: File) => {
-        const updated = media.map((item, itemIndex) =>
-            itemIndex === index
-                ? { ...item, url: result.url, fileId: result.id, mimeType: result.mimeType, fileName: file.name, size: file.size }
-                : item,
-        );
-        setMedia(updated);
+    const upsertMediaForSlot = (slot: MaterialSlot, item: VideoMediaItem | undefined) => {
+        setMedia((current) => {
+            const next = [...current];
+            const slotIndex = materialSlots.findIndex((materialSlot) => materialSlot.id === slot.id);
+            const sameTypeMediaIndexes = next
+                .map((mediaItem, index) => ({ mediaItem, index }))
+                .filter(({ mediaItem }) => mediaItem.type === slot.type)
+                .map(({ index }) => index);
+            const existingIndex = sameTypeMediaIndexes[slot.type === "reference_image" ? slotIndexForReference(slotIndex, materialSlots) : 0];
+
+            if (!item) {
+                if (existingIndex != null) next.splice(existingIndex, 1);
+                return sanitizeMediaForMode(mode, next);
+            }
+
+            if (existingIndex == null) {
+                return sanitizeMediaForMode(mode, [...next, item]);
+            }
+            next[existingIndex] = item;
+            return sanitizeMediaForMode(mode, next);
+        });
     };
 
-    const handleFileChange = async (index: number, event: ChangeEvent<HTMLInputElement>) => {
+    const handleMediaUploaded = (slot: MaterialSlot, result: UploadFileResult, file: File) => {
+        upsertMediaForSlot(slot, {
+            type: slot.type,
+            url: result.url,
+            fileId: result.id,
+            mimeType: result.mimeType,
+            fileName: file.name,
+            size: file.size,
+        });
+    };
+
+    const handleFileChange = async (slot: MaterialSlot, event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         event.target.value = "";
         if (!file) return;
 
-        const acceptError = getUploadAcceptIssue(media[index]?.type, file);
+        const acceptError = getUploadAcceptIssue(slot.type, file);
         if (acceptError) {
             setUploadError(acceptError);
             return;
         }
 
         setUploadError(undefined);
-        setUploadingIndex(index);
+        setUploadingSlotId(slot.id);
         try {
             const result = await uploadFileAuto(file, {
                 description: "Echoflow Video media asset",
                 extensionId: "echoflow-video",
             });
-            handleMediaUploaded(index, result, file);
+            handleMediaUploaded(slot, result, file);
         } catch (error) {
             setUploadError(error instanceof Error ? error.message : "素材上传失败，请稍后重试");
         } finally {
-            setUploadingIndex(null);
+            setUploadingSlotId(null);
         }
-    };
-
-    const handleRemoveMedia = (index: number) => {
-        setMedia(media.filter((_, itemIndex) => itemIndex !== index));
     };
 
     const handleSubmit = (event: FormEvent) => {
         event.preventDefault();
-        if (!prompt.trim() || !modelId || mediaIssue || uploadingIndex !== null) return;
+        if (!canSubmit || !selectedModel) return;
 
         const params: CreateVideoParams = {
             prompt: prompt.trim(),
@@ -191,7 +287,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             promptOptimizationSource,
             promptOptimizationStyle: promptOptimizationSource ? promptStyle : undefined,
             promptOptimizerModelId,
-            model: modelId,
+            model: selectedModel.id,
             requestKey: createRequestId(),
             resolution,
             duration: Number(duration) || 5,
@@ -199,7 +295,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             watermark,
         };
 
-        const submittedMedia = media.filter((item) => item.fileId && item.url.trim());
+        const submittedMedia = sanitizeMediaForMode(mode, media).filter((item) => item.fileId && item.url.trim());
         if (submittedMedia.length > 0) {
             params.media = submittedMedia;
         }
@@ -214,7 +310,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
         }
         await optimizePromptMutation.mutateAsync({
             prompt: prompt.trim(),
-            model: selectedModel?.model ?? modelId,
+            model: selectedModel?.model ?? selectedModel?.id,
             style: promptStyle,
             modelId: optimizerModelId || undefined,
             requestKey: `prompt-opt-${createRequestId()}`,
@@ -223,361 +319,359 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
         });
     };
 
+    const selectedMode = getModeDefinition(mode);
+
     return (
-        <form onSubmit={handleSubmit}>
-            <Card>
-                <CardHeader className="space-y-3">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div>
-                            <CardTitle className="flex items-center gap-2">
-                                <Video className="size-5 text-primary" />
-                                视频生成
-                            </CardTitle>
-                            <CardDescription className="mt-1">选择模型、补齐素材，提交后自动轮询结果</CardDescription>
-                        </div>
-                        <Badge variant="secondary" className="w-fit">预计 {estimatedPower} 算力</Badge>
+        <Card className="overflow-hidden">
+            <form onSubmit={handleSubmit}>
+                <CardHeader className="gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                            <WandSparkles className="size-5 text-primary" />
+                            创建视频任务
+                        </CardTitle>
+                        <CardDescription className="mt-1">
+                            视频生成需要一些时间，提交后会进入队列处理。
+                        </CardDescription>
+                    </div>
+                    <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-[auto_auto]">
+                        <Badge variant="secondary" className="justify-center gap-1.5 sm:justify-start">
+                            <Sparkles className="size-3.5" />
+                            {billingEstimateLabel.compact}
+                        </Badge>
+                        <Button type="submit" variant={disabledReason ? "secondary" : "default"} disabled={!canSubmit} className="w-full sm:w-auto">
+                            {loading ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                            {loading ? "提交中" : disabledReason ? "暂未开放" : "提交生成任务"}
+                        </Button>
                     </div>
                 </CardHeader>
+
                 <CardContent className="space-y-5">
                     {disabledReason && (
-                        <Alert variant="destructive">
+                        <Alert>
                             <AlertCircle className="size-4" />
-                            <AlertTitle>服务暂不可用</AlertTitle>
+                            <AlertTitle>视频生成功能暂未开放</AlertTitle>
                             <AlertDescription>{disabledReason}</AlertDescription>
                         </Alert>
                     )}
 
-                    <div className="space-y-2">
-                        <Label>模型</Label>
+                <section className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <p className="text-sm font-medium">生成方式</p>
+                            <p className="text-xs text-muted-foreground">{selectedMode.description}</p>
+                        </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                        {modeOptions.map((option) => (
+                            <Button
+                                key={option.id}
+                                type="button"
+                                variant={mode === option.id ? "default" : "outline"}
+                                disabled={modeControlsDisabled || !option.available || modelsLoading}
+                                className="h-auto justify-start gap-2 px-3 py-2 text-left"
+                                onClick={() => handleModeChange(option.id)}
+                            >
+                                <Film className="size-4 shrink-0" />
+                                <span className="truncate">{option.label}</span>
+                            </Button>
+                        ))}
+                    </div>
+                </section>
+
+                <section className="space-y-2">
+                    <p className="text-sm font-medium">生成规格</p>
+                    <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center">
+                        <div className="flex size-12 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                            <Clapperboard className="size-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{selectedModel?.name || "暂未开放"}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                                {selectedModel?.description || "当前还没有可用的视频生成规格。"}
+                            </p>
+                        </div>
                         <Select
-                            value={modelId}
+                            value={selectedModel?.id ?? ""}
                             onValueChange={(value) => {
                                 setModelId(value);
-                                setMedia([]);
                                 const nextModel = models.find((model) => model.id === value);
-                                const defaults = nextModel?.defaultParams;
-                                if (defaults?.resolution) setResolution(defaults.resolution);
-                                if (defaults?.duration) setDuration(String(defaults.duration));
-                                if (defaults?.ratio) setRatio(defaults.ratio);
-                                if (typeof defaults?.watermark === "boolean") setWatermark(defaults.watermark);
+                                if (nextModel) applyModelDefaults(nextModel);
+                                setMedia((current) => sanitizeMediaForMode(mode, current));
                             }}
-                            disabled={modelsLoading}
+                            disabled={controlsDisabled || modelsLoading || compatibleModels.length === 0}
                         >
-                            <SelectTrigger>
-                                <SelectValue placeholder="选择模型..." />
+                            <SelectTrigger className="w-full sm:w-40">
+                                <SelectValue placeholder="选择模型" />
                             </SelectTrigger>
                             <SelectContent>
-                                {models.map((model) => (
+                                {compatibleModels.map((model) => (
                                     <SelectItem key={model.id} value={model.id}>
-                                        <div className="flex flex-col items-start">
-                                            <span className="font-medium">{model.name}</span>
-                                            <span className="text-muted-foreground text-xs">{model.description}</span>
-                                        </div>
+                                        {model.name}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
-                        {selectedModel && (
-                            <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
-                                <Info className="mt-0.5 size-3.5 shrink-0" />
-                                {selectedModel.description}
-                            </p>
-                        )}
                     </div>
+                    {selectedModel ? (
+                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                            <Info className="mt-0.5 size-3.5 shrink-0" />
+                            {selectedModel.description}
+                        </p>
+                    ) : null}
+                    {modeHasNoCompatibleModels ? (
+                        <Alert>
+                            <AlertCircle className="size-4" />
+                            <AlertTitle>当前模式暂无可用模型</AlertTitle>
+                            <AlertDescription>
+                                请在 Console 启用支持该生成方式的视频模型；用户端会继续保留工作台，但暂时不能提交该模式任务。
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+                </section>
 
-                    <div className="space-y-2">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <Label>提示词</Label>
-                            <div className="flex flex-wrap gap-2">
-                                {optimizerOptions?.models?.length ? (
-                                    <Select value={optimizerModelId} onValueChange={setOptimizerModelId}>
-                                        <SelectTrigger className="h-8 w-[180px]">
-                                            <SelectValue placeholder="优化模型" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {optimizerOptions.models.map((model) => (
-                                                <SelectItem key={model.id} value={model.id}>
-                                                    {model.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                ) : null}
-                                <Select value={promptStyle} onValueChange={(value) => setPromptStyle(value as PromptOptimizationStyle)}>
-                                    <SelectTrigger className="h-8 w-[112px]">
-                                        <SelectValue />
+                <section className="space-y-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm font-medium">画面描述</p>
+                        <div className="flex flex-wrap gap-2">
+                            {optimizerOptions?.models?.length ? (
+                                <Select value={optimizerModelId} onValueChange={setOptimizerModelId} disabled={controlsDisabled}>
+                                    <SelectTrigger className="w-40">
+                                        <SelectValue placeholder="优化模型" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="cinematic">电影感</SelectItem>
-                                        <SelectItem value="commercial">商业</SelectItem>
-                                        <SelectItem value="realistic">写实</SelectItem>
-                                        <SelectItem value="anime">动漫</SelectItem>
-                                        <SelectItem value="minimal">简洁</SelectItem>
+                                        {optimizerOptions.models.map((model) => (
+                                            <SelectItem key={model.id} value={model.id}>
+                                                {model.name}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={!prompt.trim() || optimizePromptMutation.isPending}
-                                    onClick={() => {
-                                        void handleOptimizePrompt();
-                                    }}
-                                >
-                                    {optimizePromptMutation.isPending ? (
-                                        <Loader2 className="size-3.5 animate-spin" />
-                                    ) : (
-                                        <Sparkles className="size-3.5" />
-                                    )}
-                                    优化
-                                </Button>
-                            </div>
+                            ) : null}
+                            <Select value={promptStyle} onValueChange={(value) => setPromptStyle(value as PromptOptimizationStyle)} disabled={controlsDisabled}>
+                                <SelectTrigger className="w-28">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Object.entries(promptStyleLabel).map(([value, label]) => (
+                                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={controlsDisabled || !prompt.trim() || optimizePromptMutation.isPending}
+                                onClick={() => {
+                                    void handleOptimizePrompt();
+                                }}
+                            >
+                                {optimizePromptMutation.isPending ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                    <Sparkles className="size-4" />
+                                )}
+                                优化描述
+                            </Button>
                         </div>
-                        <Textarea
-                            placeholder="描述你想要生成的视频内容..."
-                            rows={3}
-                            value={prompt}
-                            onChange={(event) => setPrompt(event.target.value)}
-                        />
-                        <div className="flex flex-wrap gap-1.5">
+                    </div>
+                    <Textarea
+                        className="min-h-32 resize-y leading-7"
+                        placeholder="描述主体、镜头、动作、风格和画面节奏，例如：清晨咖啡店里，手持镜头缓慢推近正在冒热气的拿铁..."
+                        rows={5}
+                        value={prompt}
+                        disabled={controlsDisabled}
+                        onChange={(event) => setPrompt(event.target.value)}
+                    />
+                        <div className="flex flex-wrap gap-2">
                             {templates.map((template) => (
                                 <Button
                                     key={template.label}
                                     type="button"
                                     variant="outline"
                                     size="sm"
+                                    disabled={controlsDisabled}
                                     onClick={() => setPrompt(template.prompt)}
                                 >
                                     {template.label}
                                 </Button>
                             ))}
                         </div>
-                    </div>
-
-                    {mediaTypes.length > 0 && (
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label>媒体素材</Label>
-                                <Button type="button" variant="outline" size="sm" onClick={handleAddMedia}>
-                                    <Plus className="size-3.5" />
-                                    添加
-                                </Button>
+                    {promptOptimizationSource && originalPrompt && (
+                        <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 text-sm">
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground">原始描述</p>
+                                <p className="mt-1 leading-6">{originalPrompt}</p>
                             </div>
-                            <div className="space-y-2">
-                                {media.map((item, index) => (
-                                    <div key={index} className="rounded-lg border p-3">
-                                        <div className="flex flex-col gap-2 md:flex-row md:items-start">
-                                            <Select value={item.type} onValueChange={(value) => handleMediaTypeChange(index, value)}>
-                                                <SelectTrigger className="md:w-24 shrink-0">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {mediaTypes.map((mediaType) => (
-                                                        <SelectItem key={mediaType} value={mediaType}>
-                                                            {typeLabel(mediaType)}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <div className="flex min-h-10 flex-1 items-center rounded-md border bg-muted/30 px-3 text-sm">
-                                                {item.fileId ? (
-                                                    <span className="truncate">{item.fileName || item.url}</span>
-                                                ) : (
-                                                    <span className="text-muted-foreground">请上传{typeLabel(item.type)}素材</span>
-                                                )}
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    ref={(node) => {
-                                                        fileInputsRef.current[index] = node;
-                                                    }}
-                                                    type="file"
-                                                    className="hidden"
-                                                    accept={getUploadAccept(item.type)}
-                                                    onChange={(event) => {
-                                                        void handleFileChange(index, event);
-                                                    }}
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="icon"
-                                                    disabled={uploadingIndex !== null}
-                                                    onClick={() => fileInputsRef.current[index]?.click()}
-                                                >
-                                                    {uploadingIndex === index ? (
-                                                        <Loader2 className="size-4 animate-spin" />
-                                                    ) : (
-                                                        <Upload className="size-4" />
-                                                    )}
-                                                </Button>
-                                                <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveMedia(index)}>
-                                                    <Trash2 className="size-4 text-muted-foreground" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                        <MediaPreview item={item} />
-                                    </div>
-                                ))}
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground">{getPromptSourceLabel(promptOptimizationSource)} · {promptStyleLabel[promptStyle]}</p>
+                                <p className="mt-1 leading-6">{prompt}</p>
                             </div>
-                            {media.length === 0 && (
-                                <p className="text-muted-foreground text-xs">点击"添加"后上传素材，系统会使用平台上传记录校验文件归属。</p>
-                            )}
-                            {uploadError && <p className="text-destructive text-xs">{uploadError}</p>}
-                            {mediaIssue && <p className="text-destructive text-xs">{mediaIssue}</p>}
                         </div>
                     )}
+                </section>
 
-                    <div className="space-y-2">
-                        <Label>生成参数</Label>
-                        <div className="grid grid-cols-2 gap-3">
+                <section className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium">参考素材</p>
+                        <p className="text-xs text-muted-foreground">{mode === "text" ? "该模式无需上传素材" : "素材会通过平台上传校验"}</p>
+                    </div>
+                    {materialSlots.length === 0 ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground">
+                            <Clapperboard className="size-4" />
+                            <span>文生视频只需要提示词和生成参数。</span>
+                        </div>
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {materialSlots.map((slot, index) => {
+                                const item = getMediaForSlot(slot, index, materialSlots, media);
+                                const isUploading = uploadingSlotId === slot.id;
+                                return (
+                                    <div key={slot.id} className="space-y-2 rounded-lg border border-dashed bg-muted/20 p-3">
+                                        <div className="flex items-center justify-between gap-2">
+                                                <Badge variant={slot.required ? "default" : "secondary"}>{slot.required ? "必需" : "可选"}</Badge>
+                                                {item?.url ? (
+                                                    <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => upsertMediaForSlot(slot, undefined)} aria-label="移除素材">
+                                                        <X className="size-4" />
+                                                    </Button>
+                                                ) : null}
+                                        </div>
+                                        <div className="flex aspect-video items-center justify-center overflow-hidden rounded-md bg-background">
+                                            {item?.url ? (
+                                                slot.type === "video" ? (
+                                                    <video src={item.url} className="size-full object-cover" muted />
+                                                ) : (
+                                                    <img src={item.url} alt="" className="size-full object-cover" />
+                                                )
+                                            ) : (
+                                                <div className="flex flex-col items-center gap-2 text-center text-xs text-muted-foreground">
+                                                    {slot.type === "video" ? <Video className="size-6" /> : <ImageIcon className="size-6" />}
+                                                    <span>{slot.label}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium">{item?.fileName || slot.label}</p>
+                                            <p className="truncate text-xs text-muted-foreground">
+                                                {item?.fileId ? "已上传并记录 fileId" : item?.url ? "需重新上传后提交" : getMediaTypeLabel(slot.type)}
+                                            </p>
+                                        </div>
+                                        <Input
+                                            ref={(node) => {
+                                                fileInputsRef.current[slot.id] = node;
+                                            }}
+                                            type="file"
+                                            className="hidden"
+                                            accept={slot.accept}
+                                            onChange={(event) => {
+                                                void handleFileChange(slot, event);
+                                            }}
+                                        />
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={controlsDisabled || uploadingSlotId !== null}
+                                                onClick={() => fileInputsRef.current[slot.id]?.click()}
+                                            >
+                                                {isUploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                                                {item?.url ? "替换" : "上传"}
+                                            </Button>
+                                        </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                    {uploadError && <p className="text-xs text-destructive">{uploadError}</p>}
+                    {mediaIssue && <p className="text-xs text-destructive">{mediaIssue}</p>}
+                </section>
+
+                <section className="space-y-2">
+                    <p className="text-sm font-medium">生成设置</p>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                             <div className="space-y-1.5">
-                                <Label className="text-xs text-muted-foreground">分辨率</Label>
-                                <Select value={resolution} onValueChange={setResolution}>
+                                <Label>时长</Label>
+                                <Input
+                                    type="number"
+                                    min={durationMin}
+                                max={durationMax}
+                                value={duration}
+                                    disabled={controlsDisabled}
+                                    onChange={(event) => setDuration(event.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>分辨率</Label>
+                                <Select value={resolution} onValueChange={setResolution} disabled={controlsDisabled}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        {resolutions.map((item) => (
-                                            <SelectItem key={item} value={item}>{item}</SelectItem>
+                                    {resolutions.map((item) => (
+                                        <SelectItem key={item} value={item}>{item}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="space-y-1.5">
-                                <Label className="text-xs text-muted-foreground">时长 (秒)</Label>
-                                <Input
-                                    type="number"
-                                    min={durationMin}
-                                    max={durationMax}
-                                    value={duration}
-                                    onChange={(event) => setDuration(event.target.value)}
-                                />
-                            </div>
                             {supportsRatio && (
                                 <div className="space-y-1.5">
-                                    <Label className="text-xs text-muted-foreground">比例</Label>
-                                    <Select value={ratio} onValueChange={setRatio}>
+                                    <Label>比例</Label>
+                                    <Select value={ratio} onValueChange={setRatio} disabled={controlsDisabled}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            {ratios.map((item) => (
-                                                <SelectItem key={item} value={item}>{item}</SelectItem>
+                                        {ratios.map((item) => (
+                                            <SelectItem key={item} value={item}>{item}</SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
                             )}
-                            <div className="space-y-1.5 flex items-end">
-                                <div className="flex items-center gap-2">
-                                    <Switch checked={watermark} onCheckedChange={setWatermark} id="watermark" />
-                                    <Label htmlFor="watermark" className="text-xs text-muted-foreground cursor-pointer">
-                                        水印
-                                    </Label>
+                            <div className="space-y-1.5">
+                                <Label>水印</Label>
+                                <div className="flex min-h-10 items-center gap-2 rounded-md border px-3">
+                                    <Switch checked={watermark} onCheckedChange={setWatermark} id="watermark" disabled={controlsDisabled} />
+                                    <span className="text-sm text-muted-foreground">{watermark ? "开启" : "关闭"}</span>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                </section>
 
-                    <Button
-                        type="submit"
-                        className="w-full"
-                        disabled={Boolean(disabledReason) || loading || uploadingIndex !== null || !prompt.trim() || !modelId || !!mediaIssue}
-                    >
-                        {loading ? (
-                            <>
-                                <Loader2 className="size-4 animate-spin" />
-                                提交中...
-                            </>
-                        ) : (
-                            <>
-                                <Video className="size-4" />
-                                生成视频
-                            </>
-                        )}
-                    </Button>
+                    <section className="grid gap-3 rounded-lg border bg-muted/20 p-3 text-sm sm:grid-cols-3">
+                        <div>
+                            <span className="text-xs text-muted-foreground">预计消耗</span>
+                            <p className="mt-1 font-medium">{billingEstimateLabel.detail}</p>
+                            {billingEstimateLabel.description ? (
+                                <p className="mt-1 text-xs text-muted-foreground">{billingEstimateLabel.description}</p>
+                            ) : null}
+                        </div>
+                        <div>
+                            <span className="text-xs text-muted-foreground">失败退款</span>
+                            <p className="mt-1 flex items-center gap-1.5 font-medium"><ShieldCheck className="size-4" />按账务规则处理</p>
+                        </div>
+                        <div>
+                            <span className="text-xs text-muted-foreground">提交后</span>
+                            <p className="mt-1 font-medium">{getBillingLabel("pending")} · 排队生成</p>
+                        </div>
+                    </section>
                 </CardContent>
-            </Card>
-        </form>
+            </form>
+        </Card>
     );
 }
 
-function MediaPreview({ item }: { item: VideoMediaItem }) {
-    if (!item.url.trim()) return null;
-
-    return (
-        <div className="mt-3 flex items-center gap-3 rounded-md bg-muted/50 p-2">
-            <div className="size-14 overflow-hidden rounded bg-background flex items-center justify-center shrink-0">
-                {item.type === "video" ? (
-                    <video src={item.url} className="size-full object-cover" muted />
-                ) : (
-                    <img src={item.url} alt="" className="size-full object-cover" />
-                )}
-            </div>
-            <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1 text-xs font-medium">
-                    {item.type === "video" ? <Video className="size-3.5" /> : <ImageIcon className="size-3.5" />}
-                    {item.fileId ? "已上传素材" : "待重新上传素材"}
-                </p>
-                <p className="text-muted-foreground flex items-center gap-1 truncate text-xs">
-                    <Link className="size-3 shrink-0" />
-                    {item.url}
-                </p>
-                {item.mimeType && <p className="text-muted-foreground text-xs">{item.mimeType}</p>}
-            </div>
-        </div>
-    );
+function getMediaForSlot(slot: MaterialSlot, slotIndex: number, slots: MaterialSlot[], media: VideoMediaItem[]) {
+    if (slot.type !== "reference_image") {
+        return media.find((item) => item.type === slot.type);
+    }
+    const referenceIndex = slotIndexForReference(slotIndex, slots);
+    return media.filter((item) => item.type === "reference_image")[referenceIndex];
 }
 
-function typeLabel(type: string) {
-    switch (type) {
-        case "first_frame":
-            return "首帧";
-        case "reference_image":
-            return "参考图";
-        case "video":
-            return "视频";
-        default:
-            return type;
-    }
+function slotIndexForReference(slotIndex: number, slots?: MaterialSlot[]) {
+    if (!slots) return slotIndex;
+    return slots.slice(0, slotIndex + 1).filter((item) => item.type === "reference_image").length - 1;
 }
 
-function getMediaIssue(model: VideoModelOption | undefined, media: VideoMediaItem[]) {
-    if (!model) return undefined;
-    const firstFrames = media.filter((item) => item.type === "first_frame" && item.url.trim());
-    const references = media.filter((item) => item.type === "reference_image" && item.url.trim());
-    const videos = media.filter((item) => item.type === "video" && item.url.trim());
-    const abilityTypes = model.capabilities?.abilityTypes ?? [];
-
-    if (model.mediaTypes.length === 0 && media.some((item) => item.url.trim())) {
-        return "该模型不需要媒体素材";
-    }
-    if (media.some((item) => item.url.trim() && !item.fileId)) {
-        return "历史外链素材需要重新上传后才能提交";
-    }
-    if (firstFrames.length > 0) {
-        if (!abilityTypes.includes("first_frame_i2v")) return "当前模型不支持首帧图生视频";
-        if (firstFrames.length !== 1 || references.length > 0 || videos.length > 0) return "图生视频需要且只需要 1 张首帧图片";
-    }
-    if (references.length > 0) {
-        if (!abilityTypes.includes("reference_to_video") && !abilityTypes.includes("video_editing")) return "当前模型不支持参考图素材";
-        if (references.length > 4) return "参考图最多 4 张";
-    }
-    if (videos.length > 0) {
-        if (!abilityTypes.includes("video_editing") && !abilityTypes.includes("action_transfer")) return "当前模型不支持视频编辑";
-        if (videos.length !== 1 || firstFrames.length > 0) return "视频编辑需要 1 个视频，可再添加参考图";
-    }
-    if (!media.some((item) => item.url.trim()) && !abilityTypes.includes("text_to_video")) {
-        if (abilityTypes.includes("first_frame_i2v")) return "图生视频需要 1 张首帧图片";
-        if (abilityTypes.includes("reference_to_video")) return "参考图生视频需要 1-4 张参考图";
-        if (abilityTypes.includes("video_editing") || abilityTypes.includes("action_transfer")) return "视频编辑需要 1 个视频";
-    }
-    return undefined;
-}
-
-function getUploadAccept(type: VideoMediaItem["type"]) {
-    return type === "video" ? "video/*" : "image/*";
-}
-
-function getUploadAcceptIssue(type: VideoMediaItem["type"] | undefined, file: File) {
-    if (!type) return "请先选择素材类型";
+function getUploadAcceptIssue(type: VideoMediaItem["type"], file: File) {
     if (type === "video") {
         if (!file.type.startsWith("video/")) return "视频素材只能上传视频文件";
         if (file.size > 300 * 1024 * 1024) return "视频文件不能超过 300MB";
@@ -588,20 +682,39 @@ function getUploadAcceptIssue(type: VideoMediaItem["type"] | undefined, file: Fi
     return undefined;
 }
 
-function estimatePower(model: VideoModelOption | undefined, resolution: string, duration: number) {
-    const modelMultiplier: Record<string, number> = {
-        "doubao-seedance-2-0-260128": 4,
-        "doubao-seedance-1-5-pro-251215": 3,
-        "kling-text2video": 3,
-        "kling-image2video": 3,
-        "kling-multi-image2video": 4,
-        "happyhorse-1.0-t2v": 2,
-        "happyhorse-1.0-i2v": 3,
-        "happyhorse-1.0-r2v": 3,
-        "happyhorse-1.0-video-edit": 4,
+function getBillingEstimateLabel({
+    amount,
+    isPending,
+    isError,
+}: {
+    amount?: number;
+    isPending: boolean;
+    isError: boolean;
+}) {
+    if (amount != null) {
+        return {
+            compact: `${amount} 算力`,
+            detail: `${amount} 算力`,
+            description: undefined,
+        };
+    }
+    if (isPending) {
+        return {
+            compact: "预估中",
+            detail: "按配置预估中",
+            description: "正在读取模型计费规则。",
+        };
+    }
+    if (isError) {
+        return {
+            compact: "预估暂不可用",
+            detail: "预估暂不可用",
+            description: "提交时仍会以后端计费规则为准，失败按账务事实处理。",
+        };
+    }
+    return {
+        compact: "按配置预估",
+        detail: "按配置预估",
+        description: "具体消耗以后端模型计费规则为准。",
     };
-    const min = model?.capabilities?.duration?.min ?? 1;
-    const max = model?.capabilities?.duration?.max ?? 30;
-    const safeDuration = Math.min(Math.max(duration || 5, min), max);
-    return Math.ceil(safeDuration * (modelMultiplier[model?.model ?? ""] ?? 2) * (resolution === "1080P" ? 2 : 1));
 }

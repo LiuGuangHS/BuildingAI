@@ -2,9 +2,19 @@ import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
-import { Eye, Film, Trash2 } from "lucide-react";
+import { Eye, Film, RotateCcw, Trash2 } from "lucide-react";
+import { type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
+import { writeReuseParams } from "../lib/reuse-params-storage";
+import {
+    formatDateTime,
+    getBillingLabel,
+    getBillingTrustMessage,
+    getGenerationModeLabel,
+    getStatusLabel,
+} from "../lib/video-labels";
 import type { VideoGeneration } from "../services/types/generation";
 
 interface HistoryListProps {
@@ -14,6 +24,9 @@ interface HistoryListProps {
     /** Base path for detail links, e.g. "/console/history" */
     detailBasePath?: string;
     onDelete?: (id: string) => void;
+    onReuse?: (generation: VideoGeneration) => void;
+    variant?: "compact" | "full" | "strip";
+    action?: ReactNode;
 }
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -23,40 +36,112 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "o
     failed: "destructive",
 };
 
-const statusLabel: Record<string, string> = {
-    pending: "排队中",
-    processing: "生成中",
-    succeeded: "已完成",
-    failed: "失败",
-};
-
-const billingLabel: Record<string, string> = {
-    pending: "待扣费",
-    deducted: "已扣费",
-    refunded: "已退款",
-    failed: "扣费失败",
-};
-
-const modelLabel: Record<string, string> = {
-    "happyhorse-1.0-i2v": "图生视频",
-    "happyhorse-1.0-r2v": "参考图生视频",
-    "happyhorse-1.0-t2v": "文生视频",
-    "happyhorse-1.0-video-edit": "视频编辑",
-};
-
-function formatTime(iso?: string) {
-    if (!iso) return "";
-    return new Date(iso).toLocaleString("zh-CN", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    });
-}
-
-export function HistoryList({ items, loading, showDelete = true, detailBasePath = "/console/history", onDelete }: HistoryListProps) {
+export function HistoryList({
+    items,
+    loading,
+    showDelete = true,
+    detailBasePath = "/console/history",
+    onDelete,
+    onReuse,
+    variant = "full",
+    action,
+}: HistoryListProps) {
     const navigate = useNavigate();
     const detailPath = (id: string) => detailBasePath ? `${detailBasePath}/${id}` : id;
+    const handleReuse = (item: VideoGeneration) => {
+        if (onReuse) {
+            onReuse(item);
+            return;
+        }
+        writeReuseParams({
+            prompt: item.prompt,
+            originalPrompt: item.originalPrompt,
+            promptOptimizationSource: item.promptOptimizationSource,
+            promptOptimizationStyle: item.promptOptimizationStyle,
+            promptOptimizerModelId: item.promptOptimizerModelId,
+            model: item.model,
+            media: item.media,
+            resolution: item.parameters.resolution,
+            duration: item.parameters.duration,
+            ratio: item.parameters.ratio,
+            watermark: item.parameters.watermark,
+            audioSetting: item.parameters.audio_setting,
+        });
+        toast.success("已复制参数");
+        navigate("/");
+    };
+
+    if (variant === "strip") {
+        return (
+            <Card>
+                <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                            <Film className="size-5 text-primary" />
+                            最近生成
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">生成完成后会进入历史，可查看结果或复用参数。</p>
+                    </div>
+                    {action}
+                </CardHeader>
+                <CardContent>
+                    {loading ? (
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <Skeleton key={i} className="aspect-video w-full rounded-lg" />
+                            ))}
+                        </div>
+                    ) : items.length === 0 ? (
+                        <div className="flex min-h-28 items-center justify-center gap-2 rounded-lg border border-dashed text-sm text-muted-foreground">
+                            <Film className="size-5" />
+                            <span>暂无生成记录</span>
+                        </div>
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                            {items.slice(0, 6).map((item) => (
+                                <div
+                                    key={item.id}
+                                    className="flex min-w-0 flex-col gap-2 rounded-lg border p-2 transition-colors hover:bg-muted/50"
+                                >
+                                    <Button
+                                        variant="ghost"
+                                        type="button"
+                                        className="h-auto min-w-0 flex-col items-stretch justify-start gap-2 p-0 text-left hover:bg-transparent"
+                                        onClick={() => navigate(detailPath(item.id))}
+                                    >
+                                        <span className="relative flex aspect-video items-center justify-center overflow-hidden rounded-md bg-muted">
+                                            {item.videoUrl ? (
+                                                <video src={item.videoUrl} className="size-full object-cover" muted />
+                                            ) : (
+                                                <Film className="size-5 text-muted-foreground" />
+                                            )}
+                                            <Badge variant="secondary" className="absolute bottom-1 left-1 px-1.5 py-0 text-[11px]">
+                                                {item.parameters.duration ? `${item.parameters.duration}s` : getStatusLabel(item.status)}
+                                            </Badge>
+                                        </span>
+                                        <span className="line-clamp-2 min-h-9 text-sm font-medium leading-snug">{item.prompt}</span>
+                                        <span className="truncate text-xs text-muted-foreground">{getGenerationModeLabel(item)} · {getBillingTrustMessage(item)}</span>
+                                    </Button>
+                                    <div className="grid grid-cols-2 gap-1">
+                                        <Button type="button" variant="outline" size="sm" onClick={() => navigate(detailPath(item.id))}>
+                                            <Eye className="size-3.5" />
+                                            查看
+                                        </Button>
+                                        <Button type="button" variant="ghost" size="sm" onClick={() => handleReuse(item)}>
+                                            <RotateCcw className="size-3.5" />
+                                            复用
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        );
+    }
+
+    const isCompact = variant === "compact";
 
     if (loading) {
         return (
@@ -86,7 +171,7 @@ export function HistoryList({ items, loading, showDelete = true, detailBasePath 
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <p className="text-muted-foreground text-center text-sm py-6">
+                    <p className="text-muted-foreground py-6 text-center text-sm">
                         暂无生成记录
                     </p>
                 </CardContent>
@@ -108,14 +193,16 @@ export function HistoryList({ items, loading, showDelete = true, detailBasePath 
                     </Button>
                 )}
             </CardHeader>
-            <CardContent className="space-y-2">
-                {items.slice(0, 6).map((item) => (
+            <CardContent className={isCompact ? "space-y-0" : "space-y-2"}>
+                {items.slice(0, 12).map((item) => (
                     <div
                         key={item.id}
-                        className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors cursor-pointer"
+                        className={isCompact
+                            ? "flex cursor-pointer items-center gap-3 border-b p-3 transition-colors last:border-b-0 hover:bg-muted/50"
+                            : "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"}
                         onClick={() => navigate(detailPath(item.id))}
                     >
-                        <div className="size-14 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                        <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                             {item.videoUrl ? (
                                 <video src={item.videoUrl} className="size-full object-cover" muted />
                             ) : (
@@ -123,25 +210,37 @@ export function HistoryList({ items, loading, showDelete = true, detailBasePath 
                             )}
                         </div>
 
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{item.prompt}</p>
-                            <div className="flex items-center gap-2 mt-1">
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{item.prompt}</p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
                                 <Badge variant={statusVariant[item.status] ?? "secondary"} className="text-xs">
-                                    {statusLabel[item.status] ?? item.status}
+                                    {getStatusLabel(item.status)}
                                 </Badge>
                                 <span className="text-muted-foreground text-xs">
-                                    {modelLabel[item.model] ?? item.model}
+                                    {getGenerationModeLabel(item)}
                                 </span>
                                 <span className="text-muted-foreground text-xs">
-                                    {billingLabel[item.billingStatus] ?? item.billingStatus}
+                                    {item.status === "failed" ? getBillingTrustMessage(item) : getBillingLabel(item.billingStatus)}
                                 </span>
                                 <span className="text-muted-foreground text-xs">
-                                    {formatTime(item.createdAt)}
+                                    {formatDateTime(item.createdAt)}
                                 </span>
                             </div>
                         </div>
 
-                        <div className="flex gap-1 shrink-0">
+                        <div className="flex shrink-0 gap-1">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8"
+                                title="复制参数"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReuse(item);
+                                }}
+                            >
+                                <RotateCcw className="size-3.5" />
+                            </Button>
                             <Button
                                 variant="ghost"
                                 size="icon"

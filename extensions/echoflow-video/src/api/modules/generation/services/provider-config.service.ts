@@ -4,8 +4,9 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { PublicAiModelService, normalizeProviderConfig } from "@buildingai/extension-sdk";
+import { PublicAiModelService, resolveProviderSecretValue } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 import { PromptTemplate, VideoProviderConfig } from "../../../db/entities/video-provider-config.entity";
 import { VideoConfigAudit } from "../../../db/entities/video-config-audit.entity";
@@ -149,7 +150,7 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         if (!expectedSecret) {
             return false;
         }
-        return Boolean(secret && secret === expectedSecret);
+        return this.safeCompareSecret(secret, expectedSecret);
     }
 
     private findHappyHorseConfig() {
@@ -199,18 +200,13 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
     }
 
     private async resolveWebhookSecret(secretId: string): Promise<string> {
-        let secretConfig: Record<string, { value?: string; required?: boolean }>;
-        try {
-            secretConfig = await this.secretService.getConfigKeyValuePairs(secretId);
-        } catch {
-            throw HttpErrorFactory.badRequest("Webhook Secret 不存在或不可用");
-        }
-        const values = normalizeProviderConfig(secretConfig);
-        const secret = values.webhookSecret;
-        if (!secret) {
-            throw HttpErrorFactory.badRequest("Webhook Secret 中未找到 webhookSecret/secret/token 字段");
-        }
-        return secret;
+        return resolveProviderSecretValue({
+            secretId,
+            field: "webhookSecret",
+            missingSecretMessage: "Webhook Secret 不存在或不可用",
+            missingValueMessage: "Webhook Secret 中未找到 webhookSecret/secret/token 字段",
+            secretConfigResolver: (id) => this.secretService.getConfigKeyValuePairs(id),
+        });
     }
 
     private async tryResolveWebhookSecret(secretId: string): Promise<string> {
@@ -219,6 +215,15 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         } catch {
             return "";
         }
+    }
+
+    private safeCompareSecret(actual: string | undefined, expected: string): boolean {
+        if (!actual || !expected) {
+            return false;
+        }
+        const actualDigest = createHash("sha256").update(actual).digest();
+        const expectedDigest = createHash("sha256").update(expected).digest();
+        return timingSafeEqual(actualDigest, expectedDigest);
     }
 
     private async writeAudit(action: string, config: VideoProviderConfig, operatorId?: string): Promise<void> {

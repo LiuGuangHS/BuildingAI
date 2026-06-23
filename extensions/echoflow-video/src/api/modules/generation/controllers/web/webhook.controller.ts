@@ -33,7 +33,7 @@ export class WebhookController {
     ) {
         const verified = await this.providerConfigService.verifyHappyHorseWebhookSecret(secret);
         if (!verified) {
-            this.logger.warn("Webhook received with invalid or missing secret");
+            this.logger.warn("Webhook received with invalid or missing signature");
             return { received: true };
         }
 

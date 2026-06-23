@@ -23,12 +23,28 @@ export interface ProviderPublicStatus {
     enabled: boolean;
 }
 
+const emptyPage = <T>(params?: QueryVideoParams): PaginatedResponse<T> => ({
+    items: [],
+    total: 0,
+    page: params?.page ?? 1,
+    pageSize: params?.pageSize ?? 10,
+    totalPages: 0,
+});
+
+async function quietly<T>(request: Promise<T>, fallback: T): Promise<T> {
+    try {
+        return await request;
+    } catch {
+        return fallback;
+    }
+}
+
 // ---- Queries ----
 
 export function useWebVideoModelOptionsQuery(options?: QueryOptionsUtil<VideoModelOption[]>) {
     return useQuery<VideoModelOption[]>({
         queryKey: ["echoflow-video", "web", "models"],
-        queryFn: () => apiHttpClient.get<VideoModelOption[]>("/generation/options/models"),
+        queryFn: () => quietly(apiHttpClient.get<VideoModelOption[]>("/generation/options/models", { silent: true }), []),
         staleTime: 5 * 60 * 1000,
         ...options,
     });
@@ -37,7 +53,11 @@ export function useWebVideoModelOptionsQuery(options?: QueryOptionsUtil<VideoMod
 export function useWebProviderStatusQuery(options?: QueryOptionsUtil<ProviderPublicStatus>) {
     return useQuery<ProviderPublicStatus>({
         queryKey: ["echoflow-video", "web", "provider-status"],
-        queryFn: () => apiHttpClient.get<ProviderPublicStatus>("/generation/options/provider-status"),
+        queryFn: () =>
+            quietly(
+                apiHttpClient.get<ProviderPublicStatus>("/generation/options/provider-status", { silent: true }),
+                { available: false, configured: false, enabled: false },
+            ),
         staleTime: 60 * 1000,
         ...options,
     });
@@ -46,7 +66,7 @@ export function useWebProviderStatusQuery(options?: QueryOptionsUtil<ProviderPub
 export function useWebPromptOptimizerOptionsQuery(options?: QueryOptionsUtil<PromptOptimizerOptions>) {
     return useQuery<PromptOptimizerOptions>({
         queryKey: ["echoflow-video", "web", "prompt-optimizer-options"],
-        queryFn: () => apiHttpClient.get<PromptOptimizerOptions>("/generation/prompt/options"),
+        queryFn: () => quietly(apiHttpClient.get<PromptOptimizerOptions>("/generation/prompt/options", { silent: true }), { models: [] }),
         staleTime: 60 * 1000,
         ...options,
     });
@@ -59,7 +79,7 @@ export function useWebVideoListQuery(
     return useQuery({
         queryKey: ["echoflow-video", "web", "generations", params],
         queryFn: () =>
-            apiHttpClient.get<PaginatedResponse<VideoGeneration>>("/generation", { params }),
+            quietly(apiHttpClient.get<PaginatedResponse<VideoGeneration>>("/generation", { params, silent: true }), emptyPage<VideoGeneration>(params)),
         ...options,
     });
 }
@@ -67,8 +87,9 @@ export function useWebVideoListQuery(
 export function useWebVideoDetailQuery(id: string, options?: QueryOptionsUtil<VideoGeneration>) {
     return useQuery<VideoGeneration>({
         queryKey: ["echoflow-video", "web", "generation", id],
-        queryFn: () => apiHttpClient.get<VideoGeneration>(`/generation/${id}`),
+        queryFn: () => apiHttpClient.get<VideoGeneration>(`/generation/${id}`, { silent: true }),
         enabled: !!id && options?.enabled !== false,
+        retry: false,
         ...options,
     });
 }
@@ -83,8 +104,9 @@ export function useWebVideoStatusQuery(
 ) {
     return useQuery<VideoGeneration>({
         queryKey: ["echoflow-video", "web", "generation", id, "status"],
-        queryFn: () => apiHttpClient.get<VideoGeneration>(`/generation/${id}/status`),
+        queryFn: () => apiHttpClient.get<VideoGeneration>(`/generation/${id}/status`, { silent: true }),
         enabled: !!id && options?.enabled !== false,
+        retry: false,
         refetchInterval: (query) => {
             const data = query.state.data;
             if (data && (data.status === "succeeded" || data.status === "failed")) {
@@ -106,7 +128,7 @@ export function useWebVideoStatusQuery(
 
 export function useWebRefreshVideoStatusMutation(options?: MutationOptionsUtil<VideoGeneration, string>) {
     return useMutation<VideoGeneration, Error, string>({
-        mutationFn: (id) => apiHttpClient.get<VideoGeneration>(`/generation/${id}/status`),
+        mutationFn: (id) => apiHttpClient.get<VideoGeneration>(`/generation/${id}/status`, { silent: true }),
         ...options,
     });
 }

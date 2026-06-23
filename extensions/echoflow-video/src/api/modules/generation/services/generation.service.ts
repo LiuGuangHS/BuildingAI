@@ -1,11 +1,14 @@
 import { BaseService } from "@buildingai/base";
-import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants/shared/account-log.constants";
+import { ACTION } from "@buildingai/constants/shared/account-log.constants";
 import {
+    assertPublicHttpUrl,
     ExtensionBillingService,
     ExtensionNotificationService,
+    normalizePublicHttpUrl,
+    safeJsonParse,
 } from "@buildingai/extension-sdk";
+import { FileUploadService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog, File } from "@buildingai/db/entities";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThanOrEqual, Like, MoreThanOrEqual, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -47,10 +50,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
     constructor(
         @InjectRepository(VideoGeneration)
         private readonly generationRepository: Repository<VideoGeneration>,
-        @InjectRepository(File)
-        private readonly fileRepository: Repository<File>,
-        @InjectRepository(AccountLog)
-        private readonly accountLogRepository: Repository<AccountLog>,
+        private readonly fileUploadService: FileUploadService,
         private readonly billingService: ExtensionBillingService,
         private readonly providerConfigService: ProviderConfigService,
         private readonly modelConfigService: ModelConfigService,
@@ -394,7 +394,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             record.rawResponse = this.compactRawPayload(pollResult.rawResponse);
 
             if (isSuccessStatus(pollResult.status)) {
-                const videoUrl = this.normalizeResultVideoUrl(pollResult.videoUrl);
+                const videoUrl = await this.normalizeResultVideoUrl(pollResult.videoUrl);
                 if (videoUrl) {
                     record.status = VideoGenerationStatus.SUCCEEDED;
                     record.videoUrl = videoUrl;
@@ -684,7 +684,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         }
 
         if (isSuccessStatus(status)) {
-            const normalizedVideoUrl = this.normalizeResultVideoUrl(videoUrl);
+            const normalizedVideoUrl = await this.normalizeResultVideoUrl(videoUrl);
             if (normalizedVideoUrl) {
                 record.status = VideoGenerationStatus.SUCCEEDED;
                 record.videoUrl = normalizedVideoUrl;
@@ -798,7 +798,15 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             (url.pathname.startsWith("/echoflow-video/uploads/") ||
                 url.pathname.startsWith("/uploads/"));
 
-        if (this.isPrivateOrLocalHost(url.hostname) && !isPlatformUpload) {
+        if (!isPlatformUpload) {
+            try {
+                normalizePublicHttpUrl(value, { label: "媒体素材 URL" });
+            } catch {
+                throw HttpErrorFactory.badRequest("媒体素材 URL 不允许指向本机或内网地址");
+            }
+        }
+
+        if (isPlatformUpload && (!["http:", "https:"].includes(url.protocol) || url.username || url.password)) {
             throw HttpErrorFactory.badRequest("媒体素材 URL 不允许指向本机或内网地址");
         }
     }
@@ -810,11 +818,12 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
                     throw HttpErrorFactory.badRequest("媒体素材必须先通过平台上传");
                 }
 
-                const file = await this.fileRepository.findOne({
-                    where: { id: item.fileId } as FindOptionsWhere<File>,
-                });
+                const file = await this.fileUploadService.findOneById(item.fileId);
                 if (!file) {
                     throw HttpErrorFactory.badRequest("媒体素材文件不存在");
+                }
+                if (file.deletedAt) {
+                    throw HttpErrorFactory.badRequest("媒体素材文件已删除");
                 }
                 if (file.uploaderId !== userId) {
                     throw HttpErrorFactory.badRequest("媒体素材不属于当前用户");
@@ -848,7 +857,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         return normalized;
     }
 
-    private normalizeResultVideoUrl(raw?: string) {
+    private async normalizeResultVideoUrl(raw?: string) {
         const value = raw?.trim();
         if (!value) {
             return undefined;
@@ -864,28 +873,13 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
             return undefined;
         }
-        if (this.isPrivateOrLocalHost(url.hostname)) {
+        try {
+            await assertPublicHttpUrl(value, { label: "视频结果 URL" });
+        } catch {
             return undefined;
         }
 
         return url.toString();
-    }
-
-    private isPrivateOrLocalHost(hostname: string): boolean {
-        const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-        return (
-            host === "localhost" ||
-            host === "0.0.0.0" ||
-            host === "127.0.0.1" ||
-            host === "::1" ||
-            host.endsWith(".local") ||
-            host.startsWith("10.") ||
-            host.startsWith("127.") ||
-            host.startsWith("169.254.") ||
-            host.startsWith("192.168.") ||
-            /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
-            /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
-        );
     }
 
     private async hasBillingLog(
@@ -893,14 +887,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         action: (typeof ACTION)[keyof typeof ACTION],
         manager?: EntityManager,
     ) {
-        const repository = manager?.getRepository(AccountLog) ?? this.accountLogRepository;
-        return repository.exists({
-            where: {
-                associationNo,
-                accountType: ACCOUNT_LOG_TYPE.PLUGIN_DEC,
-                action,
-            } as FindOptionsWhere<AccountLog>,
-        });
+        return this.billingService.hasBillingLog({ associationNo, action }, manager);
     }
 
     private assertVideoCanBeDeleted(record: VideoGeneration) {
@@ -973,9 +960,34 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             });
         } catch (error) {
             this.logger.error(`Video generation ${record.id} billing refund failed`, error);
+            await this.recordRefundFailureMetadata(record, error);
             record.errorMessage = this.truncateText(
                 `${record.errorMessage || "任务失败"}（退款失败，请联系管理员）`,
                 2000,
+            );
+        }
+    }
+
+    private async recordRefundFailureMetadata(record: VideoGeneration, error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        const update = {
+            rawResponse: {
+                ...(record.rawResponse ?? {}),
+                metadata: {
+                    ...(typeof record.rawResponse?.metadata === "object" && record.rawResponse.metadata !== null
+                        ? record.rawResponse.metadata
+                        : {}),
+                    refundError: this.truncateText(message, 1000),
+                    refundFailedAt: new Date().toISOString(),
+                },
+            },
+        };
+        record.rawResponse = update.rawResponse;
+        try {
+            await this.generationRepository.update(record.id, update);
+        } catch (metadataError) {
+            this.logger.warn(
+                `Persist video generation ${record.id} refund failure metadata failed: ${metadataError instanceof Error ? metadataError.message : String(metadataError)}`,
             );
         }
     }
@@ -1011,7 +1023,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         const record = await this.generationRepository.findOne({
             where: { id } as FindOptionsWhere<VideoGeneration>,
         });
-        if (!record || isTerminalStatus(record.status)) {
+        if (!record || record.deletedAt || isTerminalStatus(record.status)) {
             return;
         }
         this.appendStatusEvent(
@@ -1054,7 +1066,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             if (!locked) {
                 throw HttpErrorFactory.notFound("视频生成记录不存在");
             }
-            if (isTerminalStatus(locked.status)) {
+            if (locked.deletedAt || isTerminalStatus(locked.status)) {
                 return locked;
             }
 
@@ -1167,7 +1179,8 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
                 };
             }
 
-            const result = JSON.parse(text) as Record<string, unknown>;
+            const result = safeJsonParse<Record<string, unknown>>(text);
+            if (!result) return { preview: text.slice(0, MAX_TOTAL_LENGTH) };
             if (stringTruncations > 0) {
                 result._stringTruncations = stringTruncations;
             }
@@ -1223,8 +1236,6 @@ export const generationModuleEntities = [
     VideoPolicyConfig,
     VideoConfigAudit,
     VideoPromptOptimization,
-    AccountLog,
-    File,
 ];
 export const generationModuleProviders = [
     GenerationService,

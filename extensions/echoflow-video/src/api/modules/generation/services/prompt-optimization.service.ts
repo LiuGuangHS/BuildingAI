@@ -1,11 +1,9 @@
-import { generateText } from "@buildingai/ai-sdk";
-import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants/shared/account-log.constants";
+import { ACTION } from "@buildingai/constants/shared/account-log.constants";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog } from "@buildingai/db/entities";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { ExtensionBillingService, PublicAiModelService, normalizeProviderConfig } from "@buildingai/extension-sdk";
+import { ExtensionBillingService, PublicAiModelService } from "@buildingai/extension-sdk";
 import { Injectable, Logger } from "@nestjs/common";
 
 import {
@@ -43,8 +41,6 @@ export class PromptOptimizationService {
         private readonly billingService: ExtensionBillingService,
         @InjectRepository(VideoPromptOptimization)
         private readonly optimizationRepository: Repository<VideoPromptOptimization>,
-        @InjectRepository(AccountLog)
-        private readonly accountLogRepository: Repository<AccountLog>,
     ) {}
 
     async optimize(dto: OptimizePromptDto, userId?: string): Promise<PromptOptimizationResult> {
@@ -136,13 +132,6 @@ export class PromptOptimizationService {
         consumedPower?: number;
     }> {
         const modelInfo = await this.aiModelService.getModelInfo(modelId);
-        const providerConfig = normalizeProviderConfig(
-            await this.aiModelService.getProviderConfig(modelId),
-        );
-        const provider = await this.aiModelService.getProviderAdapter(modelId, providerConfig);
-        if (!provider.supports("language")) {
-            throw new Error("所选主站模型不支持文本生成");
-        }
 
         const system = [
             "You are a professional AI video prompt director.",
@@ -172,8 +161,7 @@ export class PromptOptimizationService {
             await this.deductOptimizationBilling(record.id, userId!, estimatedPower, modelId);
         }
 
-        const result = await generateText({
-            model: provider(modelInfo.model).model,
+        const result = await this.aiModelService.generateText(modelId, {
             system,
             prompt: userPrompt,
             temperature: 0.7,
@@ -590,14 +578,7 @@ export class PromptOptimizationService {
         action: (typeof ACTION)[keyof typeof ACTION],
         manager?: EntityManager,
     ) {
-        const repository = manager?.getRepository(AccountLog) ?? this.accountLogRepository;
-        return repository.exists({
-            where: {
-                associationNo,
-                accountType: ACCOUNT_LOG_TYPE.PLUGIN_DEC,
-                action,
-            } as FindOptionsWhere<AccountLog>,
-        });
+        return this.billingService.hasBillingLog({ associationNo, action }, manager);
     }
 
     private async markOptimizationFailed(recordId: string, message: string) {

@@ -517,7 +517,7 @@ export class Upgrade {
     private async ensureExtensionRecord(): Promise<void> {
         const extensionData = {
             icon: "/echoflow-video/static/logo.png",
-            name: "AI视频工作台",
+            name: "EchoFlow 视频生成",
             identifier: "echoflow-video",
             version: "0.0.1",
             description: "面向创作者的 AI 视频生成工作台，支持文生视频、图生视频、视频编辑、任务历史和算力计费。",

@@ -21,6 +21,8 @@ export const ECHOFLOW_VIDEO_MODEL = {
 export type EchoFlowVideoModel =
     (typeof ECHOFLOW_VIDEO_MODEL)[keyof typeof ECHOFLOW_VIDEO_MODEL];
 
+export const DEFAULT_VIDEO_GATEWAY_BASE_URL = "https://api.echoflow.cn";
+
 export interface VideoModelEndpointConfig {
     id?: string;
     name: string;

@@ -8,13 +8,14 @@ import { SecretReferenceSelect } from "@buildingai/ui/components/secret-referenc
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { useSecretsListQuery } from "@buildingai/services/console";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Save, ShieldCheck, Sparkles } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { ConsolePage } from "../../components/console-page";
 import { ErrorState } from "../../components/error-state";
 import {
-    queryClient,
     useProviderConfigAuditsQuery,
     useProviderConfigQuery,
     usePromptOptimizerModelsQuery,
@@ -22,12 +23,13 @@ import {
 } from "../../services";
 
 export default function ProviderConfigPage() {
-    useDocumentHead({ title: "AI视频工作台 LLM 与回调" });
+    useDocumentHead({ title: "视频生成配置" });
     const [webhookSecretId, setWebhookSecretId] = useState("");
     const [webhookSecretName, setWebhookSecretName] = useState("");
     const [clearWebhookSecret, setClearWebhookSecret] = useState(false);
     const [promptOptimizerEnabled, setPromptOptimizerEnabled] = useState(true);
     const [promptOptimizerModelId, setPromptOptimizerModelId] = useState("");
+    const queryClient = useQueryClient();
     const { data, isError, refetch } = useProviderConfigQuery();
     const { data: audits = [] } = useProviderConfigAuditsQuery();
     const { data: promptOptimizerModels = [] } = usePromptOptimizerModelsQuery();
@@ -65,14 +67,14 @@ export default function ProviderConfigPage() {
 
     if (isError) {
         return (
-            <div className="min-h-screen p-4 md:p-6">
+            <ConsolePage>
                 <ErrorState title="加载配置失败" message="无法获取 LLM 与回调配置" onRetry={() => refetch()} />
-            </div>
+            </ConsolePage>
         );
     }
 
     return (
-        <div className="min-h-screen space-y-6 p-4 md:p-6">
+        <ConsolePage>
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <Badge variant="secondary" className="mb-3 shadow-sm">管理后台</Badge>
@@ -278,6 +280,6 @@ export default function ProviderConfigPage() {
                     )}
                 </CardContent>
             </Card>
-        </div>
+        </ConsolePage>
     );
 }

@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "../../components/confirm-dialog";
+import { ConsolePage } from "../../components/console-page";
 import { ErrorState } from "../../components/error-state";
 import {
     useBatchCancelVideoMutation,
@@ -55,7 +56,7 @@ const billingLabel: Record<string, string> = {
 };
 
 export default function HistoryPage() {
-    useDocumentHead({ title: "视频生成历史 - AI视频工作台" });
+    useDocumentHead({ title: "视频生成历史" });
     const navigate = useNavigate();
 
     const [page, setPage] = useState(1);
@@ -116,7 +117,7 @@ export default function HistoryPage() {
     };
 
     return (
-        <div className="min-h-screen space-y-6 p-4 md:p-6">
+        <ConsolePage>
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -344,6 +345,6 @@ export default function HistoryPage() {
                 }}
                 onCancel={() => setDeleteTarget(null)}
             />
-        </div>
+        </ConsolePage>
     );
 }

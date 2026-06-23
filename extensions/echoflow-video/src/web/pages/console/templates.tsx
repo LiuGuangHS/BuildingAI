@@ -7,10 +7,12 @@ import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
+import { safeJsonParse } from "@buildingai/stores";
 import { Plus, Save, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 
+import { ConsolePage } from "../../components/console-page";
 import {
     useConsoleVideoModelConfigsQuery,
     useConsoleVideoTemplatesQuery,
@@ -54,7 +56,7 @@ export default function ConsoleVideoTemplatesPage() {
     };
 
     return (
-        <div className="space-y-5 p-4 md:p-6">
+        <ConsolePage>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight">模板预设</h1>
@@ -113,11 +115,12 @@ export default function ConsoleVideoTemplatesPage() {
                     onCancel={() => setEditing(undefined)}
                 />
             </div>
-        </div>
+        </ConsolePage>
     );
 }
 
 function TemplateEditor({ value, onSave, onCancel }: { value?: VideoPromptTemplate; onSave: (data: SaveVideoTemplateParams) => void; onCancel: () => void }) {
+    const idPrefix = useId();
     const { data: models } = useConsoleVideoModelConfigsQuery({ page: 1, pageSize: 100 });
     const [title, setTitle] = useState(value?.title ?? "");
     const [category, setCategory] = useState(value?.category ?? "default");
@@ -158,17 +161,21 @@ function TemplateEditor({ value, onSave, onCancel }: { value?: VideoPromptTempla
                 <div className="space-y-2">
                     <Label>适用能力</Label>
                     <div className="grid grid-cols-2 gap-2">
-                        {abilityOptions.map(([key, label]) => (
-                            <label key={key} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                        {abilityOptions.map(([key, label]) => {
+                            const checkboxId = `${idPrefix}-ability-${key}`;
+                            return (
+                            <Label key={key} htmlFor={checkboxId} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
                                 <Checkbox
+                                    id={checkboxId}
                                     checked={abilityTypes.includes(key)}
                                     onCheckedChange={(checked) => setAbilityTypes((current) =>
                                         checked ? [...current, key] : current.filter((item) => item !== key),
                                     )}
                                 />
                                 {label}
-                            </label>
-                        ))}
+                            </Label>
+                            );
+                        })}
                     </div>
                 </div>
                 <div className="space-y-2"><Label>Prompt</Label><Textarea className="min-h-32" value={prompt} onChange={(event) => setPrompt(event.target.value)} /></div>
@@ -197,7 +204,7 @@ function TemplateEditor({ value, onSave, onCancel }: { value?: VideoPromptTempla
                                 prompt,
                                 abilityTypes,
                                 modelConfigId: modelConfigId === "all" ? undefined : modelConfigId,
-                                defaultParams: JSON.parse(defaultParams),
+                                defaultParams: parseDefaultParams(defaultParams),
                                 enabled,
                                 sortOrder: Number(sortOrder || 0),
                             });
@@ -227,4 +234,12 @@ function createDraft(): VideoPromptTemplate {
         createdAt: "",
         updatedAt: "",
     };
+}
+
+function parseDefaultParams(value: string) {
+    const parsed = safeJsonParse<unknown>(value || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("默认参数 JSON 格式错误");
+    }
+    return parsed as Record<string, unknown>;
 }

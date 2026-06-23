@@ -1,10 +1,11 @@
-import { RedisModule } from "@buildingai/cache";
-import { QueueModule, SecretModule } from "@buildingai/core/modules";
+import { RedisModule, RedisService } from "@buildingai/cache";
+import { QueueModule, SecretModule, UploadModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import {
     AiPublicModule,
     ExtensionBillingModule,
     ExtensionNotificationModule,
+    ExtensionRateLimitService,
 } from "@buildingai/extension-sdk";
 import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
@@ -26,7 +27,6 @@ import {
 } from "./services/generation.service";
 import { VideoPollProcessor } from "./processors/video-poll.processor";
 import { VIDEO_POLL_QUEUE } from "./services/video-poll-queue.constants";
-import { VideoRequestLimiterService } from "./services/video-request-limiter.service";
 
 @Module({
     imports: [
@@ -35,6 +35,7 @@ import { VideoRequestLimiterService } from "./services/video-request-limiter.ser
         ExtensionBillingModule,
         ExtensionNotificationModule,
         SecretModule,
+        UploadModule,
         RedisModule,
         QueueModule,
         BullModule.registerQueue({ name: VIDEO_POLL_QUEUE }),
@@ -51,7 +52,15 @@ import { VideoRequestLimiterService } from "./services/video-request-limiter.ser
         TemplateWebController,
         WebhookController,
     ],
-    providers: [...generationModuleProviders, VideoRequestLimiterService, VideoPollProcessor],
+    providers: [
+        ...generationModuleProviders,
+        {
+            provide: ExtensionRateLimitService,
+            useFactory: (redisService: RedisService) => new ExtensionRateLimitService(redisService),
+            inject: [RedisService],
+        },
+        VideoPollProcessor,
+    ],
     exports: [GenerationService],
 })
 export class GenerationModule {}

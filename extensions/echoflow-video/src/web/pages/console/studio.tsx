@@ -3,11 +3,13 @@ import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Card, CardContent } from "@buildingai/ui/components/ui/card";
 import { Clapperboard, Clock } from "lucide-react";
 
+import { ConsolePage } from "../../components/console-page";
+
 export default function ConsoleStudioReservedPage() {
-    useDocumentHead({ title: "短视频制作 - AI视频工作台管理" });
+    useDocumentHead({ title: "短视频制作 - 视频生成管理" });
 
     return (
-        <div className="min-h-screen space-y-6 p-4 md:p-6">
+        <ConsolePage>
             <div className="max-w-3xl space-y-4">
                 <Badge variant="secondary">预留入口</Badge>
                 <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
@@ -23,6 +25,6 @@ export default function ConsoleStudioReservedPage() {
                     </CardContent>
                 </Card>
             </div>
-        </div>
+        </ConsolePage>
     );
 }

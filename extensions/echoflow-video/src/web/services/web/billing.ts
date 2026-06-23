@@ -6,7 +6,7 @@ import type { BillingEstimate, EstimateVideoBillingParams } from "../types/gener
 
 export function useWebEstimateVideoBillingMutation(options?: MutationOptionsUtil<BillingEstimate, EstimateVideoBillingParams>) {
     return useMutation<BillingEstimate, Error, EstimateVideoBillingParams>({
-        mutationFn: (data) => apiHttpClient.post<BillingEstimate>("/billing/estimate", data),
+        mutationFn: (data) => apiHttpClient.post<BillingEstimate>("/billing/estimate", data, { silent: true }),
         ...options,
     });
 }

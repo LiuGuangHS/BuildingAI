@@ -13,6 +13,7 @@ import { CheckCircle2, KeyRound, Plus, Save, SlidersHorizontal, Trash2, Zap } fr
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { ConsolePage } from "../../components/console-page";
 import {
     useConsoleVideoBillingRulesQuery,
     useConsoleVideoModelConfigsQuery,
@@ -97,7 +98,7 @@ export default function ConsoleVideoModelsPage() {
     };
 
     return (
-        <div className="space-y-5 p-4 md:p-6">
+        <ConsolePage>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight">模型配置</h1>
@@ -165,7 +166,7 @@ export default function ConsoleVideoModelsPage() {
                     onTestEndpoint={(id, endpoint) => testEndpointMutation.mutateAsync({ id, data: serializeEndpoint(endpoint, 0) })}
                 />
             </div>
-        </div>
+        </ConsolePage>
     );
 }
 
@@ -216,8 +217,17 @@ function ModelOperationsEditor({
         setRatio(value?.defaultParams?.ratio ?? "");
         setWatermark(value?.defaultParams?.watermark ?? true);
         setEndpoints((value?.endpoints?.length ? value.endpoints : [makeEndpoint()]).map((endpoint, index) => ({
-            ...endpoint,
             id: endpoint.id || `endpoint-${index + 1}`,
+            name: endpoint.name,
+            secretId: endpoint.secretId,
+            secretName: endpoint.secretName,
+            baseUrlOverride: endpoint.baseUrlOverride,
+            enabled: endpoint.enabled,
+            priority: endpoint.priority,
+            requestTimeoutMs: endpoint.requestTimeoutMs,
+            testTimeoutMs: endpoint.testTimeoutMs,
+            maxRetries: endpoint.maxRetries,
+            retryDelayMs: endpoint.retryDelayMs,
         })));
         setBaseCost(String(billingRule?.baseCost ?? 0));
         setPerSecondCost(String(billingRule?.perSecondCost ?? 2));
@@ -414,7 +424,20 @@ function EndpointEditor({
     onRemove: () => void;
     onTest: () => void;
 }) {
-    const patch = (data: Partial<VideoModelEndpoint>) => onChange({ ...value, ...data });
+    const patch = (data: Partial<VideoModelEndpoint>) =>
+        onChange({
+            id: value.id,
+            name: data.name ?? value.name,
+            secretId: data.secretId ?? value.secretId,
+            secretName: data.secretName ?? value.secretName,
+            baseUrlOverride: data.baseUrlOverride ?? value.baseUrlOverride,
+            enabled: data.enabled ?? value.enabled,
+            priority: data.priority ?? value.priority,
+            requestTimeoutMs: data.requestTimeoutMs ?? value.requestTimeoutMs,
+            testTimeoutMs: data.testTimeoutMs ?? value.testTimeoutMs,
+            maxRetries: data.maxRetries ?? value.maxRetries,
+            retryDelayMs: data.retryDelayMs ?? value.retryDelayMs,
+        });
     return (
         <div className="space-y-3 rounded-md border p-3">
             <div className="flex items-center justify-between gap-2">
@@ -488,10 +511,10 @@ function SwitchField({
     onCheckedChange: (checked: boolean) => void;
 }) {
     return (
-        <label className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-            <span>{label}</span>
+        <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+            <Label>{label}</Label>
             <Switch checked={checked} onCheckedChange={onCheckedChange} />
-        </label>
+        </div>
     );
 }
 

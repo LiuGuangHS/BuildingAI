@@ -28,7 +28,10 @@ export default {
     base: `/extension/${packageJson.name}`,
     envDir: "./../../",
     resolve: {
-        tsconfigPaths: true,
+        // The extension root tsconfig references the API tsconfig, which extends
+        // workspace-only NestJS settings. Keep the web dev server on explicit
+        // aliases so a browser load never depends on backend tsconfig resolution.
+        tsconfigPaths: false,
         alias: [
             {
                 find: "shadcn/tailwind.css",

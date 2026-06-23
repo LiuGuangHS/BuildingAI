@@ -1,6 +1,6 @@
 /// <reference path="../../../jest-globals.d.ts" />
 
-import { HappyHorseModel } from "../../../../../src/api/db/entities/video-generation.entity";
+import { HappyHorseModel, VideoGenerationStatus } from "../../../../../src/api/db/entities/video-generation.entity";
 import { ModelConfigService } from "../../../../../src/api/modules/generation/services/model-config.service";
 import { ECHOFLOW_VIDEO_MODEL } from "../../../../../src/api/modules/generation/services/video-model-catalog";
 
@@ -10,6 +10,10 @@ const mockRepository = {
     count: jest.fn(),
     save: jest.fn(),
     create: jest.fn((value) => value),
+};
+
+const mockGenerationRepository = {
+    count: jest.fn(),
 };
 
 function makeEndpoint(overrides: Record<string, unknown> = {}) {
@@ -34,12 +38,13 @@ const mockSecretService = {
 };
 
 function makeService() {
-    return new ModelConfigService(mockRepository as any, mockSecretService as any);
+    return new ModelConfigService(mockRepository as any, mockGenerationRepository as any, mockSecretService as any);
 }
 
 beforeEach(() => {
     jest.clearAllMocks();
     mockRepository.save.mockImplementation(async (value) => value);
+    mockGenerationRepository.count.mockResolvedValue(0);
 });
 
 describe("ModelConfigService", () => {
@@ -183,5 +188,77 @@ describe("ModelConfigService", () => {
                 enabled: true,
             })],
         }));
+    });
+
+    it("strips historical endpoint display fields from operational views", async () => {
+        mockRepository.find.mockResolvedValue([{
+            id: "model-seedance",
+            provider: "echoflow-api",
+            model: ECHOFLOW_VIDEO_MODEL.SEEDANCE_2_0,
+            displayName: "Seedance",
+            enabled: true,
+            visibleToUser: true,
+            capabilities: { abilityTypes: ["text_to_video"] },
+            defaultParams: { duration: 5, resolution: "720P", ratio: "16:9", watermark: true },
+            endpoints: [{
+                id: "endpoint-1",
+                name: "主接口",
+                secretId: "secret-001",
+                secretName: "测试密钥",
+                baseUrlOverride: "https://api.echoflow.cn",
+                enabled: true,
+                priority: 100,
+                requestTimeoutMs: 120000,
+                testTimeoutMs: 15000,
+                maxRetries: 2,
+                retryDelayMs: 1000,
+                apiKeyMasked: "legacy-mask",
+            }],
+            sortOrder: 10,
+        } as any]);
+
+        const result = await makeService().list({ page: 1, pageSize: 20 });
+        const model = result.items.find((item) => item.model === ECHOFLOW_VIDEO_MODEL.SEEDANCE_2_0);
+        expect(model).toBeTruthy();
+        const endpoint = model?.endpoints?.[0] as Record<string, unknown>;
+
+        expect(endpoint).not.toHaveProperty("apiKeyMasked");
+        expect(endpoint).toMatchObject({
+            id: "endpoint-1",
+            name: "主接口",
+            secretId: "secret-001",
+            secretName: "测试密钥",
+            baseUrlOverride: "https://api.echoflow.cn",
+        });
+    });
+
+    it("rejects disabling or hiding models while they have active generations", async () => {
+        mockRepository.findOne.mockResolvedValue({
+            id: "model-seedance",
+            provider: "echoflow-api",
+            model: ECHOFLOW_VIDEO_MODEL.SEEDANCE_2_0,
+            displayName: "Seedance",
+            enabled: true,
+            visibleToUser: true,
+            capabilities: { abilityTypes: ["text_to_video"] },
+            defaultParams: { duration: 5, resolution: "720P", ratio: "16:9", watermark: true },
+            endpoints: [makeEndpoint()],
+            sortOrder: 10,
+        });
+        mockGenerationRepository.count.mockResolvedValue(1);
+
+        await expect(makeService().updateConfig("model-seedance", { enabled: false })).rejects.toThrow("仍有视频任务处理中");
+        await expect(makeService().updateConfig("model-seedance", { visibleToUser: false })).rejects.toThrow("仍有视频任务处理中");
+        await expect(makeService().updateConfig("model-seedance", {
+            endpoints: [makeEndpoint({ enabled: false })],
+        })).rejects.toThrow("仍有视频任务处理中");
+
+        expect(mockGenerationRepository.count).toHaveBeenCalledWith({
+            where: {
+                modelConfigId: "model-seedance",
+                status: expect.anything(),
+            },
+        });
+        expect(mockRepository.save).not.toHaveBeenCalled();
     });
 });

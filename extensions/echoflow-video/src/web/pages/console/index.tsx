@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "../../components/confirm-dialog";
+import { ConsolePage } from "../../components/console-page";
 import { ErrorState } from "../../components/error-state";
 import { HistoryList } from "../../components/history-list";
 import {
@@ -18,7 +19,7 @@ import {
 } from "../../services";
 
 export default function AIVideoConsolePage() {
-    useDocumentHead({ title: "AI视频工作台管理" });
+    useDocumentHead({ title: "视频生成管理" });
     const navigate = useNavigate();
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
@@ -58,13 +59,13 @@ export default function AIVideoConsolePage() {
     };
 
     return (
-        <div className="min-h-screen space-y-6 p-4 md:p-6">
+        <ConsolePage>
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <Badge variant="secondary" className="mb-3 shadow-sm">管理后台</Badge>
                     <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
                         <Film className="size-6 text-primary" />
-                        AI视频工作台管理
+                        视频生成管理
                     </h1>
                     <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
                         查看生成状态、处理失败记录，并维护模型接入点。
@@ -191,7 +192,7 @@ export default function AIVideoConsolePage() {
                 onConfirm={handleDeleteConfirm}
                 onCancel={() => setDeleteTarget(null)}
             />
-        </div>
+        </ConsolePage>
     );
 }
 

@@ -58,7 +58,9 @@ test.describe("Admin: Fixed Model Catalog", () => {
         const body = await res.json();
         expect(body).toHaveProperty("webhookSecretConfigured");
         expect(body).toHaveProperty("promptOptimizerEnabled");
-        expect(body).not.toHaveProperty("apiKeyMasked");
+        expect(body).not.toHaveProperty("apiKey");
+        expect(body).not.toHaveProperty("baseUrl");
+        expect(body).not.toHaveProperty("secretId");
     });
 
     test("GET /config/health returns health status", async ({ request }) => {

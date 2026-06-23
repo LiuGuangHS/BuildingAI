@@ -6,11 +6,11 @@ import { ArrowLeft, Clapperboard, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function WebStudioReservedPage() {
-    useDocumentHead({ title: "短视频制作 - AI视频工作台" });
+    useDocumentHead({ title: "短视频制作 - 视频生成" });
     const navigate = useNavigate();
 
     return (
-        <div className="min-h-screen space-y-6 p-4 md:p-6">
+        <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-3 md:p-4">
             <Button variant="ghost" className="w-fit" onClick={() => navigate("/")}>
                 <ArrowLeft className="size-4" />
                 返回工作台
@@ -25,7 +25,7 @@ export default function WebStudioReservedPage() {
                     <CardContent className="flex items-center gap-3 p-4">
                         <Clock className="size-5 text-muted-foreground" />
                         <p className="text-sm text-muted-foreground">
-                            该入口已预留，当前版本优先完成 HappyHorse 通用视频生成工作台。
+                            该入口已预留，当前版本优先完成单任务视频生成、历史复用和异步结果查看。
                         </p>
                     </CardContent>
                 </Card>

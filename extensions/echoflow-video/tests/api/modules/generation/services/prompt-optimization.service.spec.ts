@@ -1,13 +1,6 @@
 /// <reference path="../../../jest-globals.d.ts" />
 
-jest.mock("@buildingai/ai-sdk", () => ({
-    generateText: jest.fn(),
-}));
-
-import { generateText } from "@buildingai/ai-sdk";
 import { PromptOptimizationService } from "../../../../../src/api/modules/generation/services/prompt-optimization.service";
-
-const mockGenerateText = generateText as jest.Mock;
 
 const mockProviderConfigService = {
     getConsoleConfig: jest.fn(),
@@ -15,14 +8,14 @@ const mockProviderConfigService = {
 
 const mockAiModelService = {
     getModelInfo: jest.fn(),
-    getProviderConfig: jest.fn(),
-    getProviderAdapter: jest.fn(),
+    generateText: jest.fn(),
 };
 
 const mockBillingService = {
     hasSufficientPower: jest.fn(),
     deductUserPower: jest.fn(),
     addUserPower: jest.fn(),
+    hasBillingLog: jest.fn(),
 };
 
 const mockOptimizationRepo = {
@@ -33,17 +26,12 @@ const mockOptimizationRepo = {
     manager: { transaction: jest.fn() },
 };
 
-const mockAccountLogRepo = {
-    exists: jest.fn(),
-};
-
 function makeService() {
     return new PromptOptimizationService(
         mockProviderConfigService as any,
         mockAiModelService as any,
         mockBillingService as any,
         mockOptimizationRepo as any,
-        mockAccountLogRepo as any,
     );
 }
 
@@ -51,6 +39,10 @@ beforeEach(() => {
     jest.clearAllMocks();
     mockOptimizationRepo.create.mockImplementation((value) => value);
     mockOptimizationRepo.save.mockImplementation(async (value) => ({ id: "prompt-opt-001", ...value }));
+    mockAiModelService.generateText.mockResolvedValue({
+        text: "optimized video prompt",
+        usage: { inputTokens: 10, outputTokens: 8, totalTokens: 18 },
+    } as any);
 });
 
 describe("PromptOptimizationService", () => {
@@ -117,19 +109,10 @@ describe("PromptOptimizationService", () => {
                 billingRule: { power: 1, tokens: 1000 },
             };
         });
-        mockAiModelService.getProviderConfig.mockResolvedValue({
-            apiKey: { value: "sk-test" },
-            baseURL: { value: "https://example.test/v1" },
-        });
-        const providerAdapter = Object.assign(
-            jest.fn(() => ({ model: "adapter-model" })),
-            { supports: jest.fn(() => true) },
-        );
-        mockAiModelService.getProviderAdapter.mockResolvedValue(providerAdapter);
-        mockGenerateText.mockResolvedValue({
+        mockAiModelService.generateText.mockResolvedValue({
             text: "optimized video prompt",
             usage: { inputTokens: 10, outputTokens: 8, totalTokens: 18 },
-        });
+        } as any);
 
         const result = await makeService().optimize({
             prompt: "一只产品在桌面旋转展示",
@@ -139,10 +122,10 @@ describe("PromptOptimizationService", () => {
         expect(result.source).toBe("ai");
         expect(result.modelId).toBe("22222222-2222-4222-8222-222222222222");
         expect(result.optimizedPrompt).toBe("optimized video prompt");
-        expect(mockGenerateText).toHaveBeenCalledTimes(1);
+        expect(mockAiModelService.generateText).toHaveBeenCalledTimes(1);
     });
 
-    it("calls ai-sdk only through the main-system provider adapter and normalized provider config", async () => {
+    it("calls text generation through the main-system extension SDK service", async () => {
         mockProviderConfigService.getConsoleConfig.mockResolvedValue({
             promptOptimizerEnabled: true,
             promptOptimizerModelId: "11111111-1111-4111-8111-111111111111",
@@ -156,38 +139,19 @@ describe("PromptOptimizationService", () => {
             isActive: true,
             provider: { provider: "openai", isActive: true },
         });
-        mockAiModelService.getProviderConfig.mockResolvedValue({
-            api_key: { value: "sk-main" },
-            baseUrl: { value: "https://llm.example.test/v1" },
-        });
-        const providerAdapter = Object.assign(
-            jest.fn(() => ({ model: "adapter-model" })),
-            { supports: jest.fn(() => true) },
-        );
-        mockAiModelService.getProviderAdapter.mockResolvedValue(providerAdapter);
-        mockGenerateText.mockResolvedValue({
+        mockAiModelService.generateText.mockResolvedValue({
             text: "optimized video prompt",
             usage: { inputTokens: 10, outputTokens: 8, totalTokens: 18 },
-        });
+        } as any);
 
         await makeService().optimize({
             prompt: "一只产品在桌面旋转展示",
             style: "commercial",
         });
 
-        expect(mockAiModelService.getProviderConfig).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111");
-        expect(mockAiModelService.getProviderAdapter).toHaveBeenCalledWith(
-            "11111111-1111-4111-8111-111111111111",
-            {
-                apiKey: "sk-main",
-                baseURL: "https://llm.example.test/v1",
-                webhookSecret: "",
-            },
-        );
-        expect(providerAdapter.supports).toHaveBeenCalledWith("language");
-        expect(providerAdapter).toHaveBeenCalledWith("main-llm");
-        expect(mockGenerateText).toHaveBeenCalledWith(expect.objectContaining({
-            model: "adapter-model",
+        expect(mockAiModelService.generateText).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", expect.objectContaining({
+            system: expect.stringContaining("professional AI video prompt director"),
+            prompt: expect.stringContaining("Original prompt"),
         }));
     });
 
@@ -213,7 +177,7 @@ describe("PromptOptimizationService", () => {
             }),
         ).rejects.toThrow("提示词优化模型未启用或供应商未启用");
 
-        expect(mockGenerateText).not.toHaveBeenCalled();
+        expect(mockAiModelService.generateText).not.toHaveBeenCalled();
     });
 
     it("does not invent plugin fallback billing when the main-system model has no billing rule", async () => {
@@ -230,19 +194,10 @@ describe("PromptOptimizationService", () => {
             isActive: true,
             provider: { provider: "openai", isActive: true },
         });
-        mockAiModelService.getProviderConfig.mockResolvedValue({
-            apiKey: { value: "sk-test" },
-            baseURL: { value: "https://example.test/v1" },
-        });
-        const providerAdapter = Object.assign(
-            jest.fn(() => ({ model: "adapter-model" })),
-            { supports: jest.fn(() => true) },
-        );
-        mockAiModelService.getProviderAdapter.mockResolvedValue(providerAdapter);
-        mockGenerateText.mockResolvedValue({
+        mockAiModelService.generateText.mockResolvedValue({
             text: "optimized video prompt",
             usage: { inputTokens: 10, outputTokens: 8, totalTokens: 18 },
-        });
+        } as any);
 
         const result = await makeService().optimize({
             prompt: "一只产品在桌面旋转展示",
