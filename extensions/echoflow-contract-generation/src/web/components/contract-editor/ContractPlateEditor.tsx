@@ -11,10 +11,11 @@ type ContractPlateEditorProps = {
     sections: DocumentSection[];
     sourceSections: ContractSection[];
     selectedSectionIndex: number;
+    sectionAnnotations?: Array<{ label: string; level?: "low" | "medium" | "high"; issue?: string }>;
     onSectionsChange: (sections: ContractSection[]) => void;
 };
 
-export function ContractPlateEditor({ documentId, editable, sections, sourceSections, selectedSectionIndex, onSectionsChange }: ContractPlateEditorProps) {
+export function ContractPlateEditor({ documentId, editable, sections, sourceSections, selectedSectionIndex, sectionAnnotations, onSectionsChange }: ContractPlateEditorProps) {
     const sectionRefs = useRef<Array<HTMLDivElement | null>>([]);
 
     useEffect(() => {
@@ -35,19 +36,23 @@ export function ContractPlateEditor({ documentId, editable, sections, sourceSect
     }
 
     return (
-        <div className="contract-section-editor-list">
+        <div className="grid gap-5">
             {sections.map((section, index) => (
                 <section
                     key={`${documentId}:${section.id ?? index}:${section.title}`}
                     ref={(element) => {
                         sectionRefs.current[index] = element;
                     }}
-                    className="contract-section-editor"
-                    data-active={index === selectedSectionIndex ? "true" : "false"}
+                    className={index === selectedSectionIndex ? "rounded-md bg-primary/5 px-2 py-2 ring-1 ring-primary/20" : "rounded-md px-2 py-2"}
                 >
-                    <div className="contract-section-heading">
-                        <span>第 {index + 1} 条</span>
-                        <h3>{section.title}</h3>
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground">第 {index + 1} 条</span>
+                        <h3 className="text-base font-semibold tracking-normal">{section.title}</h3>
+                        {sectionAnnotations?.[index] && (
+                            <span className="contract-section-ai-marker" data-level={sectionAnnotations[index].level ?? "none"}>
+                                {sectionAnnotations[index].label}
+                            </span>
+                        )}
                     </div>
                     <SectionPlateEditor
                         key={`${documentId}:${section.id ?? index}:editor`}

@@ -1,18 +1,18 @@
 import { BaseService } from "@buildingai/base";
-import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants";
+import { ACTION } from "@buildingai/constants";
 import { FileUploadService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog, File, type AiModel } from "@buildingai/db/entities";
 import { Brackets, EntityManager, In, LessThan, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import {
     ExtensionBillingService,
     ExtensionNotificationService,
+    Output,
     PublicAiModelService,
-    normalizeProviderConfig,
+    assertPublicHttpUrl,
+    normalizePublicHttpUrl,
 } from "@buildingai/extension-sdk";
 import { llmFileParser } from "@buildingai/llm-file-parser";
-import { generateText, Output } from "@buildingai/ai-sdk";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import type { Queue } from "bullmq";
@@ -111,6 +111,8 @@ type ReviewUploadTaskPayload = ReviewUploadedContractDto & {
     fileUrl: string;
     fileId: string;
 };
+type PublicAiModelInfo = NonNullable<Awaited<ReturnType<PublicAiModelService["getModelInfo"]>>>;
+type UploadFileInfo = NonNullable<Awaited<ReturnType<FileUploadService["findOneById"]>>>;
 
 @Injectable()
 export class ContractGenerationService extends BaseService<ContractGenerationTask> implements OnModuleInit {
@@ -125,10 +127,6 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         private readonly versionRepo: Repository<ContractGenerationVersion>,
         @InjectRepository(ContractTemplateEntity)
         private readonly templateRepo: Repository<ContractTemplateEntity>,
-        @InjectRepository(AccountLog)
-        private readonly accountLogRepo: Repository<AccountLog>,
-        @InjectRepository(File)
-        private readonly fileRepo: Repository<File>,
         private readonly billingService: ExtensionBillingService,
         private readonly publicAiModelService: PublicAiModelService,
         private readonly fileUploadService: FileUploadService,
@@ -241,7 +239,11 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         const config = await this.getOrCreateConfig();
         const model = config.modelId ? await this.loadModel(config.modelId, false) : null;
         return {
-            ...config,
+            id: config.id,
+            modelId: config.modelId,
+            metadata: config.metadata ?? null,
+            createdAt: config.createdAt,
+            updatedAt: config.updatedAt,
             model: model ? { id: model.id, name: model.name, providerName: model.provider.name, provider: model.provider.provider, pricePerContract: this.calculateCost(model) } : null,
         };
     }
@@ -360,8 +362,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             const model = await this.loadModel(task.modelId);
             const template = await this.getTemplate(dto.templateId ?? task.templateId ?? undefined);
             await this.reserveTaskCreditsOnce(task, model.name);
-            const result = await generateText({
-                model: await this.resolveLanguageModel(model),
+            const result = await this.publicAiModelService.generateText(model.id, {
                 output: Output.object({ schema: contractSchema }),
                 prompt: this.buildGeneratePrompt(dto, template),
                 temperature: 0.18,
@@ -420,8 +421,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             const model = await this.loadModel(task.modelId);
             await this.reserveTaskCreditsOnce(task, model.name);
             const content = await llmFileParser.parseAndFormat(fileUrl, { maxFileSize: UPLOAD_REVIEW_MAX_BYTES, timeout: UPLOAD_REVIEW_PARSE_TIMEOUT_MS });
-            const result = await generateText({
-                model: await this.resolveLanguageModel(model),
+            const result = await this.publicAiModelService.generateText(model.id, {
                 output: Output.object({ schema: contractSchema }),
                 prompt: this.buildUploadReviewPrompt(dto, content.slice(0, UPLOAD_REVIEW_MAX_CHARS)),
                 temperature: 0.12,
@@ -603,8 +603,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             task = await this.claimTaskForInteractiveAction(task.id, ContractGenerationStatus.REVIEWING);
             claimed = true;
             if (!task.sections?.length) throw HttpErrorFactory.badRequest("合同暂无可审查内容");
-            const result = await generateText({
-                model: await this.resolveLanguageModel(model),
+            const result = await this.publicAiModelService.generateText(model.id, {
                 output: Output.object({ schema: reviewSchema }),
                 prompt: this.buildReviewPrompt(task),
                 temperature: 0.1,
@@ -643,8 +642,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         this.assertTaskEditable(task);
         if (!task.sections?.length) throw HttpErrorFactory.badRequest("合同暂无可改写内容");
         const model = await this.loadModel(task.modelId);
-        const result = await generateText({
-            model: await this.resolveLanguageModel(model),
+        const result = await this.publicAiModelService.generateText(model.id, {
             output: Output.object({ schema: rewriteSchema }),
             prompt: this.buildRewritePrompt(dto),
             temperature: 0.15,
@@ -964,9 +962,9 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         }
     }
 
-    private async loadModel(modelId: string): Promise<AiModel>;
-    private async loadModel(modelId: string, throwOnMissing: true): Promise<AiModel>;
-    private async loadModel(modelId: string, throwOnMissing: false): Promise<AiModel | null>;
+    private async loadModel(modelId: string): Promise<PublicAiModelInfo>;
+    private async loadModel(modelId: string, throwOnMissing: true): Promise<PublicAiModelInfo>;
+    private async loadModel(modelId: string, throwOnMissing: false): Promise<PublicAiModelInfo | null>;
     private async loadModel(modelId: string, throwOnMissing = true) {
         const model = await this.getModelInfo(modelId);
         if (!model || !model.provider || !model.provider.isActive || model.modelType !== "llm") {
@@ -977,8 +975,8 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     }
 
 
-    private async loadConfiguredModel(throwOnMissing: true): Promise<AiModel>;
-    private async loadConfiguredModel(throwOnMissing: false): Promise<AiModel | null>;
+    private async loadConfiguredModel(throwOnMissing: true): Promise<PublicAiModelInfo>;
+    private async loadConfiguredModel(throwOnMissing: false): Promise<PublicAiModelInfo | null>;
     private async loadConfiguredModel(throwOnMissing: boolean) {
         const config = await this.getOrCreateConfig();
         if (!config.modelId) {
@@ -1003,13 +1001,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         }
     }
 
-    private async resolveLanguageModel(model: AiModel) {
-        const providerConfig = normalizeProviderConfig(await this.publicAiModelService.getProviderConfig(model.id));
-        const provider = await this.publicAiModelService.getProviderAdapter(model.id, providerConfig);
-        return provider(model.model).model;
-    }
-
-    private async getModelInfo(modelId: string): Promise<AiModel | null> {
+    private async getModelInfo(modelId: string): Promise<PublicAiModelInfo | null> {
         try {
             return await this.publicAiModelService.getModelInfo(modelId);
         } catch {
@@ -1038,11 +1030,10 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         if (!entityManager) {
             return this.taskRepo.manager.transaction((manager) => this.reserveTaskCreditsOnce(task, modelName, manager));
         }
-        const repo = entityManager?.getRepository(AccountLog) ?? this.accountLogRepo;
         const currentTask = await entityManager.findOne(ContractGenerationTask, { where: { id: task.id }, lock: { mode: "pessimistic_write" }, withDeleted: true });
         if (!currentTask || currentTask.deletedAt) return;
         if (currentTask.providerMetadata?.billingStatus === "deducted") return;
-        const existingLog = await repo.findOne({ where: { associationNo: task.id, accountType: ACCOUNT_LOG_TYPE.PLUGIN_DEC, action: ACTION.DEC }, select: ["id"] });
+        const existingLog = await this.billingService.hasBillingLog({ associationNo: task.id, action: ACTION.DEC }, entityManager);
         if (!existingLog) {
             await this.billingService.deductUserPower({ userId: task.userId, amount: cost, remark: `AI合同: ${modelName}`, associationNo: task.id, associationUserId: task.userId }, entityManager);
         }
@@ -1061,13 +1052,8 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
                 const task = await entityManager.findOne(ContractGenerationTask, { where: { id: taskId }, lock: { mode: "pessimistic_write" }, withDeleted: true });
                 if (!task || Number(task.costCredits ?? 0) <= 0) return;
                 const metadata = task.providerMetadata ?? {};
-                const accountLogRepo = entityManager.getRepository(AccountLog);
-                const wasDeducted = metadata.billingStatus === "deducted" || await accountLogRepo.exists({
-                    where: { associationNo: task.id, accountType: ACCOUNT_LOG_TYPE.PLUGIN_DEC, action: ACTION.DEC },
-                });
-                const alreadyRefunded = Boolean(metadata.refundedAt) || await accountLogRepo.exists({
-                    where: { associationNo: task.id, accountType: ACCOUNT_LOG_TYPE.PLUGIN_DEC, action: ACTION.INC },
-                });
+                const wasDeducted = metadata.billingStatus === "deducted" || await this.billingService.hasBillingLog({ associationNo: task.id, action: ACTION.DEC }, entityManager);
+                const alreadyRefunded = Boolean(metadata.refundedAt) || await this.billingService.hasBillingLog({ associationNo: task.id, action: ACTION.INC }, entityManager);
                 if (!wasDeducted || alreadyRefunded) return;
                 await this.billingService.addUserPower({ userId: task.userId, amount: Number(task.costCredits), remark, associationNo: task.id, associationUserId: task.userId }, entityManager);
                 await entityManager.update(ContractGenerationTask, task.id, {
@@ -1242,18 +1228,18 @@ ${content}`;
     }
 
     private async resolveReviewFileSource(userId: string, dto: ReviewUploadedContractDto) {
-        const file = await this.fileRepo.findOne({ where: { id: dto.fileId } });
+        const file = await this.fileUploadService.findOneById(dto.fileId);
         if (!file || file.uploaderId !== userId) throw HttpErrorFactory.badRequest("合同文件不存在或无权访问");
         if (file.extensionIdentifier !== EXTENSION_ID) throw HttpErrorFactory.badRequest("合同文件不属于当前插件");
         this.assertReviewFileSupported(file);
         if (!file.url) throw HttpErrorFactory.badRequest("合同文件缺少可访问 URL");
         return {
             fileId: file.id,
-            fileUrl: this.normalizeStoredFileUrl(file.url),
+            fileUrl: await this.normalizeStoredFileUrl(file.url),
         };
     }
 
-    private assertReviewFileSupported(file: File) {
+    private assertReviewFileSupported(file: UploadFileInfo) {
         if (Number(file.size ?? 0) > UPLOAD_REVIEW_MAX_BYTES) {
             throw HttpErrorFactory.badRequest("合同文件不能超过 20MB");
         }
@@ -1266,39 +1252,22 @@ ${content}`;
         }
     }
 
-    private normalizeStoredFileUrl(value: string) {
+    private async normalizeStoredFileUrl(value: string) {
         try {
             const url = new URL(value);
             if (!["http:", "https:"].includes(url.protocol)) throw new Error("invalid protocol");
             if (url.username || url.password) throw new Error("credentials not allowed");
             const isPlatformUpload =
-                url.pathname.startsWith(`/${EXTENSION_ID}/uploads/`) ||
-                url.pathname.startsWith("/uploads/");
-            if (this.isPrivateOrLocalHost(url.hostname) && !isPlatformUpload) {
-                throw new Error("private host not allowed");
+                    url.pathname.startsWith(`/${EXTENSION_ID}/uploads/`) ||
+                    url.pathname.startsWith("/uploads/");
+            if (!isPlatformUpload) {
+                await assertPublicHttpUrl(value, { label: "合同文件 URL" });
             }
             url.hash = "";
             return url.toString();
         } catch {
             throw HttpErrorFactory.badRequest("合同文件 URL 格式不正确或不安全");
         }
-    }
-
-    private isPrivateOrLocalHost(hostname: string): boolean {
-        const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-        return (
-            host === "localhost" ||
-            host === "0.0.0.0" ||
-            host === "127.0.0.1" ||
-            host === "::1" ||
-            host.endsWith(".local") ||
-            host.startsWith("10.") ||
-            host.startsWith("127.") ||
-            host.startsWith("169.254.") ||
-            host.startsWith("192.168.") ||
-            /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
-            /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
-        );
     }
 
     private buildRewritePrompt(dto: RewriteContractClauseDto) {
@@ -1369,23 +1338,47 @@ ${content}`;
         return Math.max(0, Math.min(100, Math.round(number)));
     }
 
-    private calculateCost(model: AiModel): number {
+    private calculateCost(model: PublicAiModelInfo): number {
         const config = this.normalizeModelConfig(model);
         const price = config?.pricePerContract;
         return typeof price === "number" ? price : 0;
     }
 
-    private normalizeModelConfig(model: AiModel): Record<string, unknown> | null {
+    private normalizeModelConfig(model: PublicAiModelInfo): Record<string, unknown> | null {
         if (!model.modelConfig) return null;
-        if (!Array.isArray(model.modelConfig)) return model.modelConfig as Record<string, unknown>;
-        return model.modelConfig.reduce<Record<string, unknown>>((accumulator, item) => {
+        if (!Array.isArray(model.modelConfig)) return this.pickContractModelConfig(model.modelConfig as Record<string, unknown>);
+        const items = model.modelConfig as unknown[];
+        return items.reduce<Record<string, unknown>>((accumulator, item) => {
             if (item && typeof item === "object" && "field" in item && typeof item.field === "string") {
-                accumulator[item.field] = item.value;
+                const field = item.field.trim();
+                if (!field) return accumulator;
+                if (field === "pricePerContract" && "value" in item) {
+                    accumulator.pricePerContract = this.toOptionalNumber((item as { value?: unknown }).value);
+                }
                 return accumulator;
             }
-            Object.assign(accumulator, item);
+            if (item && typeof item === "object") {
+                const picked = this.pickContractModelConfig(item as Record<string, unknown>);
+                if (picked.pricePerContract !== undefined) {
+                    accumulator.pricePerContract = picked.pricePerContract;
+                }
+            }
             return accumulator;
         }, {});
+    }
+
+    private pickContractModelConfig(config: Record<string, unknown>) {
+        const pricePerContract = this.toOptionalNumber(config.pricePerContract);
+        return pricePerContract === undefined ? {} : { pricePerContract };
+    }
+
+    private toOptionalNumber(value: unknown): number | undefined {
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value === "string" && value.trim()) {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : undefined;
+        }
+        return undefined;
     }
 
     private createMulterFile(buffer: Buffer, filename: string, mimetype: string): Express.Multer.File {

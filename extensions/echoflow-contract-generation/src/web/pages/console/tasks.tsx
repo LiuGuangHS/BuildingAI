@@ -17,7 +17,7 @@ import { Input } from "@buildingai/ui/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 
 import { useAdminContractTaskDetailQuery, useAdminContractTasksQuery, useDeleteAdminContractTaskMutation } from "../../services/console";
-import type { ContractGenerationStatus, ContractGenerationTask } from "../../services/types";
+import type { AdminContractGenerationTask, ContractGenerationStatus } from "../../services/types";
 
 const PAGE_SIZE = 20;
 const allStatuses: Array<{ value: "all" | ContractGenerationStatus; label: string }> = [
@@ -43,7 +43,7 @@ export default function ContractTasksConsolePage() {
     const { data: detail } = useAdminContractTaskDetailQuery(selectedTaskId);
     const tasks = taskPage?.items ?? [];
 
-    async function handleDelete(task: ContractGenerationTask) {
+    async function handleDelete(task: AdminContractGenerationTask) {
         await deleteMutation.mutateAsync(task.id);
         if (selectedTaskId === task.id) setSelectedTaskId("");
     }

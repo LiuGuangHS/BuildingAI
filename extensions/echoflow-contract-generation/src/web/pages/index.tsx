@@ -1,36 +1,34 @@
 import { Badge } from "@buildingai/ui/components/ui/badge";
-import { Button } from "@buildingai/ui/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
-import { Input } from "@buildingai/ui/components/ui/input";
-import { Label } from "@buildingai/ui/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@buildingai/ui/components/ui/tabs";
-import { Textarea } from "@buildingai/ui/components/ui/textarea";
-import { cn } from "@buildingai/ui/lib/utils";
+import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { uploadFile } from "@buildingai/services/shared";
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
-import { ContractDocumentWorkbench } from "../components/contract-editor/ContractDocumentEditor";
+import { ContractInspector } from "../components/contract-workbench/ContractInspector";
+import { ContractIntakeRail } from "../components/contract-workbench/ContractIntakeRail";
+import { ContractTemplateDrawer } from "../components/contract-workbench/ContractTemplateDrawer";
+import { ContractWorkbenchShell } from "../components/contract-workbench/ContractWorkbenchShell";
+import { deriveContractWorkbenchState } from "../components/contract-workbench/contract-workbench-view-model";
 import { useContractGenerationConfigQuery, useContractTaskDetailQuery, useContractTasksQuery, useContractTemplatesQuery, useContractVersionsQuery, useExportContractMutation, useGenerateContractMutation, useRestoreContractVersionMutation, useReviewContractMutation, useReviewUploadedContractMutation, useRewriteContractClauseMutation, useUpdateContractContentMutation, useUpdateRiskActionMutation } from "../services/web";
-import type { ContractGenerationConfig, ContractGenerationStatus, ContractGenerationTask, ContractSection, ContractTemplate, ContractTemplateField } from "../services/types";
+import type { ContractGenerationConfig, ContractGenerationStatus, ContractGenerationTask, ContractSection, ContractTemplate } from "../services/types";
 
-const stanceOptions = [
-    { value: "neutral", label: "中立平衡" },
-    { value: "favor_party_a", label: "偏甲方" },
-    { value: "favor_party_b", label: "偏乙方" },
-    { value: "strict", label: "更严格" },
-    { value: "friendly", label: "更友好" },
-] as const;
-
-const exportTypeOptions = [
-    { value: "contract", label: "正式合同" },
-    { value: "contract_with_report", label: "合同 + 风险报告" },
-    { value: "risk_report", label: "仅风险报告" },
-] as const;
-
-const EMPTY_SELECT_VALUE = "__empty__";
+type ContractStance = "neutral" | "favor_party_a" | "favor_party_b" | "strict" | "friendly";
 type RewriteMode = "reduce_risk" | "stricter" | "favor_party_a" | "favor_party_b" | "concise" | "friendly";
+
+const ContractDocumentWorkbench = lazy(() =>
+    import("../components/contract-editor/ContractDocumentEditor").then((module) => ({
+        default: module.ContractDocumentWorkbench,
+    })),
+);
+
+function ContractDocumentLoading() {
+    return (
+        <div className="space-y-3 rounded-lg border bg-card p-4" role="status" aria-live="polite">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="min-h-[28rem] w-full rounded-lg" />
+        </div>
+    );
+}
 
 export default function ContractGenerationHomePage() {
     const { data: templates = [] } = useContractTemplatesQuery();
@@ -51,7 +49,7 @@ export default function ContractGenerationHomePage() {
     const [title, setTitle] = useState("服务合同");
     const [reviewFile, setReviewFile] = useState<File | null>(null);
     const [prompt, setPrompt] = useState("");
-    const [stance, setStance] = useState<(typeof stanceOptions)[number]["value"]>("neutral");
+    const [stance, setStance] = useState<ContractStance>("neutral");
     const [exportType, setExportType] = useState<"contract" | "contract_with_report" | "risk_report">("contract");
     const [variables, setVariables] = useState<Record<string, string>>({});
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -63,7 +61,6 @@ export default function ContractGenerationHomePage() {
     const [rewriteMode, setRewriteMode] = useState<RewriteMode>("reduce_risk");
     const [rewritePreview, setRewritePreview] = useState<{ content: string; reason: string } | null>(null);
     const [message, setMessage] = useState("");
-    const [recentCollapsed, setRecentCollapsed] = useState(false);
     const [dirty, setDirty] = useState(false);
     const [documentRevision, setDocumentRevision] = useState(0);
     const { data: detailTask } = useContractTaskDetailQuery(activeTaskId);
@@ -79,6 +76,16 @@ export default function ContractGenerationHomePage() {
     const canSave = Boolean(activeTask && sections.length > 0 && !isBusy);
     const canReview = Boolean(activeTask && sections.length > 0 && !isBusy);
     const canExport = Boolean(activeTask && sections.length > 0 && !isBusy);
+    const workbenchState = useMemo(() => deriveContractWorkbenchState({
+        mode,
+        configured: Boolean(config?.configured),
+        template: selectedTemplate,
+        variables,
+        prompt,
+        reviewFileName: reviewFile?.name ?? "",
+        task: activeTask,
+        dirty,
+    }), [activeTask, config?.configured, dirty, mode, prompt, reviewFile?.name, selectedTemplate, variables]);
 
     useEffect(() => {
         if (!selectedTemplateId && templates[0]) {
@@ -302,342 +309,117 @@ export default function ContractGenerationHomePage() {
     }
 
     const primaryActionPending = generateMutation.isPending || reviewUploadMutation.isPending || updateMutation.isPending || reviewMutation.isPending || exportMutation.isPending;
+    const visibleSections = activeTask ? sections : draftSections;
+    const selectedSection = visibleSections[selectedSectionIndex];
 
     return (
-        <main className="contract-workbench">
-            <Card className="contract-workbench-header" size="sm">
-                <div className="contract-header-copy">
-                    <p>合同工作台</p>
-                    <h1>合同起草与风险审查</h1>
-                    <span className="contract-flow-note">模板字段 / 文档编辑 / 风险建议 / Word 导出</span>
-                </div>
-                <div className="contract-header-meta">
-                    <div className="contract-header-status">
+        <ContractWorkbenchShell
+            state={workbenchState}
+            intake={
+                <>
+                    <div className="flex flex-wrap items-center gap-1.5 max-sm:grid max-sm:grid-cols-2">
+                        <ContractTemplateDrawer
+                            templates={filteredTemplates}
+                            tasks={taskPage?.items ?? []}
+                            keyword={templateKeyword}
+                            selectedTemplate={selectedTemplate}
+                            onKeywordChange={setTemplateKeyword}
+                            onSelectTemplate={selectTemplate}
+                            onSelectTask={setTask}
+                        />
                         <ModelStatus config={config} />
                         <TaskStatusBadge status={activeTask?.status ?? "draft"} />
-                        {dirty && <Badge variant="outline" className="contract-badge-warning">{activeTask ? "有未保存修改" : "草稿已编辑"}</Badge>}
+                        {dirty && <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">{activeTask ? "未保存" : "草稿"}</Badge>}
                     </div>
-                    <Button className="contract-header-primary" onClick={handlePrimaryAction} disabled={isBusy || primaryActionPending} loading={primaryActionPending}>
-                        {primaryActionText({ mode, activeTask, dirty })}
-                    </Button>
-                </div>
-            </Card>
-
-            {message && <div className="contract-notice">{message}</div>}
-
-            <section className="contract-workbench-grid">
-                <aside className="contract-control-rail">
-                    <Card className="contract-task-card" size="sm">
-                        <CardHeader>
-                            <CardTitle>任务信息</CardTitle>
-                            <CardDescription>填写合同信息，正文会在右侧形成草稿骨架。</CardDescription>
-                            <CardAction>
-                                <Tabs value={mode} onValueChange={(value) => setMode(value as typeof mode)} className="contract-mode-tabs">
-                                    <TabsList>
-                                        <TabsTrigger value="draft">起草</TabsTrigger>
-                                        <TabsTrigger value="review">审查</TabsTrigger>
-                                    </TabsList>
-                                </Tabs>
-                            </CardAction>
-                        </CardHeader>
-                        <CardContent>
-                            {selectedTemplate && <TemplateSummary template={selectedTemplate} />}
-                            <WorkspaceSetup
-                                mode={mode}
-                                title={title}
-                                selectedTemplate={selectedTemplate}
-                                variables={variables}
-                                errors={fieldErrors}
-                                prompt={prompt}
-                                reviewFile={reviewFile}
-                                stance={stance}
-                                exportType={exportType}
-                                onTitleChange={(value) => { setTitle(value); if (activeTask) setDirty(true); }}
-                                onVariablesChange={(nextVariables) => {
-                                    setVariables(nextVariables);
-                                    if (selectedTemplate) setFieldErrors(validateTemplateFields(selectedTemplate, nextVariables));
-                                }}
-                                onPromptChange={setPrompt}
-                                onReviewFileChange={setReviewFile}
-                                onStanceChange={setStance}
-                                onExportTypeChange={setExportType}
-                                onFillExample={() => fillExample(selectedTemplate, setVariables, setTitle, setPrompt)}
-                            />
-                            <div className="contract-submit-panel">
-                                <span>提交后按当前模型配置预扣积分，失败会按账务事实退款。</span>
-                                <Button onClick={handlePrimaryAction} disabled={isBusy || primaryActionPending} loading={primaryActionPending}>
-                                    {primaryActionText({ mode, activeTask, dirty })}
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <TemplateSidebar
-                        templates={filteredTemplates}
-                        keyword={templateKeyword}
+                        <ContractIntakeRail
+                            state={workbenchState}
+                            mode={mode}
+                            onModeChange={setMode}
                         selectedTemplate={selectedTemplate}
-                        tasks={taskPage?.items ?? []}
-                        recentCollapsed={recentCollapsed}
-                        onKeywordChange={setTemplateKeyword}
-                        onSelectTemplate={selectTemplate}
-                        onSelectTask={setTask}
-                        onToggleRecent={() => setRecentCollapsed((value) => !value)}
-                    />
-                </aside>
-
-                <ContractDocumentWorkbench
-                    activeTask={activeTask}
-                    template={selectedTemplate}
-                    title={title}
-                    variables={variables}
-                    sections={activeTask ? sections : draftSections}
-                    documentRevision={documentRevision}
-                    selectedSectionIndex={selectedSectionIndex}
-                    draftEditable={!activeTask}
+                        variables={variables}
+                        errors={fieldErrors}
+                        prompt={prompt}
+                        reviewFile={reviewFile}
+                        stance={stance}
+                        exportType={exportType}
+                        isBusy={isBusy}
+                        primaryActionPending={primaryActionPending}
+                        primaryActionLabel={workbenchState.primaryAction.label}
+                        onPrimaryAction={handlePrimaryAction}
+                        onVariablesChange={(nextVariables) => {
+                            setVariables(nextVariables);
+                            if (selectedTemplate) setFieldErrors(validateTemplateFields(selectedTemplate, nextVariables));
+                        }}
+                        onPromptChange={setPrompt}
+                        onReviewFileChange={setReviewFile}
+                            onStanceChange={(value) => setStance(value as ContractStance)}
+                            onExportTypeChange={setExportType}
+                            onFillExample={() => fillExample(selectedTemplate, setVariables, setTitle, setPrompt)}
+                        />
+                    </>
+                }
+            document={
+                <>
+                    {message && <div className="mb-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm text-foreground">{message}</div>}
+                    <Suspense fallback={<ContractDocumentLoading />}>
+                        <ContractDocumentWorkbench
+                            activeTask={activeTask}
+                            template={selectedTemplate}
+                            title={title}
+                            variables={variables}
+                            sections={activeTask ? sections : draftSections}
+                            documentRevision={documentRevision}
+                            selectedSectionIndex={selectedSectionIndex}
+                            draftEditable={!activeTask}
+                            rewriteMode={rewriteMode}
+                            rewritePreview={rewritePreview}
+                            rewritePending={rewriteMutation.isPending}
+                            versions={versions}
+                            reviewPending={reviewMutation.isPending}
+                            exportType={exportType}
+                            dirty={dirty}
+                            canSave={canSave}
+                            canReview={canReview}
+                            canExport={canExport}
+                            onSelectSection={setSelectedSectionIndex}
+                            onSectionsChange={replaceSections}
+                            onRewriteModeChange={setRewriteMode}
+                            onRewrite={handleRewrite}
+                            onApplyRewrite={applyRewritePreview}
+                            onCancelRewrite={() => setRewritePreview(null)}
+                            onSave={handleSave}
+                            onReview={handleReview}
+                            onExport={handleExport}
+                        />
+                    </Suspense>
+                </>
+            }
+            inspector={
+                <ContractInspector
+                    task={activeTask}
+                    versions={versions}
+                    selectedSection={selectedSection}
                     rewriteMode={rewriteMode}
                     rewritePreview={rewritePreview}
                     rewritePending={rewriteMutation.isPending}
-                    versions={versions}
                     reviewPending={reviewMutation.isPending}
                     exportType={exportType}
                     dirty={dirty}
-                    canSave={canSave}
                     canReview={canReview}
                     canExport={canExport}
-                    onSelectSection={setSelectedSectionIndex}
-                    onSectionsChange={replaceSections}
                     onRewriteModeChange={setRewriteMode}
                     onRewrite={handleRewrite}
                     onApplyRewrite={applyRewritePreview}
                     onCancelRewrite={() => setRewritePreview(null)}
-                    onSave={handleSave}
                     onReview={handleReview}
                     onExport={handleExport}
                     onAcceptRisk={handleAcceptRisk}
                     onIgnoreRisk={handleIgnoreRisk}
+                    onSelectSection={setSelectedSectionIndex}
                     onRestoreVersion={handleRestoreVersion}
                 />
-            </section>
-        </main>
-    );
-}
-
-function TemplateSummary({ template }: { template: ContractTemplate }) {
-    return (
-        <div className="contract-template-summary">
-            <div>
-                <span>当前模板</span>
-                <strong>{template.name}</strong>
-            </div>
-            <dl>
-                <div>
-                    <dt>行业</dt>
-                    <dd>{template.industry}</dd>
-                </div>
-                <div>
-                    <dt>类型</dt>
-                    <dd>{template.contractType}</dd>
-                </div>
-                <div>
-                    <dt>字段</dt>
-                    <dd>{template.fields.length}</dd>
-                </div>
-                <div>
-                    <dt>条款</dt>
-                    <dd>{template.defaultSections.length}</dd>
-                </div>
-            </dl>
-        </div>
-    );
-}
-
-function TemplateSidebar({ templates, keyword, selectedTemplate, tasks, recentCollapsed, onKeywordChange, onSelectTemplate, onSelectTask, onToggleRecent }: { templates: ContractTemplate[]; keyword: string; selectedTemplate?: ContractTemplate; tasks: ContractGenerationTask[]; recentCollapsed: boolean; onKeywordChange: (value: string) => void; onSelectTemplate: (template: ContractTemplate) => void; onSelectTask: (task: ContractGenerationTask) => void; onToggleRecent: () => void }) {
-    return (
-        <Card className="contract-sidebar" size="sm">
-            <CardHeader>
-                <CardTitle>模板</CardTitle>
-                <CardDescription>选择常用合同类型</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Input value={keyword} onChange={(event) => onKeywordChange(event.target.value)} placeholder="搜索模板、行业或类型" />
-                <div className="contract-template-list">
-                    {templates.map((template) => (
-                        <Button
-                            key={template.id}
-                            className={cn("contract-template-item", selectedTemplate?.id === template.id && "is-active")}
-                            onClick={() => onSelectTemplate(template)}
-                            type="button"
-                            variant="outline"
-                        >
-                            <strong>{template.name}</strong>
-                            <span>{template.industry} / {template.contractType}</span>
-                            {template.description && <em>{template.description}</em>}
-                        </Button>
-                    ))}
-                    {templates.length === 0 && <div className="contract-empty">没有匹配模板。</div>}
-                </div>
-                <div className="contract-sidebar-section">
-                    <div className="contract-panel-head is-compact">
-                        <div><h2>最近合同</h2><p>{tasks.length} 个任务</p></div>
-                        <Button variant="ghost" size="sm" onClick={onToggleRecent} type="button">{recentCollapsed ? "展开" : "收起"}</Button>
-                    </div>
-                    {!recentCollapsed && (
-                        <div className="contract-task-list">
-                            {tasks.map((task) => (
-                                <Button key={task.id} className="contract-task-item" onClick={() => onSelectTask(task)} type="button" variant="outline">
-                                    <strong>{task.title}</strong>
-                                    <span>{statusText(task.status)} / {new Date(task.createdAt).toLocaleDateString()}</span>
-                                </Button>
-                            ))}
-                            {tasks.length === 0 && <div className="contract-empty">暂无最近合同。</div>}
-                        </div>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
-
-function WorkspaceSetup(props: {
-    mode: "draft" | "review";
-    title: string;
-    selectedTemplate?: ContractTemplate;
-    variables: Record<string, string>;
-    errors: Record<string, string>;
-    prompt: string;
-    reviewFile: File | null;
-    stance: (typeof stanceOptions)[number]["value"];
-    exportType: "contract" | "contract_with_report" | "risk_report";
-    onTitleChange: (value: string) => void;
-    onVariablesChange: (value: Record<string, string>) => void;
-    onPromptChange: (value: string) => void;
-    onReviewFileChange: (value: File | null) => void;
-    onStanceChange: (value: (typeof stanceOptions)[number]["value"]) => void;
-    onExportTypeChange: (value: "contract" | "contract_with_report" | "risk_report") => void;
-    onFillExample: () => void;
-}) {
-    return (
-        <section className="contract-setup">
-            <div className="contract-setup-head">
-                <div>
-                    <h3>基础信息</h3>
-                    <p>先把合同标题、立场和交付类型定下来，后面的条款会跟着收敛。</p>
-                </div>
-                <Button variant="outline" onClick={props.onFillExample} type="button">填入示例</Button>
-            </div>
-
-            <div className="contract-form-grid contract-setup-grid">
-                <Field label="合同标题" value={props.title} onChange={props.onTitleChange} />
-                <SelectField label="合同立场" value={props.stance} options={stanceOptions} onChange={(value) => props.onStanceChange(value as typeof props.stance)} />
-                <SelectField label="导出类型" value={props.exportType} options={exportTypeOptions} onChange={(value) => props.onExportTypeChange(value as typeof props.exportType)} />
-            </div>
-
-            {props.mode === "draft" && props.selectedTemplate && (
-                <section className="contract-setup-section">
-                    <div className="contract-setup-head is-sub">
-                        <div>
-                            <h3>模板字段</h3>
-                            <p>这些变量会直接写入合同正文，建议先补齐。</p>
-                        </div>
-                    </div>
-                    <TemplateForm template={props.selectedTemplate} variables={props.variables} errors={props.errors} onChange={props.onVariablesChange} />
-                    <FieldShell label="补充要求" wide>
-                        <Textarea value={props.prompt} onChange={(event) => props.onPromptChange(event.target.value)} placeholder="例如：违约责任更严格、付款节点按 30/40/30、争议解决放在上海..." />
-                    </FieldShell>
-                </section>
-            )}
-
-            {props.mode === "review" && (
-                <div className="contract-upload-panel contract-setup-section">
-                    <div className="contract-setup-head is-sub">
-                        <div>
-                            <h3>上传已有合同</h3>
-                            <p>支持 Word、PDF 和文本文件，上传后会先解析再进入审查。</p>
-                        </div>
-                    </div>
-                    <FieldShell label="已有合同文件" wide>
-                        <Input type="file" accept=".doc,.docx,.pdf,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" onChange={(event) => props.onReviewFileChange(event.target.files?.[0] ?? null)} />
-                        <small>{props.reviewFile ? `已选择：${props.reviewFile.name}` : "支持 Word/PDF/文本等可解析文件，文件会先上传到平台后再审查。"}</small>
-                    </FieldShell>
-                </div>
-            )}
-        </section>
-    );
-}
-
-function TemplateForm({ template, variables, errors, onChange }: { template: ContractTemplate; variables: Record<string, string>; errors: Record<string, string>; onChange: (value: Record<string, string>) => void }) {
-    const fieldGroups = groupTemplateFields(template.fields);
-    return (
-        <div className="contract-template-form">
-            {fieldGroups.map((group) => (
-                <section key={group.title} className="contract-field-group">
-                    <div className="contract-field-group-head">
-                        <h4>{group.title}</h4>
-                        <p>{group.description}</p>
-                    </div>
-                    <div className="contract-form-grid">
-                        {group.fields.map((field) => (
-                            <TemplateField key={field.key} field={field} value={variables[field.key] ?? ""} error={errors[field.key]} onChange={(value) => onChange({ ...variables, [field.key]: value })} />
-                        ))}
-                    </div>
-                </section>
-            ))}
-        </div>
-    );
-}
-
-function TemplateField({ field, value, error, onChange }: { field: ContractTemplateField; value: string; error?: string; onChange: (value: string) => void }) {
-    return (
-        <FieldShell label={`${field.label}${field.required ? " *" : ""}`} error={error} wide={field.type === "textarea"}>
-            {field.type === "textarea" ? (
-                <Textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={field.placeholder} />
-            ) : field.type === "select" ? (
-                <Select value={value || EMPTY_SELECT_VALUE} onValueChange={(nextValue) => onChange(nextValue === EMPTY_SELECT_VALUE ? "" : nextValue)}>
-                    <SelectTrigger className="w-full">
-                        <SelectValue placeholder="请选择" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value={EMPTY_SELECT_VALUE}>请选择</SelectItem>
-                        {(field.options ?? []).map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-            ) : (
-                <Input type={field.type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={field.placeholder} />
-            )}
-        </FieldShell>
-    );
-}
-
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
-    return (
-        <FieldShell label={label}>
-            <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
-        </FieldShell>
-    );
-}
-
-function SelectField({ label, value, options, onChange }: { label: string; value: string; options: readonly { value: string; label: string }[]; onChange: (value: string) => void }) {
-    return (
-        <FieldShell label={label}>
-            <Select value={value} onValueChange={onChange}>
-                <SelectTrigger className="w-full">
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    {options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
-                </SelectContent>
-            </Select>
-        </FieldShell>
-    );
-}
-
-function FieldShell({ label, children, error, wide }: { label: string; children: ReactNode; error?: string; wide?: boolean }) {
-    return (
-        <div className={cn("contract-field", wide && "is-wide")}>
-            <Label>{label}</Label>
-            {children}
-            {error && <em>{error}</em>}
-        </div>
+            }
+        />
     );
 }
 
@@ -675,28 +457,24 @@ function buildGenerationPrompt(prompt: string, draftSections: ContractSection[])
 }
 
 function fillExample(template: ContractTemplate | undefined, setVariables: (value: Record<string, string>) => void, setTitle: (value: string) => void, setPrompt: (value: string) => void) {
-    if (!template) return;
-    const values = template.fields.reduce<Record<string, string>>((accumulator, field) => {
+    const fallbackTemplate = {
+        name: "企业服务合同",
+        fields: [
+            { key: "partyA", label: "甲方", required: true, type: "text" as const },
+            { key: "partyB", label: "乙方", required: true, type: "text" as const },
+            { key: "serviceScope", label: "服务范围", required: true, type: "text" as const },
+            { key: "fees", label: "费用与付款", required: true, type: "text" as const },
+            { key: "term", label: "合同期限", required: true, type: "text" as const },
+        ],
+    } satisfies Pick<ContractTemplate, "name" | "fields">;
+    const source = template ?? fallbackTemplate;
+    const values = source.fields.reduce<Record<string, string>>((accumulator, field) => {
         accumulator[field.key] = exampleValue(field.key, field.label, field.options);
         return accumulator;
     }, {});
     setVariables(values);
-    setTitle(`${template.name}（示例）`);
+    setTitle(`${source.name}（示例）`);
     setPrompt("请强化付款节点、验收标准和违约责任，条款表达保持专业、清晰、可执行。");
-}
-
-function groupTemplateFields(fields: ContractTemplateField[]) {
-    const groups = [
-        { title: "当事方", description: "明确合同双方主体信息。", fields: [] as ContractTemplateField[], match: (field: ContractTemplateField) => /甲方|乙方|丙方|委托方|受托方|买方|卖方|出租方|承租方|雇主|劳动者|供应商|客户|party|buyer|seller|tenant|lessor|employer/i.test(`${field.key} ${field.label}`) },
-        { title: "履行与费用", description: "确认时间、周期、金额和付款安排。", fields: [] as ContractTemplateField[], match: (field: ContractTemplateField) => /日期|期限|周期|费用|金额|价格|租金|报酬|付款|支付|结算|验收|date|term|period|fee|price|amount|payment|rent/i.test(`${field.key} ${field.label}`) },
-        { title: "服务与争议", description: "描述服务内容、交付范围和争议解决方式。", fields: [] as ContractTemplateField[], match: (field: ContractTemplateField) => /服务|内容|范围|交付|职责|标准|地点|地址|争议|法院|仲裁|保密|违约|service|scope|deliver|address|dispute|court|arbitration|confidential|breach/i.test(`${field.key} ${field.label}`) },
-        { title: "其他信息", description: "补充模板所需的其他变量。", fields: [] as ContractTemplateField[], match: () => true },
-    ];
-    fields.forEach((field) => {
-        const group = groups.find((item) => item.match(field)) ?? groups[groups.length - 1];
-        group.fields.push(field);
-    });
-    return groups.filter((group) => group.fields.length > 0).map(({ match, ...group }) => group);
 }
 
 function exampleValue(key: string, label: string, options?: string[]) {
@@ -721,12 +499,4 @@ function statusText(status: string) {
 
 function isBusyStatus(status: ContractGenerationStatus | string) {
     return ["pending", "processing", "reviewing", "exporting"].includes(status);
-}
-
-function primaryActionText({ mode, activeTask, dirty }: { mode: "draft" | "review"; activeTask?: ContractGenerationTask | null; dirty: boolean }) {
-    if (!activeTask) return mode === "review" ? "开始审查" : "生成合同";
-    if (isBusyStatus(activeTask.status)) return `${statusText(activeTask.status)}...`;
-    if (dirty) return "保存修改";
-    if (activeTask.riskFindings.length > 0) return "导出 Word";
-    return "风险审查";
 }

@@ -10,20 +10,21 @@ const moduleSource = readFileSync(
     new URL("../src/api/modules/contract-generation/contract-generation.module.ts", import.meta.url),
     "utf8",
 );
+const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
+const readmeSource = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
-test("contract generation uses ai-sdk only through main-system model resolution", () => {
-    const resolverIndex = serviceSource.indexOf("private async resolveLanguageModel(model: AiModel)");
-    const adapterIndex = serviceSource.indexOf("this.publicAiModelService.getProviderAdapter(model.id, providerConfig)");
+test("contract generation uses the extension SDK text generation entrypoint", () => {
     const generateCalls = serviceSource.match(/generateText\(\{/g) ?? [];
-    const resolvedModelCalls = serviceSource.match(/model:\s*await this\.resolveLanguageModel\(model\)/g) ?? [];
+    const sdkGenerateCalls = serviceSource.match(/this\.publicAiModelService\.generateText\(/g) ?? [];
 
-    assert.ok(serviceSource.includes('from "@buildingai/ai-sdk"'));
+    assert.equal(serviceSource.includes('from "@buildingai/ai-sdk"'), false);
+    assert.equal(packageSource.includes("@buildingai/ai-sdk"), false);
     assert.ok(serviceSource.includes("PublicAiModelService"));
-    assert.ok(resolverIndex > 0);
-    assert.ok(serviceSource.includes("normalizeProviderConfig(await this.publicAiModelService.getProviderConfig(model.id))"));
-    assert.ok(adapterIndex > resolverIndex);
-    assert.ok(generateCalls.length > 0);
-    assert.equal(resolvedModelCalls.length, generateCalls.length);
+    assert.equal(serviceSource.includes("private async resolveLanguageModel(model: AiModel)"), false);
+    assert.equal(serviceSource.includes("normalizeProviderConfig(await this.publicAiModelService.getProviderConfig"), false);
+    assert.equal(serviceSource.includes("this.publicAiModelService.getProviderAdapter("), false);
+    assert.equal(generateCalls.length, 0);
+    assert.ok(sdkGenerateCalls.length > 0);
 });
 
 test("contract console model list uses the extension SDK instead of a direct AiModel repository", () => {
@@ -31,4 +32,12 @@ test("contract console model list uses the extension SDK instead of a direct AiM
     assert.equal(serviceSource.includes("@InjectRepository(AiModel)"), false);
     assert.equal(serviceSource.includes("modelRepo"), false);
     assert.equal(moduleSource.includes("AiModel"), false);
+});
+
+test("contract README documents PublicAiModelService as the provider boundary", () => {
+    assert.match(readmeSource, /PublicAiModelService/);
+    assert.match(readmeSource, /generateText\(\)/);
+    assert.match(readmeSource, /主系统边界内复用 Provider\/Secret 归一化/);
+    assert.doesNotMatch(readmeSource, /获取模型、Provider Config 和 adapter/);
+    assert.doesNotMatch(readmeSource, /使用 `normalizeProviderConfig\(\)` 读取主站 Secret 字段别名/);
 });

@@ -17,6 +17,7 @@ import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
+import { safeJsonParse } from "@buildingai/stores";
 
 import { useAdminContractTemplatesQuery, useCreateAdminContractTemplateMutation, useDeleteAdminContractTemplateMutation, useResetBuiltinContractTemplatesMutation, useUpdateAdminContractTemplateMutation } from "../../services/console";
 import type { ContractTemplate, UpsertContractTemplateParams } from "../../services/types";
@@ -64,12 +65,9 @@ export default function ContractTemplatesConsolePage() {
     }
 
     async function handleSubmit() {
-        let fields: UpsertContractTemplateParams["fields"];
-        try {
-            fields = JSON.parse(fieldsText);
-            if (!Array.isArray(fields)) throw new Error("字段配置必须是 JSON 数组");
-        } catch (error) {
-            setMessage(error instanceof Error ? error.message : "字段配置 JSON 不正确");
+        const fields = parseFields(fieldsText);
+        if (!fields) {
+            setMessage("字段配置必须是 JSON 数组");
             return;
         }
         const params: UpsertContractTemplateParams = { ...form, fields, defaultSections: sectionsText.split("\n").map((item) => item.trim()).filter(Boolean) };
@@ -98,12 +96,13 @@ export default function ContractTemplatesConsolePage() {
     }
 
     function formatFieldsJson() {
-        try {
-            setFieldsText(JSON.stringify(JSON.parse(fieldsText), null, 2));
-            setMessage("字段 JSON 已格式化");
-        } catch (error) {
-            setMessage(error instanceof Error ? error.message : "字段配置 JSON 不正确");
+        const fields = parseFields(fieldsText);
+        if (!fields) {
+            setMessage("字段配置必须是 JSON 数组");
+            return;
         }
+        setFieldsText(JSON.stringify(fields, null, 2));
+        setMessage("字段 JSON 已格式化");
     }
 
     return (
@@ -236,6 +235,11 @@ export default function ContractTemplatesConsolePage() {
 
 function toForm(template: ContractTemplate): UpsertContractTemplateParams {
     return { name: template.name, industry: template.industry, contractType: template.contractType, description: template.description, fields: template.fields, defaultSections: template.defaultSections, promptTemplate: template.promptTemplate ?? "", isActive: template.isActive ?? true, sortOrder: template.sortOrder ?? 0 };
+}
+
+function parseFields(value: string) {
+    const fields = safeJsonParse<UpsertContractTemplateParams["fields"]>(value);
+    return Array.isArray(fields) ? fields : undefined;
 }
 
 function Field({ label, type = "text", value, onChange }: { label: string; type?: string; value: string; onChange: (value: string) => void }) {

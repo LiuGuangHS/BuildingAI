@@ -1,4 +1,4 @@
-import type { ContractSection, ContractTemplate, ContractTemplateField } from "../../services/types";
+import type { ContractRiskFinding, ContractSection, ContractTemplate, ContractTemplateField } from "../../services/types";
 
 export type DraftCheckItem = {
     key: string;
@@ -9,6 +9,8 @@ export type DraftCheckItem = {
 export type DocumentSection = ContractSection & {
     source: "task" | "draft" | "template" | "placeholder";
 };
+
+const riskRank: Record<ContractRiskFinding["level"], number> = { low: 1, medium: 2, high: 3 };
 
 export function buildDocumentSections(options: {
     sections: ContractSection[];
@@ -161,6 +163,18 @@ export function getCompletionSummary(template: ContractTemplate | undefined, var
         completed,
         missing,
         requiredTotal: required.length,
+    };
+}
+
+export function getSectionRiskAnnotation(sectionTitle: string, risks: ContractRiskFinding[]) {
+    const risk = risks
+        .filter((item) => sectionTitle.includes(item.sectionTitle) || item.sectionTitle.includes(sectionTitle))
+        .sort((left, right) => riskRank[right.level] - riskRank[left.level])[0];
+    if (!risk) return { label: "AI 已识别", level: undefined, issue: "" };
+    return {
+        label: risk.level === "high" ? "高风险" : risk.level === "medium" ? "中风险" : "低风险",
+        level: risk.level,
+        issue: risk.issue,
     };
 }
 
