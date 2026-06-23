@@ -1,8 +1,32 @@
 import { defineRouteOption } from "@buildingai/web-core";
+import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
+import { lazy, Suspense, type ReactNode } from "react";
 
 import packageJson from "./../../package.json";
-import AstrologyFortuneConsolePage from "./pages/console";
 import AstrologyFortuneHomePage from "./pages";
+
+const AstrologyFortuneConsolePage = lazy(() => import("./pages/console"));
+
+function RouteLoading() {
+    return (
+        <div className="mx-auto grid w-full max-w-[1480px] gap-3 p-3 md:p-4" role="status" aria-live="polite">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-64 w-full rounded-lg" />
+        </div>
+    );
+}
+
+function LazyPage({ children }: { children: ReactNode }) {
+    return <Suspense fallback={<RouteLoading />}>{children}</Suspense>;
+}
+
+function ConsoleRoute({ section }: { section: "overview" | "settings" | "reports" | "tasks" | "profiles" }) {
+    return (
+        <LazyPage>
+            <AstrologyFortuneConsolePage section={section} />
+        </LazyPage>
+    );
+}
 
 export const routeOption = defineRouteOption({
     base: `extension/${packageJson.name}`,
@@ -43,23 +67,23 @@ export const routeOption = defineRouteOption({
     consoleRoutes: [
         {
             index: true,
-            element: <AstrologyFortuneConsolePage section="overview" />,
+            element: <ConsoleRoute section="overview" />,
         },
         {
             path: "settings",
-            element: <AstrologyFortuneConsolePage section="settings" />,
+            element: <ConsoleRoute section="settings" />,
         },
         {
             path: "reports",
-            element: <AstrologyFortuneConsolePage section="reports" />,
+            element: <ConsoleRoute section="reports" />,
         },
         {
             path: "tasks",
-            element: <AstrologyFortuneConsolePage section="tasks" />,
+            element: <ConsoleRoute section="tasks" />,
         },
         {
             path: "profiles",
-            element: <AstrologyFortuneConsolePage section="profiles" />,
+            element: <ConsoleRoute section="profiles" />,
         },
     ],
 });

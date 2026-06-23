@@ -2,16 +2,30 @@ import { BaseController } from "@buildingai/base";
 import { ExtensionWebController } from "@buildingai/core/decorators";
 import { type UserPlayground } from "@buildingai/db";
 import { Playground } from "@buildingai/decorators/playground.decorator";
+import { ExtensionRateLimitService, type ExtensionRateLimitWindow } from "@buildingai/extension-sdk";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
 import { CreateAstrologyProfileDto, GenerateAstrologyReportDto, QueryAstrologyProfileDto, QueryAstrologyReportDto, UpdateAstrologyProfileDto, UpdateFavoriteDto, UpdateReportFeedbackDto } from "../../dto";
 import { AstrologyFortuneService } from "../../services";
 
+const ASTROLOGY_RATE_LIMIT_WINDOWS: ExtensionRateLimitWindow[] = [
+    { suffix: "short", ttlSeconds: 10, limit: 5 },
+    { suffix: "minute", ttlSeconds: 60, limit: 20 },
+];
+
 @ExtensionWebController("astrology-fortune")
 export class AstrologyFortuneWebController extends BaseController {
-    constructor(private readonly astrologyFortuneService: AstrologyFortuneService) {
+    constructor(
+        private readonly astrologyFortuneService: AstrologyFortuneService,
+        private readonly rateLimitService: ExtensionRateLimitService,
+    ) {
         super();
+    }
+
+    @Get("generation-status")
+    getPublicGenerationStatus() {
+        return this.astrologyFortuneService.getPublicGenerationStatus();
     }
 
     @Post("profiles")
@@ -41,6 +55,7 @@ export class AstrologyFortuneWebController extends BaseController {
 
     @Post("reports/generate")
     async generateReport(@Playground() user: UserPlayground, @Body() dto: GenerateAstrologyReportDto) {
+        await this.assertRateLimit("report-generation", user.id);
         return this.toPublicReport(await this.astrologyFortuneService.generateReport(user.id, dto));
     }
 
@@ -71,6 +86,16 @@ export class AstrologyFortuneWebController extends BaseController {
     @Delete("reports/:id")
     deleteReport(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
         return this.astrologyFortuneService.deleteReport(user.id, id);
+    }
+
+    private async assertRateLimit(action: "report-generation", userId: string) {
+        await this.rateLimitService.assertAllowed({
+            namespace: "echoflow-astrology-fortune",
+            action,
+            subject: userId,
+            windows: ASTROLOGY_RATE_LIMIT_WINDOWS,
+            message: "请求过于频繁，请稍后重试",
+        });
     }
 
     private toPublicReport(report: Awaited<ReturnType<AstrologyFortuneService["generateReport"]>> | Awaited<ReturnType<AstrologyFortuneService["listUserReports"]>>["items"][number] | Awaited<ReturnType<AstrologyFortuneService["getReportDetail"]>> | Awaited<ReturnType<AstrologyFortuneService["updateFavorite"]>> | Awaited<ReturnType<AstrologyFortuneService["updateReportFeedback"]>>) {

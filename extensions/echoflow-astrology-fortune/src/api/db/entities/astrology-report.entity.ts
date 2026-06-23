@@ -33,9 +33,17 @@ export type AstrologyReportResult = {
         direction?: string;
         timeRange?: string;
     };
+    evidence?: Array<{ source: string; insight: string; confidence?: "low" | "medium" | "high" }>;
     sections?: Array<{ heading: string; content: string }>;
-    actions?: string[];
-    warnings?: string[];
+    actions?: Array<string | { item: string; reason?: string; timebox?: string }>;
+    warnings?: Array<string | { title: string; detail?: string }>;
+    reviewChecklist?: Array<{
+        item: string;
+        why: string;
+        evidenceSource: string;
+        timebox?: string;
+    }>;
+    followUps?: string[];
     closing?: string;
 };
 

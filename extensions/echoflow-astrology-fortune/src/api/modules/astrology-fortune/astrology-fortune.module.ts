@@ -1,10 +1,11 @@
+import { RedisModule, RedisService } from "@buildingai/cache";
 import { QueueModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog } from "@buildingai/db/entities";
 import {
     AiPublicModule,
     ExtensionBillingModule,
     ExtensionNotificationModule,
+    ExtensionRateLimitService,
 } from "@buildingai/extension-sdk";
 import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
@@ -18,15 +19,24 @@ import { ASTROLOGY_REPORT_QUEUE } from "./services/astrology-queue.constants";
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([AstrologyFortuneSetting, AstrologyProfile, AstrologyReport, AccountLog]),
+        TypeOrmModule.forFeature([AstrologyFortuneSetting, AstrologyProfile, AstrologyReport]),
         AiPublicModule,
         ExtensionBillingModule,
         ExtensionNotificationModule,
+        RedisModule,
         QueueModule,
         BullModule.registerQueue({ name: ASTROLOGY_REPORT_QUEUE }),
     ],
     controllers: [AstrologyFortuneWebController, AstrologyFortuneConsoleController],
-    providers: [AstrologyFortuneService, AstrologyReportProcessor],
+    providers: [
+        AstrologyFortuneService,
+        {
+            provide: ExtensionRateLimitService,
+            useFactory: (redisService: RedisService) => new ExtensionRateLimitService(redisService),
+            inject: [RedisService],
+        },
+        AstrologyReportProcessor,
+    ],
     exports: [AstrologyFortuneService],
 })
 export class AstrologyFortuneModule {}

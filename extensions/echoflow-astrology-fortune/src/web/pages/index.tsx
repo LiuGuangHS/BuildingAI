@@ -1,4 +1,10 @@
 import { useCopy } from "@buildingai/hooks";
+import {
+    Alert,
+    AlertDescription,
+    AlertTitle,
+} from "@buildingai/ui/components/ui/alert";
+import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Checkbox } from "@buildingai/ui/components/ui/checkbox";
 import {
@@ -10,6 +16,7 @@ import {
 } from "@buildingai/ui/components/ui/dialog";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
+import { Progress } from "@buildingai/ui/components/ui/progress";
 import {
     Select,
     SelectContent,
@@ -19,14 +26,15 @@ import {
 } from "@buildingai/ui/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@buildingai/ui/components/ui/tabs";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
-import { TimeText } from "@buildingai/ui/components/ui/time-text";
 import { usePagination } from "@buildingai/ui/hooks/use-pagination";
+import { cn } from "@buildingai/ui/lib/utils";
 import {
     AlertCircle,
     BookOpen,
     CalendarDays,
     Coins,
     Copy,
+    Download,
     FileText,
     Heart,
     Library,
@@ -41,7 +49,7 @@ import {
     Users,
     Wand2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -53,6 +61,7 @@ import {
     type ReportIntent,
 } from "../constants/report-types";
 import {
+    useAstrologyGenerationStatusQuery,
     useAstrologyProfilesQuery,
     useAstrologyReportsQuery,
     useCreateAstrologyProfileMutation,
@@ -91,10 +100,103 @@ type GenerateOverride = {
     sourceReportId?: string;
 };
 
+type ReportFeedbackHandler = (
+    report: AstrologyReport,
+    rating: UpdateReportFeedbackParams["rating"],
+    note?: UpdateReportFeedbackParams["note"],
+) => void;
+type ReportActionItem = NonNullable<AstrologyReport["result"]>["actions"][number];
+type ReportWarningItem = NonNullable<AstrologyReport["result"]>["warnings"][number];
+
+type DailyFocusOption = {
+    label: string;
+    focusArea: string;
+    state: string;
+    question: string;
+};
+
+type InsightScopeItem = {
+    title: string;
+    text: string;
+};
+
 const defaultIntent = reportIntents[0] as ReportIntent;
 const dailyIntent = reportIntents.find((item) => item.value === "daily") ?? defaultIntent;
 const relationshipIntent =
     reportIntents.find((item) => item.value === "compatibility") ?? defaultIntent;
+
+const dailyFocusOptions: DailyFocusOption[] = [
+    {
+        label: "综合",
+        focusArea: "今日综合运势",
+        state: "想知道今天适合推进什么",
+        question: "今天我最应该把注意力放在哪里？",
+    },
+    {
+        label: "事业",
+        focusArea: "今日事业节奏",
+        state: "今天有工作推进、沟通或选择需要处理",
+        question: "今天我在工作上应该先推进什么、暂时避开什么？",
+    },
+    {
+        label: "感情",
+        focusArea: "今日感情互动",
+        state: "想看今天适合怎样表达、靠近或保持距离",
+        question: "今天我在感情互动里适合主动一点，还是先观察？",
+    },
+    {
+        label: "财富",
+        focusArea: "今日财富与资源",
+        state: "想判断今天适不适合花钱、谈资源或做财务决定",
+        question: "今天我在钱、资源和机会上需要注意什么？",
+    },
+    {
+        label: "情绪",
+        focusArea: "今日情绪能量",
+        state: "想知道今天如何稳定状态、避免内耗",
+        question: "今天我最容易被什么影响情绪，应该怎样调整？",
+    },
+];
+
+const relationshipScenes = ["暧昧", "恋爱", "复合", "婚姻", "合作"];
+
+const intentQuestionTemplates: Partial<Record<AstrologyReportType, string[]>> = {
+    daily: [
+        "今天最值得优先推进的一件事是什么？",
+        "今天我需要避开什么误判或沟通方式？",
+        "今天有哪些信号说明方向是对的？",
+    ],
+    love: [
+        "我和对方现在最需要处理的关系卡点是什么？",
+        "近期适合主动沟通，还是先观察对方反应？",
+        "我在感情里反复出现的模式是什么？",
+    ],
+    career: [
+        "这周我在工作上最该争取什么机会？",
+        "当前工作机会适合继续投入吗？",
+        "我应该如何调整事业节奏和优先级？",
+    ],
+    wealth: [
+        "近期我在花钱和资源配置上要注意什么？",
+        "现在适合推进某个赚钱计划吗？",
+        "哪些风险会影响我的财务判断？",
+    ],
+    compatibility: [
+        "我们之间的吸引力和冲突点分别是什么？",
+        "这段关系适合继续推进到下一步吗？",
+        "我应该用什么方式和对方沟通更有效？",
+    ],
+    decision: [
+        "要不要继续推进这段关系？",
+        "这份工作机会现在适合我吗？",
+        "未来一周我应该先处理什么？",
+    ],
+    personality: [
+        "我的核心性格优势和盲点是什么？",
+        "我适合怎样的工作和关系节奏？",
+        "哪些情绪模式最容易影响我的选择？",
+    ],
+};
 
 const viewOptions: Array<{
     value: WorkView;
@@ -125,7 +227,7 @@ const defaultPartner: PartnerInput = {
     birthTime: "",
     birthPlace: "",
     zodiacSign: "",
-    relationshipStatus: "暧昧中",
+    relationshipStatus: "暧昧",
 };
 
 const HISTORY_PAGE_SIZE = 12;
@@ -137,6 +239,7 @@ export default function AstrologyFortuneHomePage() {
     const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
     const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
     const [reportType, setReportType] = useState<AstrologyReportType>("daily");
+    const [dailyFocus, setDailyFocus] = useState(dailyFocusOptions[0]);
     const [focusArea, setFocusArea] = useState(defaultIntent.focusArea);
     const [currentState, setCurrentState] = useState(defaultIntent.currentState);
     const [question, setQuestion] = useState(defaultIntent.question);
@@ -148,6 +251,7 @@ export default function AstrologyFortuneHomePage() {
     const [historyPage, setHistoryPage] = useState(1);
 
     const profilesQuery = useAstrologyProfilesQuery();
+    const generationStatus = useAstrologyGenerationStatusQuery();
     const reportsQuery = useAstrologyReportsQuery({
         page: historyPage,
         pageSize: HISTORY_PAGE_SIZE,
@@ -173,24 +277,27 @@ export default function AstrologyFortuneHomePage() {
     const latestCompatibilityReport = reports.find(
         (item) => item.reportType === "compatibility" && item.status === "success" && item.result,
     );
+    const followUpSourceReport = reports.find((item) => item.id === followUpSourceReportId) ?? null;
     const currentReport = activeReport ?? latestSuccessfulReport ?? null;
     const currentIntent = reportIntents.find((item) => item.value === reportType) ?? defaultIntent;
     const busy =
         createProfileMutation.isPending ||
         updateProfileMutation.isPending ||
         generateReportMutation.isPending;
-    const profileStats = useMemo(
-        () => ({
-            total: profiles.length,
-            favoriteReports: reports.filter((item) => item.isFavorite).length,
-        }),
-        [profiles.length, reports],
-    );
     const profileCompletion = useMemo(
         () => calculateProfileCompletion(selectedProfile ?? profileForm),
         [selectedProfile, profileForm],
     );
+    const toolbarIntent =
+        activeView === "relationship"
+            ? relationshipIntent
+            : activeView === "today"
+              ? dailyIntent
+              : currentIntent;
     const dataUnavailable = profilesQuery.isError || reportsQuery.isError;
+    const generationDisabled = generationStatus.data?.canGenerate === false;
+    const generationUnavailableReason =
+        generationStatus.data?.unavailableReason || "当前生成服务暂不可用，请稍后再试。";
     const historyPagination = usePagination({
         total: reportsQuery.data?.total ?? 0,
         pageSize: reportsQuery.data?.pageSize ?? HISTORY_PAGE_SIZE,
@@ -277,6 +384,10 @@ export default function AstrologyFortuneHomePage() {
 
     async function handleGenerateReport(event?: FormEvent, override?: GenerateOverride) {
         event?.preventDefault();
+        if (generationDisabled) {
+            toast.error(generationUnavailableReason);
+            return;
+        }
         const intent = override?.intent ?? currentIntent;
         try {
             const profile =
@@ -308,6 +419,10 @@ export default function AstrologyFortuneHomePage() {
     }
 
     async function handleRegenerate(report: AstrologyReport) {
+        if (generationDisabled) {
+            toast.error(generationUnavailableReason);
+            return;
+        }
         const intent =
             reportIntents.find((item) => item.value === report.reportType) ?? currentIntent;
         selectIntent(intent);
@@ -340,8 +455,25 @@ export default function AstrologyFortuneHomePage() {
     }
 
     async function copyReport(report: AstrologyReport) {
-        await copy(report.resultText || report.result?.summary || "");
+        await copy(getReportExportText(report));
         toast.success("报告内容已复制");
+    }
+
+    function downloadReport(report: AstrologyReport) {
+        const text = getReportExportText(report);
+        if (!text) {
+            toast.error("暂无可下载的报告内容");
+            return;
+        }
+        const filename = `${(report.result?.title || reportLabel(report.reportType)).replace(/[\\/:*?"<>|]/g, "-")}.txt`;
+        const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+        toast.success("报告文本已下载");
     }
 
     function prepareFollowUp(report: AstrologyReport, prompt: string) {
@@ -374,11 +506,12 @@ export default function AstrologyFortuneHomePage() {
     async function handleFeedback(
         report: AstrologyReport,
         rating: UpdateReportFeedbackParams["rating"],
+        note?: UpdateReportFeedbackParams["note"],
     ) {
         try {
             const updatedReport = await feedbackMutation.mutateAsync({
                 reportId: report.id,
-                params: { rating },
+                params: { rating, note },
             });
             if (activeReport?.id === updatedReport.id) setActiveReport(updatedReport);
             if (detailReport?.id === updatedReport.id) setDetailReport(updatedReport);
@@ -394,44 +527,56 @@ export default function AstrologyFortuneHomePage() {
     }
 
     return (
-        <main className="astro-shell">
-            <style>{styles}</style>
-            <section className="astro-page">
-                <AppHeader
+        <main className="w-full overflow-x-hidden text-foreground">
+            <section className="w-full space-y-3">
+                <PluginBusinessToolbar
+                    activeView={activeView}
+                    intent={toolbarIntent}
                     profile={selectedProfile}
-                    profileStats={profileStats}
-                    reportCount={reportsQuery.data?.total ?? reports.length}
                     report={currentReport}
                     completion={profileCompletion}
+                    onChangeView={setActiveView}
                     onOpenProfiles={() => setActiveView("profiles")}
                 />
 
                 {dataUnavailable && <DataStatusNotice />}
 
-                <WorkTabs activeView={activeView} onChange={setActiveView} />
-
                 {activeView === "today" && (
                     <TodayView
                         profile={selectedProfile}
                         completion={profileCompletion}
+                        dailyFocus={dailyFocus}
+                        currentState={currentState}
+                        question={question}
                         report={
                             activeReport?.reportType === "daily"
                                 ? activeReport
                                 : (latestDailyReport ?? currentReport)
                         }
                         busy={busy}
+                        generationDisabled={generationDisabled}
+                        generationUnavailableReason={generationUnavailableReason}
+                        onDailyFocusChange={(option) => {
+                            setDailyFocus(option);
+                            setFocusArea(option.focusArea);
+                            setCurrentState(option.state);
+                            setQuestion(option.question);
+                        }}
+                        onCurrentStateChange={setCurrentState}
+                        onQuestionChange={setQuestion}
                         onGenerate={() =>
                             handleGenerateReport(undefined, {
                                 intent: dailyIntent,
-                                focusArea: dailyIntent.focusArea,
-                                currentState: currentState || dailyIntent.currentState,
-                                question: question || dailyIntent.question,
+                                focusArea: dailyFocus.focusArea,
+                                currentState: currentState || dailyFocus.state,
+                                question: question || dailyFocus.question,
                             })
                         }
                         onOpenProfile={() => setActiveView("profiles")}
                         onOpenReport={setDetailReport}
                         onFavorite={handleFavorite}
                         onCopy={copyReport}
+                        onDownload={downloadReport}
                         onDelete={handleDeleteReport}
                         onRegenerate={handleRegenerate}
                         onFollowUp={prepareFollowUp}
@@ -440,7 +585,7 @@ export default function AstrologyFortuneHomePage() {
                 )}
 
                 {activeView === "ask" && (
-                    <section className="work-grid">
+                    <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,.96fr)]">
                         <ReportComposer
                             intent={currentIntent}
                             intents={reportIntents}
@@ -451,16 +596,20 @@ export default function AstrologyFortuneHomePage() {
                             currentState={currentState}
                             question={question}
                             partner={partner}
+                            followUpSourceReport={followUpSourceReport}
                             busy={busy}
                             onFocusAreaChange={setFocusArea}
                             onCurrentStateChange={setCurrentState}
                             onQuestionChange={setQuestion}
                             onPartnerChange={setPartner}
                             onIntentChange={selectIntent}
+                            onClearFollowUpSource={() => setFollowUpSourceReportId(null)}
                             onSubmit={(event) => handleGenerateReport(event)}
                             onOpenProfiles={() => setActiveView("profiles")}
+                            generationDisabled={generationDisabled}
+                            generationUnavailableReason={generationUnavailableReason}
                         />
-                        <div className="side-stack">
+                        <div className="grid gap-3">
                             <GenerationValuePanel
                                 intent={currentIntent}
                                 profile={selectedProfile}
@@ -474,6 +623,7 @@ export default function AstrologyFortuneHomePage() {
                                 report={currentReport}
                                 onFavorite={handleFavorite}
                                 onCopy={copyReport}
+                                onDownload={downloadReport}
                                 onOpen={setDetailReport}
                                 onDelete={handleDeleteReport}
                                 onRegenerate={handleRegenerate}
@@ -485,11 +635,13 @@ export default function AstrologyFortuneHomePage() {
                 )}
 
                 {activeView === "relationship" && (
-                    <section className="work-grid">
+                    <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,.96fr)]">
                         <RelationshipPanel
                             partner={partner}
                             profile={selectedProfile}
                             busy={busy}
+                            generationDisabled={generationDisabled}
+                            generationUnavailableReason={generationUnavailableReason}
                             onPartnerChange={setPartner}
                             onOpenProfiles={() => setActiveView("profiles")}
                             onGenerate={() =>
@@ -501,7 +653,7 @@ export default function AstrologyFortuneHomePage() {
                                 })
                             }
                         />
-                        <div className="side-stack">
+                        <div className="grid gap-3">
                             <GenerationValuePanel
                                 intent={relationshipIntent}
                                 profile={selectedProfile}
@@ -517,6 +669,7 @@ export default function AstrologyFortuneHomePage() {
                                 }
                                 onFavorite={handleFavorite}
                                 onCopy={copyReport}
+                                onDownload={downloadReport}
                                 onOpen={setDetailReport}
                                 onDelete={handleDeleteReport}
                                 onRegenerate={handleRegenerate}
@@ -544,7 +697,7 @@ export default function AstrologyFortuneHomePage() {
                 )}
 
                 {activeView === "reports" && (
-                    <section className="work-grid">
+                    <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,.96fr)]">
                         <HistoryPanel
                             reports={reports}
                             total={reportsQuery.data?.total ?? 0}
@@ -557,6 +710,7 @@ export default function AstrologyFortuneHomePage() {
                             report={currentReport}
                             onFavorite={handleFavorite}
                             onCopy={copyReport}
+                            onDownload={downloadReport}
                             onOpen={setDetailReport}
                             onDelete={handleDeleteReport}
                             onRegenerate={handleRegenerate}
@@ -571,6 +725,7 @@ export default function AstrologyFortuneHomePage() {
                 report={detailReport}
                 onClose={() => setDetailReport(null)}
                 onCopy={copyReport}
+                onDownload={downloadReport}
                 onFavorite={handleFavorite}
                 onDelete={handleDeleteReport}
                 onRegenerate={handleRegenerate}
@@ -583,32 +738,34 @@ export default function AstrologyFortuneHomePage() {
 
 function DataStatusNotice() {
     return (
-        <div className="data-status">
+        <div className="mb-3 flex items-center gap-2 rounded-md border bg-muted p-3 text-xs text-muted-foreground">
             <AlertCircle size={15} />
             <span>本地数据暂不可用，页面已切换为空状态。生成和保存需要主服务连接正常。</span>
         </div>
     );
 }
 
-function AppHeader({
+function PluginBusinessToolbar({
+    activeView,
+    intent,
     profile,
-    profileStats,
-    reportCount,
     report,
     completion,
+    onChangeView,
     onOpenProfiles,
 }: {
+    activeView: WorkView;
+    intent: ReportIntent;
     profile: AstrologyProfile | null;
-    profileStats: { total: number; favoriteReports: number };
-    reportCount: number;
     report: AstrologyReport | null;
     completion: ProfileCompletion;
+    onChangeView: (view: WorkView) => void;
     onOpenProfiles: () => void;
 }) {
     return (
-        <header className="app-header">
+        <header className="sticky top-0 z-10 mb-3 grid gap-3 border-b bg-background/95 py-3 backdrop-blur lg:grid-cols-[minmax(280px,.9fr)_minmax(0,1.1fr)]">
             <div
-                className="header-panel"
+                className="min-w-0 cursor-pointer rounded-md p-2 text-left hover:bg-muted/60"
                 role="button"
                 tabIndex={0}
                 onClick={onOpenProfiles}
@@ -616,7 +773,7 @@ function AppHeader({
                     if (event.key === "Enter") onOpenProfiles();
                 }}
             >
-                <div className="profile-main">
+                <div className="flex min-w-0 items-center gap-2">
                     <UserRound size={16} />
                     <strong>{profile?.name || "未创建档案"}</strong>
                     <span>
@@ -625,17 +782,15 @@ function AppHeader({
                             : "生成前先保存基础信息"}
                     </span>
                 </div>
-                <div className="header-stats">
+                <div className="mt-2 flex flex-wrap gap-1.5">
                     <span>完整度 {completion.percent}%</span>
-                    <span>档案 {profileStats.total}</span>
-                    <span>报告 {reportCount}</span>
-                    {profileStats.favoriteReports > 0 && (
-                        <span>收藏 {profileStats.favoriteReports}</span>
-                    )}
+                    <span>{priceGroupLabel(intent.priceGroup)}</span>
+                    <span>失败退款</span>
                     <span>{report ? statusLabel(report.status) : "未生成"}</span>
                     <b>{profile ? "完善" : "创建"}</b>
                 </div>
             </div>
+            <WorkTabs activeView={activeView} onChange={onChangeView} />
         </header>
     );
 }
@@ -651,16 +806,15 @@ function WorkTabs({
         <Tabs
             value={activeView}
             onValueChange={(value) => onChange(value as WorkView)}
-            className="work-tabs"
+            className="min-w-0"
         >
-            <TabsList className="work-tabs-list" variant="line">
+            <TabsList className="grid w-full grid-cols-5 justify-start border-b bg-transparent max-[760px]:overflow-visible min-[761px]:flex min-[761px]:overflow-x-auto [&::-webkit-scrollbar]:hidden" variant="line">
                 {viewOptions.map((item) => {
                     const Icon = item.icon;
                     return (
-                        <TabsTrigger key={item.value} value={item.value} className="work-tab">
+                        <TabsTrigger key={item.value} value={item.value} className="h-10 min-w-0 gap-1.5 whitespace-nowrap rounded-none px-2 text-muted-foreground data-[state=active]:text-foreground max-[760px]:[&_svg]:hidden">
                             <Icon size={17} />
                             <span>{item.label}</span>
-                            <small>{item.description}</small>
                         </TabsTrigger>
                     );
                 })}
@@ -672,8 +826,16 @@ function WorkTabs({
 function TodayView({
     profile,
     completion,
+    dailyFocus,
+    currentState,
+    question,
     report,
     busy,
+    generationDisabled,
+    generationUnavailableReason,
+    onDailyFocusChange,
+    onCurrentStateChange,
+    onQuestionChange,
     onGenerate,
     onOpenProfile,
     onOpenReport,
@@ -686,8 +848,16 @@ function TodayView({
 }: {
     profile: AstrologyProfile | null;
     completion: ProfileCompletion;
+    dailyFocus: DailyFocusOption;
+    currentState: string;
+    question: string;
     report: AstrologyReport | null;
     busy: boolean;
+    generationDisabled: boolean;
+    generationUnavailableReason: string;
+    onDailyFocusChange: (option: DailyFocusOption) => void;
+    onCurrentStateChange: (value: string) => void;
+    onQuestionChange: (value: string) => void;
     onGenerate: () => void;
     onOpenProfile: () => void;
     onOpenReport: (report: AstrologyReport) => void;
@@ -696,22 +866,37 @@ function TodayView({
     onDelete: (id: string) => void;
     onRegenerate: (report: AstrologyReport) => void;
     onFollowUp: (report: AstrologyReport, prompt: string) => void;
-    onFeedback: (report: AstrologyReport, rating: UpdateReportFeedbackParams["rating"]) => void;
+    onFeedback: ReportFeedbackHandler;
 }) {
     return (
-        <section className="today-layout">
-            <div className="daily-panel">
-                <div className="daily-head">
+        <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.04fr)_minmax(300px,.96fr)]">
+            <div className="rounded-md border bg-card p-4">
+                <div className="mb-3 flex items-start justify-between gap-3 border-b pb-3 max-md:grid">
                     <div>
-                        <div className="panel-kicker">
+                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                             <CalendarDays size={15} /> 今日
                         </div>
                         <h2>今天先看哪里</h2>
-                        <p>结合档案和当前状态，生成一份行动化的今日建议。</p>
+                        <p>结合星盘档案、今日状态和关注点，让 AI 生成一份能执行的今日建议。</p>
                     </div>
                     <CostHint intent={dailyIntent} compact />
                 </div>
-                <div className="context-row">
+                <div className="flex flex-wrap gap-1.5" aria-label="今日关注点">
+                    {dailyFocusOptions.map((option) => (
+                        <Button
+                            key={option.label}
+                            className={cn(dailyFocus.label === option.label && "border-primary/30 bg-primary/5 text-foreground")}
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            disabled={generationDisabled}
+                            onClick={() => onDailyFocusChange(option)}
+                        >
+                            {option.label}
+                        </Button>
+                    ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted p-3 text-xs text-muted-foreground">
                     <span>参考</span>
                     <strong>
                         {profile ? `${profile.name} / ${profile.zodiacSign}` : "生成时自动创建档案"}
@@ -719,11 +904,45 @@ function TodayView({
                     <span>完整度 {completion.percent}%</span>
                     <span>{report ? `最近：${statusLabel(report.status)}` : "还没有今日报告"}</span>
                 </div>
-                <div className="primary-actions">
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <TextField
+                        label="今天状态"
+                        value={currentState}
+                        onChange={onCurrentStateChange}
+                        disabled={generationDisabled}
+                    />
+                    <TextField label="想确认的问题" value={question} onChange={onQuestionChange} disabled={generationDisabled} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5 mt-0">
+                    {intentQuestionTemplates.daily?.map((item) => (
+                        <Template key={item} onClick={() => onQuestionChange(item)} disabled={generationDisabled}>
+                            {item}
+                        </Template>
+                    ))}
+                </div>
+                {generationDisabled && <GenerationUnavailableNotice text={generationUnavailableReason} />}
+                <InsightScope
+                    items={[
+                        {
+                            title: "参考档案",
+                            text: "出生日期、地点和星座信息会作为长期倾向底座。",
+                        },
+                        {
+                            title: "结合当下",
+                            text: "今日状态和关注点会影响建议的优先级，减少泛泛而谈。",
+                        },
+                        {
+                            title: "输出结构",
+                            text: "生成摘要、观察信号和下一步行动，方便当天复盘。",
+                        },
+                    ]}
+                />
+                <BillingNotice intent={dailyIntent} compact />
+                <div className="mt-4 flex items-center justify-between gap-3 max-md:grid max-md:grid-cols-2">
                     <Button
-                        className="astro-primary"
+                        className="font-semibold"
                         loading={busy}
-                        disabled={busy}
+                        disabled={busy || generationDisabled}
                         onClick={onGenerate}
                         type="button"
                     >
@@ -731,7 +950,7 @@ function TodayView({
                         生成今日建议
                     </Button>
                     <Button
-                        className="astro-secondary"
+                        className="font-semibold text-muted-foreground"
                         variant="outline"
                         onClick={onOpenProfile}
                         type="button"
@@ -740,13 +959,13 @@ function TodayView({
                         完善档案
                     </Button>
                 </div>
-                <div className="ai-cue">
+                <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
                     <Wand2 size={15} />
-                    <span>生成后可继续追问执行细节，反馈会影响后续报告的取舍和表达。</span>
+                    <span>AI 会把今日结论拆成摘要、观察信号和下一步行动；生成后可继续追问执行细节。</span>
                 </div>
             </div>
 
-            <div className="side-stack">
+            <div className="grid gap-3">
                 <ProfileReadiness
                     profile={profile}
                     completion={completion}
@@ -778,45 +997,56 @@ function ReportComposer(props: {
     currentState: string;
     question: string;
     partner: PartnerInput;
+    followUpSourceReport: AstrologyReport | null;
     busy: boolean;
+    generationDisabled: boolean;
+    generationUnavailableReason: string;
     onFocusAreaChange: (value: string) => void;
     onCurrentStateChange: (value: string) => void;
     onQuestionChange: (value: string) => void;
     onPartnerChange: (value: PartnerInput) => void;
     onIntentChange: (intent: ReportIntent) => void;
+    onClearFollowUpSource: () => void;
     onSubmit: (event: FormEvent) => void;
     onOpenProfiles: () => void;
 }) {
     const Icon = props.intent.icon;
+    const templates =
+        intentQuestionTemplates[props.reportType] ??
+        intentQuestionTemplates.decision ??
+        [];
+    const { generationDisabled, generationUnavailableReason } = props;
+    const quality = getQuestionQuality(props.question);
     return (
-        <form className="panel composer-panel" onSubmit={props.onSubmit}>
-            <div className="panel-heading">
-                <div className="panel-icon">
+        <form className="self-start rounded-md border bg-card p-4" onSubmit={props.onSubmit}>
+            <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
                     <Icon size={18} />
                 </div>
                 <div>
-                    <div className="panel-kicker">定向解读</div>
+                    <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">定向解读</div>
                     <h2>问一个具体问题</h2>
-                    <p>把当前处境说清楚，报告会更像建议，而不是泛泛的运势。</p>
+                    <p>把场景、时间和目标说清楚，AI 会优先给出可验证的判断和行动建议。</p>
                 </div>
             </div>
 
-            <div className="intent-strip">
+            <div className="flex gap-2 overflow-x-auto pb-1">
                 {props.intents.map((intent) => (
                     <IntentButton
                         key={intent.value}
                         intent={intent}
                         active={props.reportType === intent.value}
+                        disabled={generationDisabled}
                         onClick={() => props.onIntentChange(intent)}
                     />
                 ))}
             </div>
 
-            <div className="context-strip">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted p-3 text-xs text-muted-foreground">
                 <span>当前档案</span>
                 <strong>{props.selectedProfile?.name || "生成时自动创建"}</strong>
                 <Button
-                    className="astro-secondary"
+                    className="font-semibold text-muted-foreground"
                     variant="outline"
                     size="sm"
                     type="button"
@@ -826,52 +1056,99 @@ function ReportComposer(props: {
                 </Button>
             </div>
 
-            <div className="form-section two-cols">
+            {props.followUpSourceReport && (
+                <div className="mt-3 grid gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <strong className="text-foreground">基于上一份报告继续</strong>
+                        <Button
+                            className="font-semibold text-muted-foreground"
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={props.onClearFollowUpSource}
+                        >
+                            清除上下文
+                        </Button>
+                    </div>
+                    <p>
+                        AI 会带着这份报告的摘要、行动项、风险提醒和复盘清单继续分析。
+                    </p>
+                    <span>
+                        来源：
+                        {props.followUpSourceReport.result?.title ||
+                            props.followUpSourceReport.question ||
+                            reportLabel(props.followUpSourceReport.reportType)}
+                    </span>
+                </div>
+            )}
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <TextField
                     label="关注方向"
                     value={props.focusArea}
                     onChange={props.onFocusAreaChange}
+                    disabled={generationDisabled}
                 />
                 <TextField
                     label="当前状态"
                     value={props.currentState}
                     onChange={props.onCurrentStateChange}
+                    disabled={generationDisabled}
                 />
             </div>
 
             {props.reportType === "compatibility" && (
-                <PartnerFields partner={props.partner} onChange={props.onPartnerChange} />
+                <PartnerFields partner={props.partner} onChange={props.onPartnerChange} disabled={generationDisabled} />
             )}
 
-            {props.reportType === "decision" && (
-                <div className="template-row">
-                    {[
-                        "要不要继续推进这段关系？",
-                        "这份工作机会现在适合我吗？",
-                        "未来一周我应该先处理什么？",
-                    ].map((item) => (
-                        <Template key={item} onClick={() => props.onQuestionChange(item)}>
-                            {item}
-                        </Template>
-                    ))}
-                </div>
-            )}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+                {templates.map((item) => (
+                    <Template key={item} onClick={() => props.onQuestionChange(item)} disabled={generationDisabled}>
+                        {item}
+                    </Template>
+                ))}
+            </div>
 
-            <div className="form-section">
-                <Label className="astro-label">具体问题</Label>
+            <div className="mt-4">
+                <Label className="font-semibold text-foreground">具体问题</Label>
                 <Textarea
-                    className="astro-control min-h-28"
+                    className="min-h-10 min-h-28"
                     value={props.question}
+                    disabled={generationDisabled}
                     onChange={(event) => props.onQuestionChange(event.target.value)}
                 />
             </div>
 
-            <div className="ai-cue">
+            {generationDisabled && <GenerationUnavailableNotice text={`当前生成服务暂不可用：${generationUnavailableReason}`} />}
+
+            <QuestionQualityPanel quality={quality} />
+
+            <InsightScope
+                items={[
+                    {
+                        title: "解读类型",
+                        text: `${props.intent.label} · ${priceGroupLabel(props.intent.priceGroup)}`,
+                    },
+                    {
+                        title: "上下文来源",
+                        text:
+                            props.reportType === "compatibility"
+                                ? `档案完整度 ${props.profileCompletion.percent}%；关系对象 ${props.partner.name || "TA"}。`
+                                : `档案完整度 ${props.profileCompletion.percent}%；结合当前状态和具体问题。`,
+                    },
+                    {
+                        title: "生成结果",
+                        text: "会给出判断依据、行动建议、风险提醒，并可带上下文继续追问。",
+                    },
+                ]}
+            />
+
+            <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
                 <MessageCircle size={15} />
-                <span>问题越具体越少走弯路。生成后可以带着本次报告继续追问。</span>
+                <span>生成结果会沉淀到报告库；继续追问会带着上一份报告上下文，而不是重新从零开始。</span>
             </div>
 
-            <GenerationFooter intent={props.intent} busy={props.busy} />
+            <GenerationFooter intent={props.intent} busy={props.busy} generationDisabled={generationDisabled} />
         </form>
     );
 }
@@ -880,6 +1157,8 @@ function RelationshipPanel({
     partner,
     profile,
     busy,
+    generationDisabled,
+    generationUnavailableReason,
     onPartnerChange,
     onGenerate,
     onOpenProfiles,
@@ -887,27 +1166,30 @@ function RelationshipPanel({
     partner: PartnerInput;
     profile: AstrologyProfile | null;
     busy: boolean;
+    generationDisabled: boolean;
+    generationUnavailableReason: string;
     onPartnerChange: (partner: PartnerInput) => void;
     onGenerate: () => void;
     onOpenProfiles: () => void;
 }) {
+    const partnerCompletion = calculatePartnerCompletion(partner);
     return (
-        <section className="panel">
-            <div className="panel-heading">
-                <div className="panel-icon">
+        <section className="rounded-md border bg-card p-4">
+            <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
                     <Heart size={18} />
                 </div>
                 <div>
-                    <div className="panel-kicker">关系解读</div>
+                    <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">关系解读</div>
                     <h2>对象、状态和问题</h2>
-                    <p>先保存关系对象，再生成吸引力、冲突点和沟通建议。</p>
+                    <p>补充关系场景和对方信息，AI 会聚焦吸引力、冲突点、沟通话术和下一步。</p>
                 </div>
             </div>
-            <div className="context-strip">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted p-3 text-xs text-muted-foreground">
                 <span>我的档案</span>
                 <strong>{profile?.name || "未选择档案"}</strong>
                 <Button
-                    className="astro-secondary"
+                    className="font-semibold text-muted-foreground"
                     variant="outline"
                     size="sm"
                     type="button"
@@ -916,7 +1198,7 @@ function RelationshipPanel({
                     切换或完善
                 </Button>
             </div>
-            <div className="relationship-summary">
+            <div className="grid gap-3 rounded-md border bg-muted p-3 sm:grid-cols-3">
                 <strong>{partner.name || "TA"}</strong>
                 <span>{partner.relationshipStatus || "关系状态待补充"}</span>
                 <span>
@@ -925,17 +1207,54 @@ function RelationshipPanel({
                         : "生日可选，但补充后更准"}
                 </span>
             </div>
-            <PartnerFields partner={partner} onChange={onPartnerChange} />
-            <div className="relation-note">
-                <BookOpen size={16} />
-                <span>出生时间缺失也可以生成；补充后会增强宫位和相处节奏判断。</span>
+            <div className="mt-3 flex flex-wrap gap-1.5" aria-label="关系场景">
+                {relationshipScenes.map((scene) => (
+                    <Button
+                        key={scene}
+                        className={cn(partner.relationshipStatus === scene && "border-primary/30 bg-primary/5 text-foreground")}
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        disabled={generationDisabled}
+                        onClick={() => onPartnerChange({ ...partner, relationshipStatus: scene })}
+                    >
+                        {scene}
+                    </Button>
+                ))}
             </div>
-            <div className="generation-footer">
+            <PartnerFields partner={partner} onChange={onPartnerChange} disabled={generationDisabled} />
+            <CompletionMeter
+                title="关系信息可信度"
+                completion={partnerCompletion}
+                text="对方资料越完整，关系节奏、冲突来源和相处建议越能落到细节。"
+            />
+            <InsightScope
+                items={[
+                    {
+                        title: "双方基础",
+                        text: "我的档案和对方资料会共同进入关系匹配判断。",
+                    },
+                    {
+                        title: "关系阶段",
+                        text: `${partner.relationshipStatus || "未填写"} 场景会影响沟通建议和推进节奏。`,
+                    },
+                    {
+                        title: "可信度",
+                        text: `对方资料完整度 ${partnerCompletion.percent}%，会影响结论颗粒度。`,
+                    },
+                ]}
+            />
+            <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+                <BookOpen size={16} />
+                <span>出生时间缺失也可以生成；补充后会增强宫位、相处节奏和沟通时机判断。</span>
+            </div>
+            {generationDisabled && <GenerationUnavailableNotice text={generationUnavailableReason} />}
+            <div className="mt-4 flex items-center justify-between gap-3">
                 <CostHint intent={relationshipIntent} />
                 <Button
-                    className="astro-primary"
+                    className="font-semibold"
                     loading={busy}
-                    disabled={busy}
+                    disabled={busy || generationDisabled}
                     onClick={onGenerate}
                     type="button"
                 >
@@ -950,45 +1269,53 @@ function RelationshipPanel({
 function PartnerFields({
     partner,
     onChange,
+    disabled,
 }: {
     partner: PartnerInput;
     onChange: (partner: PartnerInput) => void;
+    disabled?: boolean;
 }) {
     return (
-        <div className="form-section two-cols">
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
             <TextField
                 label="对方称呼"
                 value={partner.name}
                 onChange={(value) => onChange({ ...partner, name: value })}
+                disabled={disabled}
             />
             <TextField
                 label="出生日期"
                 value={partner.birthDate}
                 type="date"
                 onChange={(value) => onChange({ ...partner, birthDate: value })}
+                disabled={disabled}
             />
             <TextField
                 label="出生时间"
                 value={partner.birthTime}
                 type="time"
                 onChange={(value) => onChange({ ...partner, birthTime: value })}
+                disabled={disabled}
             />
             <TextField
                 label="出生地点"
                 value={partner.birthPlace}
                 onChange={(value) => onChange({ ...partner, birthPlace: value })}
+                disabled={disabled}
                 placeholder="可选"
             />
             <TextField
                 label="星座"
                 value={partner.zodiacSign}
                 onChange={(value) => onChange({ ...partner, zodiacSign: value })}
+                disabled={disabled}
                 placeholder="留空自动推算"
             />
             <TextField
                 label="关系状态"
                 value={partner.relationshipStatus}
                 onChange={(value) => onChange({ ...partner, relationshipStatus: value })}
+                disabled={disabled}
             />
         </div>
     );
@@ -1008,16 +1335,16 @@ function ProfileManager(props: {
     onChange: (profile: AstrologyProfileInput) => void;
 }) {
     return (
-        <section className="profile-layout">
-            <div className="panel">
-                <div className="panel-heading compact-heading">
+        <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.04fr)_minmax(300px,.96fr)]">
+            <div className="rounded-md border bg-card p-4">
+                <div className="mb-4 flex items-start justify-between gap-3 items-center">
                     <div>
-                        <div className="panel-kicker">星盘档案</div>
+                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">星盘档案</div>
                         <h2>选择生成依据</h2>
                         <p>档案是报告的长期记忆，不需要每次重新填写。</p>
                     </div>
                     <Button
-                        className="astro-secondary"
+                        className="font-semibold text-muted-foreground"
                         variant="outline"
                         onClick={props.onReset}
                         type="button"
@@ -1025,45 +1352,50 @@ function ProfileManager(props: {
                         <Plus size={16} /> 新档案
                     </Button>
                 </div>
-                <div className="profile-list">
-                    {props.profiles.map((profile) => (
-                        <Button
-                            key={profile.id}
-                            className={`profile-card ${props.selectedProfileId === profile.id ? "active" : ""}`}
-                            variant="ghost"
-                            onClick={() => props.onSelect(profile.id)}
-                            type="button"
-                        >
-                            <div>
-                                <strong>{profile.name}</strong>
-                                <span>
-                                    {profile.zodiacSign} · 生肖{profile.chineseZodiac}
-                                </span>
-                                <small>
-                                    {profile.birthDate} {profile.birthPlace || ""}
-                                </small>
-                            </div>
-                            <div className="mini-actions">
-                                <span
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        props.onEdit(profile);
-                                    }}
-                                >
-                                    编辑
-                                </span>
-                                <span
-                                    className="danger"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        props.onDelete(profile.id);
-                                    }}
-                                >
-                                    删
-                                </span>
-                            </div>
-                        </Button>
-                    ))}
+                <div className="grid gap-2">
+                    {props.profiles.map((profile) => {
+                        const completion = calculateProfileCompletion(profile);
+                        return (
+                            <Button
+                                key={profile.id}
+                                className={cn("flex w-full items-center justify-between gap-3 rounded-md border bg-background p-3 text-left hover:border-primary/30 hover:bg-primary/5", props.selectedProfileId === profile.id && "border-primary/30 bg-primary/5")}
+                                variant="ghost"
+                                onClick={() => props.onSelect(profile.id)}
+                                type="button"
+                            >
+                                <div>
+                                    <strong>{profile.name}</strong>
+                                    <span>
+                                        {profile.zodiacSign || "待推算"} · 生肖
+                                        {profile.chineseZodiac || "待补充"}
+                                    </span>
+                                    <small>
+                                        {profile.birthDate} {profile.birthPlace || ""}
+                                    </small>
+                                    <ProfileQualityLine completion={completion} />
+                                </div>
+                                <div className="flex shrink-0 gap-1">
+                                    <span
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            props.onEdit(profile);
+                                        }}
+                                    >
+                                        编辑
+                                    </span>
+                                    <span
+                                        className="text-destructive"
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            props.onDelete(profile.id);
+                                        }}
+                                    >
+                                        删
+                                    </span>
+                                </div>
+                            </Button>
+                        );
+                    })}
                     {!props.profiles.length && (
                         <EmptyState
                             title="还没有档案"
@@ -1073,18 +1405,18 @@ function ProfileManager(props: {
                 </div>
             </div>
 
-            <form className="panel" onSubmit={props.onSubmit}>
-                <div className="panel-heading compact-heading">
+            <form className="rounded-md border bg-card p-4" onSubmit={props.onSubmit}>
+                <div className="mb-4 flex items-start justify-between gap-3 items-center">
                     <div>
-                        <div className="panel-kicker">
+                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                             {props.editingProfileId ? "编辑档案" : "新建档案"}
                         </div>
                         <h2>{props.editingProfileId ? "更新出生信息" : "创建生成基础"}</h2>
                         <p>先填基础项即可开始生成，星座细节可以之后补。</p>
                     </div>
                 </div>
-                <div className="form-group-title">基础信息</div>
-                <div className="two-cols">
+                <div className="my-3 text-xs font-semibold text-muted-foreground">基础信息</div>
+                <div className="grid gap-3 md:grid-cols-2">
                     <TextField
                         label="姓名/档案名"
                         value={props.profileForm.name}
@@ -1122,8 +1454,8 @@ function ProfileManager(props: {
                         placeholder="可选"
                     />
                 </div>
-                <div className="form-group-title">增强项</div>
-                <div className="two-cols compact-fields">
+                <div className="my-3 text-xs font-semibold text-muted-foreground">增强项</div>
+                <div className="grid gap-3 md:grid-cols-3">
                     <TextField
                         label="太阳星座"
                         value={props.profileForm.zodiacSign || ""}
@@ -1150,7 +1482,7 @@ function ProfileManager(props: {
                     />
                 </div>
                 <Button
-                    className="astro-primary form-submit"
+                    className="font-semibold mt-4"
                     disabled={props.busy}
                     loading={props.busy}
                     type="submit"
@@ -1178,10 +1510,10 @@ function HistoryPanel({
     onOpen: (report: AstrologyReport) => void;
 }) {
     return (
-        <section className="panel">
-            <div className="panel-heading compact-heading">
+        <section className="rounded-md border bg-card p-4">
+            <div className="mb-4 flex items-start justify-between gap-3 items-center">
                 <div>
-                    <div className="panel-kicker">报告库</div>
+                    <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">报告库</div>
                     <h2>历史报告</h2>
                     <p>
                         {total
@@ -1195,7 +1527,7 @@ function HistoryPanel({
                         onTypeChange(value as AstrologyReportType | "all" | "favorite")
                     }
                 >
-                    <SelectTrigger className="astro-select">
+                    <SelectTrigger className="w-36">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1209,11 +1541,11 @@ function HistoryPanel({
                     </SelectContent>
                 </Select>
             </div>
-            <div className="history-list">
+            <div className="grid gap-2">
                 {reports.map((report) => (
                     <Button
                         key={report.id}
-                        className="history-card"
+                        className="flex w-full items-center justify-between gap-3 rounded-md border bg-background p-3 text-left hover:border-primary/30 hover:bg-primary/5"
                         variant="ghost"
                         onClick={() => onOpen(report)}
                         type="button"
@@ -1225,12 +1557,12 @@ function HistoryPanel({
                                     reportLabel(report.reportType)}
                             </strong>
                             <span>
-                                {reportLabel(report.reportType)} ·{" "}
-                                <TimeText value={report.createdAt} format="YYYY/MM/DD HH:mm" /> ·{" "}
+                                {reportLabel(report.reportType)} · {formatReportTime(report.createdAt)} ·{" "}
                                 {statusLabel(report.status)}
                             </span>
+                            <HistoryContextLine report={report} />
                         </div>
-                        <div className="history-score">
+                        <div className="shrink-0 text-right max-md:text-left">
                             <b>{report.score ?? "--"}</b>
                             {report.isFavorite && <small>收藏</small>}
                         </div>
@@ -1244,11 +1576,39 @@ function HistoryPanel({
                 )}
             </div>
             {total > HISTORY_PAGE_SIZE && (
-                <div className="pagination-row">
+                <div className="mt-4 flex justify-end">
                     <PaginationComponent />
                 </div>
             )}
         </section>
+    );
+}
+
+function ProfileQualityLine({ completion }: { completion: ProfileCompletion }) {
+    const missingText = completion.missing.length
+        ? `可补 ${completion.missing.slice(0, 2).join("、")}`
+        : "可直接用于高质量生成";
+    return (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+            <span>AI 依据完整度 {completion.percent}%</span>
+            <small>{missingText}</small>
+        </div>
+    );
+}
+
+function HistoryContextLine({ report }: { report: AstrologyReport }) {
+    const context = report.providerMetadata?.generationContext;
+    const details = [
+        context?.focusArea ? `范围：${context.focusArea}` : "",
+        context?.questionQuality?.level ? `质量：${questionQualityLabel(context.questionQuality.level)} ${context.questionQuality.score ?? ""}%` : "",
+        (context?.question || report.question) ? `问题：${context?.question || report.question}` : "",
+        context?.currentState ? `状态：${context.currentState}` : "",
+        report.costCredits ? `扣费 ${formatCredits(report.costCredits)}` : "",
+    ].filter(Boolean);
+    return (
+        <small className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border bg-background px-2 py-1 text-xs text-muted-foreground">
+            {details.slice(0, 2).join(" · ") || "打开查看 AI 摘要、依据和行动建议"}
+        </small>
     );
 }
 
@@ -1257,6 +1617,7 @@ function ReportPanel({
     compact,
     onFavorite,
     onCopy,
+    onDownload,
     onOpen,
     onDelete,
     onRegenerate,
@@ -1267,20 +1628,21 @@ function ReportPanel({
     compact?: boolean;
     onFavorite: (report: AstrologyReport) => void;
     onCopy: (report: AstrologyReport) => void;
+    onDownload: (report: AstrologyReport) => void;
     onOpen: (report: AstrologyReport) => void;
     onDelete: (id: string) => void;
     onRegenerate: (report: AstrologyReport) => void;
     onFollowUp: (report: AstrologyReport, prompt: string) => void;
-    onFeedback: (report: AstrologyReport, rating: UpdateReportFeedbackParams["rating"]) => void;
+    onFeedback: ReportFeedbackHandler;
 }) {
     const result = report?.result;
     const isRunning = report?.status === "pending" || report?.status === "processing";
     const isFailed = report?.status === "failed";
     return (
-        <section className={`report-panel ${compact ? "compact" : ""}`}>
-            <div className="report-head">
+        <section className={"rounded-md border bg-card p-4"}>
+            <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                    <div className="panel-kicker">
+                    <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                         <FileText size={14} /> 当前报告
                     </div>
                     <h2>
@@ -1295,38 +1657,52 @@ function ReportPanel({
                     )}
                 </div>
                 {report && (
-                    <Button
-                        className="astro-secondary"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onOpen(report)}
-                        type="button"
-                    >
-                        详情
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-2">
+                        <Badge variant={report.status === "failed" ? "destructive" : report.status === "success" ? "default" : "secondary"}>
+                            {statusLabel(report.status)}
+                        </Badge>
+                        <Button
+                            className="font-semibold text-muted-foreground"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onOpen(report)}
+                            type="button"
+                        >
+                            详情
+                        </Button>
+                    </div>
                 )}
             </div>
 
             {result ? (
-                <div className="report-content">
-                    <p className="report-summary">{result.summary}</p>
-                    <div className="keyword-row">
+                <div className="grid gap-3">
+                    <Alert className="border-primary/20 bg-primary/5">
+                        <ShieldCheck size={16} />
+                        <AlertTitle>AI 摘要结论</AlertTitle>
+                        <AlertDescription className="leading-7 text-foreground">{result.summary}</AlertDescription>
+                    </Alert>
+                    <CompactAiAnchors result={result} compact={compact} />
+                    <ReportContextTrail report={report} compact={compact} />
+                    <EvidenceList evidence={result.evidence ?? []} compact={compact} />
+                    <ReviewChecklistPanel items={result.reviewChecklist ?? []} compact={compact} />
+                    <div className="flex flex-wrap gap-1.5">
                         {result.keywords?.slice(0, 6).map((item) => (
-                            <span key={item}>{item}</span>
+                            <Badge key={item} variant="secondary">{item}</Badge>
                         ))}
                     </div>
                     {result.sections?.slice(0, compact ? 1 : 2).map((section) => (
-                        <article key={section.heading} className="report-section">
+                        <article key={section.heading} className="rounded-md border bg-card p-3">
                             <h3>{section.heading}</h3>
                             <p>{section.content}</p>
                         </article>
                     ))}
                     <ActionList items={result.actions ?? []} compact={compact} />
+                    <SignalList items={result.warnings ?? []} compact={compact} />
                     <FollowUpPanel report={report} compact={compact} onFollowUp={onFollowUp} />
                     <FeedbackPanel report={report} compact={compact} onFeedback={onFeedback} />
                     {!compact && (
                         <>
-                            <div className="metric-grid">
+                            <div className="grid gap-3 sm:grid-cols-3">
                                 {Object.entries(result.scores ?? {})
                                     .slice(0, 6)
                                     .map(([key, value]) => (
@@ -1337,7 +1713,7 @@ function ReportPanel({
                                         />
                                     ))}
                             </div>
-                            <div className="lucky-grid">
+                            <div className="grid gap-3 sm:grid-cols-2">
                                 <Lucky label="幸运色" value={result.lucky?.color} />
                                 <Lucky label="幸运数字" value={result.lucky?.number?.toString()} />
                                 <Lucky label="方位" value={result.lucky?.direction} />
@@ -1345,10 +1721,14 @@ function ReportPanel({
                             </div>
                         </>
                     )}
-                    <div className="action-row">
+                    <div className="flex flex-wrap gap-2">
                         <Action onClick={() => onCopy(report)}>
                             <Copy size={14} />
                             复制
+                        </Action>
+                        <Action onClick={() => onDownload(report)}>
+                            <Download size={14} />
+                            下载
                         </Action>
                         <Action onClick={() => onFavorite(report)}>
                             {report.isFavorite ? "取消收藏" : "收藏"}
@@ -1367,8 +1747,17 @@ function ReportPanel({
                 <StatusBox
                     icon={<Loader2 className="animate-spin" size={24} />}
                     title="任务已提交"
-                    text="这次调用已经进入任务队列。生成完成后，报告会出现在当前卡片和报告库里。"
-                />
+                    text="AI 正在读取档案、问题和当前状态，生成完成后会出现在当前卡片和报告库里。"
+                >
+                    <ProcessPreview
+                        items={[
+                            "整理本次上下文",
+                            "生成判断依据",
+                            "拆出行动建议",
+                            "写入报告库",
+                        ]}
+                    />
+                </StatusBox>
             ) : isFailed && report ? (
                 <StatusBox
                     danger
@@ -1378,6 +1767,13 @@ function ReportPanel({
                         "模型或队列暂时不可用。失败任务会按账务事实退款，可稍后重试。"
                     }
                 >
+                    <ProcessPreview
+                        items={[
+                            "本次结果未入库为成功报告",
+                            "可重试同一问题",
+                            "失败退款以账务记录为准",
+                        ]}
+                    />
                     <Action onClick={() => onRegenerate(report)}>
                         <RefreshCw size={14} />
                         重试
@@ -1390,10 +1786,54 @@ function ReportPanel({
             ) : (
                 <EmptyState
                     title="还没有可展示的报告"
-                    text="在当前工作区提交生成后，这里会展示摘要、行动建议和关键提醒。"
-                />
+                    text="提交生成后，这里会展示 AI 摘要、判断依据、复盘清单、行动建议、观察信号和继续追问入口。"
+                >
+                    <ProcessPreview
+                        items={[
+                            "摘要结论",
+                            "判断依据",
+                            "复盘清单",
+                            "行动建议",
+                            "观察信号",
+                        ]}
+                    />
+                </EmptyState>
             )}
         </section>
+    );
+}
+
+function CompactAiAnchors({ result, compact }: { result: NonNullable<AstrologyReport["result"]>; compact?: boolean }) {
+    const scores = Object.entries(result.scores ?? {}).filter(([, value]) => Number.isFinite(value));
+    const primaryScore = scores.find(([key]) => key === "overall") ?? scores[0];
+    const lucky = result.lucky;
+    const scoreValue = primaryScore ? Math.round(primaryScore[1]) : null;
+    const anchors = [
+        lucky?.color ? `幸运色 ${lucky.color}` : "",
+        typeof lucky?.number === "number" ? `幸运数字 ${lucky.number}` : "",
+        !compact && lucky?.direction ? `方位 ${lucky.direction}` : "",
+        !compact && lucky?.timeRange ? `时间 ${lucky.timeRange}` : "",
+    ].filter(Boolean);
+
+    if (!anchors.length && scoreValue === null) return null;
+    return (
+        <div className="grid gap-3 rounded-md border bg-muted/45 p-3" aria-label="AI锚点">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
+                    <ShieldCheck size={14} />
+                    AI锚点
+                </span>
+                {scoreValue !== null && (
+                    <Badge variant="outline">
+                        {scoreLabel(primaryScore?.[0] ?? "overall")} {scoreValue}%
+                    </Badge>
+                )}
+            </div>
+            {scoreValue !== null && <Progress value={Math.max(0, Math.min(100, scoreValue))} />}
+            <div className="flex flex-wrap gap-1.5">
+                {anchors.map((item) => <Badge key={item} variant="secondary">{item}</Badge>)}
+            </div>
+        </div>
     );
 }
 
@@ -1418,19 +1858,34 @@ function GenerationValuePanel({
             : "问题：使用默认问题",
         partner ? `关系对象：${partner.name} / ${partner.relationshipStatus}` : "",
     ].filter(Boolean);
+    const deliverables = [
+        "判断依据",
+        "摘要结论",
+        "行动建议",
+        "风险提醒",
+        "继续追问上下文",
+    ];
     return (
-        <section className="generation-panel">
-            <div className="panel-kicker">
+        <section className="rounded-md border bg-card p-4">
+            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                 <FileText size={14} /> 本次参考
             </div>
             <h3>报告会看这些信息</h3>
-            <p>提交后会按所选类型生成报告，结果会进入当前报告和报告库。</p>
+            <p>AI 会把这些上下文转成可复盘的结构化报告，并沉淀到当前报告和报告库。</p>
             <ul>
                 {items.map((item) => (
                     <li key={item}>{item}</li>
                 ))}
             </ul>
-            <div className="generation-cost-row">
+            <div className="grid gap-2 rounded-md border bg-muted p-3 text-muted-foreground">
+                <div className="font-semibold text-foreground">生成后得到</div>
+                <div>
+                    {deliverables.map((item) => (
+                        <span key={item}>{item}</span>
+                    ))}
+                </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
                 <span>
                     <Coins size={15} /> {priceGroupLabel(intent.priceGroup)}
                 </span>
@@ -1438,12 +1893,102 @@ function GenerationValuePanel({
                     <ShieldCheck size={15} /> 失败自动退款
                 </span>
             </div>
+            <div className="mt-2 text-xs leading-6 text-muted-foreground">
+                提交生成时按后台配置的价格组扣费；模型、队列或服务失败会按账务事实退款。
+            </div>
             {completion.missing.length > 0 && (
-                <div className="missing-note">
+                <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
                     可提升：补充 {completion.missing.join("、")} 后，报告会更具体。
                 </div>
             )}
         </section>
+    );
+}
+
+function ReportContextTrail({
+    report,
+    compact,
+}: {
+    report: AstrologyReport;
+    compact?: boolean;
+}) {
+    const source = report.providerMetadata?.sourceReport;
+    const context = report.providerMetadata?.generationContext;
+    const question = context?.question || report.question;
+    const quality = context?.questionQuality;
+    const items = [
+        `类型：${reportLabel(report.reportType)}`,
+        context?.focusArea ? `范围：${context.focusArea}` : "",
+        quality?.level ? `问题质量：${questionQualityLabel(quality.level)}${typeof quality.score === "number" ? ` ${quality.score}%` : ""}` : "",
+        context?.currentState ? `状态：${context.currentState}` : "",
+        question
+            ? `问题：${question.slice(0, compact ? 22 : 40)}${question.length > (compact ? 22 : 40) ? "..." : ""}`
+            : "问题：使用默认问题",
+        source?.title || source?.reportType
+            ? `追问来源：${source.title || reportLabel(source.reportType ?? report.reportType)}`
+            : "",
+        context?.hasTargetProfile ? "包含关系对象" : "",
+    ].filter(Boolean);
+    return (
+        <div className="grid gap-2 rounded-md border bg-muted/45 p-3 text-muted-foreground">
+            <div className="flex items-center justify-between gap-2">
+                <div className="font-semibold text-foreground">生成依据</div>
+                <Badge variant="outline">可追溯</Badge>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+                {items.map((item) => (
+                    <Badge key={item} variant="secondary" className="h-auto max-w-full justify-start whitespace-normal py-1">
+                        {item}
+                    </Badge>
+                ))}
+                <Badge variant="secondary">
+                    生成时间：{formatReportTime(report.createdAt)}
+                </Badge>
+            </div>
+            {quality && !compact && (
+                <div className="grid gap-2 rounded-md border bg-background p-3 text-xs">
+                    <div className="font-semibold text-foreground">AI 输入质量</div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                        <span>已包含：{quality.signals?.join("、") || "暂无"}</span>
+                        <span>可补充：{quality.missing?.join("、") || "无需补充"}</span>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function EvidenceList({
+    evidence,
+    compact,
+}: {
+    evidence: NonNullable<AstrologyReport["result"]>["evidence"];
+    compact?: boolean;
+}) {
+    const items = (evidence ?? []).slice(0, compact ? 3 : 5);
+    if (!items.length) return null;
+    return (
+        <div className="grid gap-2 rounded-md border bg-card p-3">
+            <div className="flex items-center justify-between gap-2">
+                <div className="font-semibold text-foreground">判断依据</div>
+                <Badge variant="outline">{items.length} 条证据</Badge>
+            </div>
+            <div className="grid gap-2">
+                {items.map((item, index) => (
+                    <div key={`${item.source}-${index}`} className="rounded-md border bg-muted/35 p-3 text-sm leading-6">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <strong className="text-foreground">{item.source}</strong>
+                            {item.confidence && (
+                                <Badge variant="outline">
+                                    {confidenceLabel(item.confidence)}
+                                </Badge>
+                            )}
+                        </div>
+                        <p className="mt-1 text-muted-foreground">{item.insight}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
     );
 }
 
@@ -1456,26 +2001,44 @@ function ProfileReadiness({
     completion: ProfileCompletion;
     onOpenProfile: () => void;
 }) {
+    const missingItems = completion.missing.slice(0, 3);
     return (
-        <section className="readiness-card">
-            <div>
-                <div className="panel-kicker">
-                    <UserRound size={14} /> 档案准备度
+        <section className="grid gap-3 rounded-md border bg-card p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
+                        <UserRound size={14} /> 档案准备度
+                    </div>
+                    <h3>{profile?.name || "未选择档案"}</h3>
+                    <p>
+                        {profile
+                            ? `${profile.zodiacSign} · ${profile.birthDate}`
+                            : "先建立档案，再让报告拿到稳定上下文。"}
+                    </p>
                 </div>
-                <h3>{profile?.name || "未选择档案"}</h3>
-                <p>
-                    {profile
-                        ? `${profile.zodiacSign} · ${profile.birthDate}`
-                        : "先建立档案，再让报告拿到稳定上下文。"}
-                </p>
+                <strong>{completion.percent}%</strong>
             </div>
-            <div className="progress-line">
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
                 <span style={{ width: `${completion.percent}%` }} />
             </div>
-            <div className="readiness-bottom">
-                <span>{completion.percent}%</span>
+            {missingItems.length > 0 ? (
+                <div className="grid gap-3 rounded-md border border-dashed bg-muted/45 p-3 text-muted-foreground">
+                    <span className="text-xs font-semibold text-foreground">可提升</span>
+                    <div className="flex flex-wrap gap-1.5">
+                        {missingItems.map((item) => (
+                            <small key={item} className="rounded-full border bg-background px-2 py-1">
+                                {item}
+                            </small>
+                        ))}
+                    </div>
+                </div>
+            ) : (
+                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-primary">档案信息充足，可直接用于高质量生成。</div>
+            )}
+            <div className="flex items-center justify-between text-muted-foreground">
+                <span>{completion.missing.length ? "补全后建议更具体" : "上下文已就绪"}</span>
                 <Button
-                    className="astro-secondary"
+                    className="font-semibold text-muted-foreground"
                     variant="outline"
                     size="sm"
                     type="button"
@@ -1488,11 +2051,11 @@ function ProfileReadiness({
     );
 }
 
-function GenerationFooter({ intent, busy }: { intent: ReportIntent; busy: boolean }) {
+function GenerationFooter({ intent, busy, generationDisabled }: { intent: ReportIntent; busy: boolean; generationDisabled: boolean }) {
     return (
-        <div className="generation-footer">
+        <div className="mt-4 flex items-center justify-between gap-3">
             <CostHint intent={intent} />
-            <Button className="astro-primary" disabled={busy} loading={busy} type="submit">
+            <Button className="font-semibold" disabled={busy || generationDisabled} loading={busy} type="submit">
                 <FileText size={16} />
                 生成 {intent.label}
             </Button>
@@ -1500,9 +2063,30 @@ function GenerationFooter({ intent, busy }: { intent: ReportIntent; busy: boolea
     );
 }
 
+function BillingNotice({ intent, compact }: { intent: ReportIntent; compact?: boolean }) {
+    return (
+        <div className={cn("grid gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs", compact && "py-2")}>
+            <div>
+                <Coins size={14} />
+                <span>{priceGroupLabel(intent.priceGroup)}</span>
+            </div>
+            <p>提交生成时按后台配置扣费；模型、队列或服务失败会按账务事实退款。</p>
+        </div>
+    );
+}
+
+function GenerationUnavailableNotice({ text }: { text: string }) {
+    return (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+            <AlertCircle size={15} />
+            <span>{text}</span>
+        </div>
+    );
+}
+
 function CostHint({ intent, compact }: { intent: ReportIntent; compact?: boolean }) {
     return (
-        <div className={`cost-hint ${compact ? "compact" : ""}`}>
+        <div className={cn("flex flex-wrap gap-1.5", compact && "justify-end")}>
             <span>
                 <Coins size={14} /> {priceGroupLabel(intent.priceGroup)}
             </span>
@@ -1516,18 +2100,21 @@ function CostHint({ intent, compact }: { intent: ReportIntent; compact?: boolean
 function IntentButton({
     intent,
     active,
+    disabled,
     onClick,
 }: {
     intent: ReportIntent;
     active: boolean;
+    disabled?: boolean;
     onClick: () => void;
 }) {
     const Icon = intent.icon;
     return (
         <Button
-            className={`intent-button ${active ? "active" : ""}`}
+            className={cn("min-h-[74px] min-w-[118px] rounded-md border bg-background p-3 text-left text-muted-foreground hover:border-primary/30 hover:bg-primary/5", active && "border-primary/30 bg-primary/5 text-foreground")}
             variant="ghost"
             onClick={onClick}
+            disabled={disabled}
             type="button"
         >
             <Icon size={16} />
@@ -1542,35 +2129,39 @@ function TextField({
     value,
     onChange,
     placeholder,
+    disabled,
     type = "text",
 }: {
     label: string;
     value: string;
     onChange: (value: string) => void;
     placeholder?: string;
+    disabled?: boolean;
     type?: string;
 }) {
     return (
-        <div className="field">
-            <Label className="astro-label">{label}</Label>
+        <div className="grid gap-2">
+            <Label className="font-semibold text-foreground">{label}</Label>
             <Input
-                className="astro-control"
+                className="min-h-10"
                 type={type}
                 value={value}
                 placeholder={placeholder}
+                disabled={disabled}
                 onChange={(event) => onChange(event.target.value)}
             />
         </div>
     );
 }
 
-function Template({ children, onClick }: { children: string; onClick: () => void }) {
+function Template({ children, onClick, disabled }: { children: string; onClick: () => void; disabled?: boolean }) {
     return (
         <Button
-            className="astro-secondary"
+            className="font-semibold text-muted-foreground"
             variant="outline"
             size="sm"
             onClick={onClick}
+            disabled={disabled}
             type="button"
         >
             <Wand2 size={13} />
@@ -1593,22 +2184,45 @@ function StatusBox({
     children?: ReactNode;
 }) {
     return (
-        <div className={`status-box ${danger ? "danger" : ""}`}>
+        <div className={cn("grid min-h-36 content-center rounded-md border border-dashed bg-muted/35 p-5 text-muted-foreground", danger && "border-destructive/30 bg-destructive/10")}>
             {icon}
             <div>
-                <strong>{title}</strong>
-                <p>{text}</p>
-                {children && <div className="status-actions">{children}</div>}
+                <strong className="text-foreground">{title}</strong>
+                <p className="max-w-2xl leading-6">{text}</p>
+                {children && <div className="mt-3 flex flex-wrap gap-2">{children}</div>}
             </div>
         </div>
     );
 }
 
-function EmptyState({ title, text }: { title: string; text: string }) {
+function EmptyState({
+    title,
+    text,
+    children,
+}: {
+    title: string;
+    text: string;
+    children?: ReactNode;
+}) {
     return (
-        <div className="empty-state">
-            <strong>{title}</strong>
-            <p>{text}</p>
+        <div className="grid min-h-36 content-center rounded-md border border-dashed bg-muted/35 p-5 text-muted-foreground">
+            <div className="grid gap-2">
+                <strong className="text-foreground">{title}</strong>
+                <p className="max-w-2xl leading-6">{text}</p>
+                {children}
+            </div>
+        </div>
+    );
+}
+
+function ProcessPreview({ items }: { items: string[] }) {
+    return (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+            {items.map((item) => (
+                <span key={item} className="rounded-full border bg-background px-2 py-1 text-xs text-muted-foreground">
+                    {item}
+                </span>
+            ))}
         </div>
     );
 }
@@ -1640,7 +2254,7 @@ function Action({
 
 function Metric({ label, value }: { label: string; value: string }) {
     return (
-        <div className="metric-card">
+        <div className="rounded-md border bg-muted p-3 text-muted-foreground">
             <span>{label}</span>
             <strong>{value}</strong>
         </div>
@@ -1649,24 +2263,176 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function Lucky({ label, value }: { label: string; value?: string }) {
     return (
-        <div className="lucky-card">
+        <div className="rounded-md border bg-muted p-3 text-muted-foreground">
             <span>{label}</span>
             <strong>{value || "--"}</strong>
         </div>
     );
 }
 
-function ActionList({ items, compact }: { items: string[]; compact?: boolean }) {
+function ReviewChecklistPanel({
+    items,
+    compact,
+}: {
+    items: NonNullable<AstrologyReport["result"]>["reviewChecklist"];
+    compact?: boolean;
+}) {
+    const idPrefix = useId();
+    const visibleItems = (items ?? []).slice(0, compact ? 2 : 4);
+    if (!visibleItems.length) return null;
+    return (
+        <div className="grid gap-2 rounded-md border bg-card p-3">
+            <div>
+                <div className="font-semibold text-foreground">复盘清单</div>
+                {!compact && (
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        把 AI 判断转成可观察的行动，稍后用现实反馈验证报告是否有帮助。
+                    </p>
+                )}
+            </div>
+            {visibleItems.map((item, index) => {
+                const checkboxId = `${idPrefix}-review-checklist-${index}`;
+                return (
+                <Label key={`${item.item}-${index}`} htmlFor={checkboxId} className="grid gap-1 rounded-md border bg-muted/35 p-3 text-sm leading-6 text-muted-foreground">
+                    <span className="flex items-start gap-2 font-medium text-foreground">
+                        <Checkbox id={checkboxId} className="mt-1" />
+                        <span>{item.item}</span>
+                    </span>
+                    <span>依据：{item.evidenceSource}</span>
+                    <span>验证点：{item.why}</span>
+                    {item.timebox && <span>时间：{item.timebox}</span>}
+                </Label>
+                );
+            })}
+        </div>
+    );
+}
+
+function ActionList({ items, compact }: { items: ReportActionItem[]; compact?: boolean }) {
+    const idPrefix = useId();
     if (!items.length) return null;
     return (
-        <div className="action-list">
-            <div className="list-title">下一步行动</div>
-            {items.slice(0, compact ? 3 : 5).map((item, index) => (
-                <label key={`${item}-${index}`} className="action-item">
-                    <Checkbox className="mt-1" />
-                    <span>{item}</span>
-                </label>
-            ))}
+        <div className="grid gap-2 rounded-md border bg-card p-3">
+            <div className="flex items-center justify-between gap-2">
+                <div className="font-semibold text-foreground">下一步行动</div>
+                <Badge variant="outline">可执行</Badge>
+            </div>
+            {items.slice(0, compact ? 3 : 5).map((item, index) => {
+                const checkboxId = `${idPrefix}-action-list-${index}`;
+                const label = formatActionItem(item);
+                return (
+                <Label key={`${label}-${index}`} htmlFor={checkboxId} className="grid gap-1 rounded-md border bg-muted/35 p-3 text-sm leading-6 text-muted-foreground">
+                    <span className="flex items-start gap-2 font-medium text-foreground">
+                    <Checkbox id={checkboxId} className="mt-1" />
+                        <span>{getActionItemTitle(item)}</span>
+                    </span>
+                    {typeof item !== "string" && item.reason && <span>原因：{item.reason}</span>}
+                    {typeof item !== "string" && item.timebox && <span>时间：{item.timebox}</span>}
+                </Label>
+                );
+            })}
+        </div>
+    );
+}
+
+function SignalList({ items, compact }: { items: ReportWarningItem[]; compact?: boolean }) {
+    if (!items.length) return null;
+    return (
+        <div className="grid gap-2 rounded-md border bg-card p-3">
+            <div className="flex items-center justify-between gap-2">
+                <div className="font-semibold text-foreground">观察信号</div>
+                <Badge variant="outline">风险校验</Badge>
+            </div>
+            {items.slice(0, compact ? 2 : 4).map((item, index) => {
+                const label = formatWarningItem(item);
+                return (
+                <div key={`${label}-${index}`} className="grid gap-1 rounded-md border bg-muted/35 p-3 text-sm leading-6 text-muted-foreground">
+                    <div className="flex items-start gap-2 font-medium text-foreground">
+                        <AlertCircle className="mt-1 shrink-0 text-primary" size={14} />
+                        <span>{getWarningItemTitle(item)}</span>
+                    </div>
+                    {typeof item !== "string" && item.detail && <span>{item.detail}</span>}
+                </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function InsightScope({ items }: { items: InsightScopeItem[] }) {
+    return (
+        <div className="grid gap-2 rounded-md border bg-muted p-3 text-muted-foreground">
+            <div className="font-semibold text-foreground">AI 解读范围</div>
+            <div>
+                {items.map((item) => (
+                    <span key={item.title}>
+                        <strong>{item.title}</strong>
+                        <small>{item.text}</small>
+                    </span>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+type QuestionQuality = {
+    score: number;
+    checks: Array<{ label: string; passed: boolean }>;
+};
+
+function QuestionQualityPanel({ quality }: { quality: QuestionQuality }) {
+    const includedChecks = quality.checks.filter((check) => check.passed);
+    const missingChecks = quality.checks.filter((check) => !check.passed);
+    return (
+        <div className="mt-4 grid gap-3 rounded-md border bg-card p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div>
+                <div className="font-semibold text-foreground">问题质量</div>
+                <p>影响输出：AI 会优先把高质量问题转成判断依据、行动建议和复盘清单。</p>
+            </div>
+            <div className="rounded-md bg-primary/10 p-3 text-center text-primary">
+                <strong>{quality.score}%</strong>
+                <span>可用度</span>
+            </div>
+            <div className="grid gap-2 rounded-md border bg-muted/35 p-3 text-sm sm:col-span-2 sm:grid-cols-2">
+                <div>
+                    <strong className="text-foreground">已包含</strong>
+                    <p>{includedChecks.map((check) => check.label).join("、") || "还需要补充更多上下文"}</p>
+                </div>
+                <div>
+                    <strong className="text-foreground">建议补充</strong>
+                    <p>{missingChecks.map((check) => check.label).join("、") || "问题已经足够具体"}</p>
+                </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5 sm:col-span-2">
+                {quality.checks.map((check) => (
+                    <span key={check.label} className={cn("rounded-full border px-2 py-1 text-xs text-muted-foreground", check.passed && "border-primary/20 bg-primary/5 text-primary")}>
+                        {check.label}
+                    </span>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function CompletionMeter({
+    title,
+    completion,
+    text,
+}: {
+    title: string;
+    completion: ProfileCompletion;
+    text: string;
+}) {
+    return (
+        <div className="grid gap-2 rounded-md border bg-muted p-3 text-muted-foreground">
+            <div className="flex items-center justify-between gap-3">
+                <strong>{title}</strong>
+                <span>{completion.percent}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <span style={{ width: `${completion.percent}%` }} />
+            </div>
+            <p>{completion.missing.length ? `建议补充：${completion.missing.join("、")}` : text}</p>
         </div>
     );
 }
@@ -1680,22 +2446,23 @@ function FollowUpPanel({
     compact?: boolean;
     onFollowUp: (report: AstrologyReport, prompt: string) => void;
 }) {
-    const prompts = [
+    const fallbackPrompts = [
         "基于「{title}」，帮我拆成今天能执行的 3 个行动。",
         "基于「{title}」，哪些判断最不确定？我应该观察什么信号？",
         "基于「{title}」，把建议改成更直接的沟通话术。",
     ];
+    const prompts = report.result?.followUps?.length ? report.result.followUps : fallbackPrompts;
     return (
-        <div className="followup-panel">
+        <div className="grid gap-2 rounded-md border bg-card p-3">
             <div>
-                <div className="list-title">继续追问</div>
-                {!compact && <p>会带着当前报告上下文回到问问区，再生成一份新的细化报告。</p>}
+                <div className="font-semibold text-foreground">继续追问</div>
+                {!compact && <p>优先使用本次报告生成的追问建议，并带着当前报告上下文回到问问区。</p>}
             </div>
-            <div className="followup-actions">
+            <div className="flex flex-wrap gap-1.5">
                 {prompts.slice(0, compact ? 2 : prompts.length).map((prompt) => (
                     <Button
                         key={prompt}
-                        className="astro-secondary"
+                        className="font-semibold text-muted-foreground"
                         variant="outline"
                         size="sm"
                         type="button"
@@ -1723,28 +2490,48 @@ function FeedbackPanel({
 }: {
     report: AstrologyReport;
     compact?: boolean;
-    onFeedback: (report: AstrologyReport, rating: UpdateReportFeedbackParams["rating"]) => void;
+    onFeedback: ReportFeedbackHandler;
 }) {
     const selected = report.providerMetadata?.feedback?.rating;
+    const savedNote = report.providerMetadata?.feedback?.note ?? "";
+    const [feedbackNote, setFeedbackNote] = useState(report.providerMetadata?.feedback?.note ?? "");
+    const noteId = useId();
+    useEffect(() => {
+        setFeedbackNote(savedNote);
+    }, [report.id, savedNote]);
     return (
-        <div className="feedback-panel">
-            <div>
-                <div className="list-title">报告反馈</div>
-                {!compact && <p>反馈会保存到报告记录，用于后续提示词和报告质量优化。</p>}
+        <div className="grid gap-3 rounded-md border bg-muted/20 p-3">
+            <div className="flex items-start justify-between gap-3 max-sm:grid">
+                <div>
+                    <div className="font-semibold text-foreground">报告反馈</div>
+                    <p>这条备注会进入下一次追问或同类报告的 AI 质量参考。</p>
+                </div>
+                <div className="flex flex-wrap justify-end gap-1.5">
+                    {feedbackOptions.map((option) => (
+                        <Button
+                            key={option.value}
+                            className={cn(selected === option.value && "border-primary/30 bg-primary/5 text-foreground")}
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() => onFeedback(report, option.value, feedbackNote.trim() || undefined)}
+                        >
+                            {option.label}
+                        </Button>
+                    ))}
+                </div>
             </div>
-            <div className="feedback-actions">
-                {feedbackOptions.map((option) => (
-                    <Button
-                        key={option.value}
-                        className={selected === option.value ? "active" : ""}
-                        variant="outline"
-                        size="sm"
-                        type="button"
-                        onClick={() => onFeedback(report, option.value)}
-                    >
-                        {option.label}
-                    </Button>
-                ))}
+            <div className="grid gap-1.5">
+                <Label htmlFor={noteId} className="text-xs text-muted-foreground">
+                    反馈备注
+                </Label>
+                <Textarea
+                    id={noteId}
+                    value={feedbackNote}
+                    onChange={(event) => setFeedbackNote(event.target.value)}
+                    placeholder="哪里太泛、哪里有用？写一句真实反馈，方便后续 AI 继续校准。"
+                    rows={compact ? 2 : 3}
+                />
             </div>
         </div>
     );
@@ -1754,6 +2541,7 @@ function ReportDetailModal({
     report,
     onClose,
     onCopy,
+    onDownload,
     onFavorite,
     onDelete,
     onRegenerate,
@@ -1763,11 +2551,12 @@ function ReportDetailModal({
     report: AstrologyReport | null;
     onClose: () => void;
     onCopy: (report: AstrologyReport) => void;
+    onDownload: (report: AstrologyReport) => void;
     onFavorite: (report: AstrologyReport) => void;
     onDelete: (id: string) => void;
     onRegenerate: (report: AstrologyReport) => void;
     onFollowUp: (report: AstrologyReport, prompt: string) => void;
-    onFeedback: (report: AstrologyReport, rating: UpdateReportFeedbackParams["rating"]) => void;
+    onFeedback: ReportFeedbackHandler;
 }) {
     const result = report?.result;
     const deleteDisabled = report ? isReportBusy(report.status) : false;
@@ -1783,8 +2572,7 @@ function ReportDetailModal({
                     <DialogDescription>
                         {report ? (
                             <>
-                                {reportLabel(report.reportType)} ·{" "}
-                                <TimeText value={report.createdAt} format="YYYY/MM/DD HH:mm" /> ·
+                                {reportLabel(report.reportType)} · {formatReportTime(report.createdAt)} ·
                                 扣费 {formatCredits(report.costCredits)}
                             </>
                         ) : (
@@ -1802,8 +2590,15 @@ function ReportDetailModal({
                 )}
                 {report && result && (
                     <div className="space-y-5">
-                        <p className="text-muted-foreground leading-7">{result.summary}</p>
-                        <div className="metric-grid">
+                        <Alert className="border-primary/20 bg-primary/5">
+                            <ShieldCheck size={16} />
+                            <AlertTitle>AI 摘要结论</AlertTitle>
+                            <AlertDescription className="leading-7 text-foreground">{result.summary}</AlertDescription>
+                        </Alert>
+                        <ReportContextTrail report={report} />
+                        <EvidenceList evidence={result.evidence ?? []} />
+                        <ReviewChecklistPanel items={result.reviewChecklist ?? []} />
+                        <div className="grid gap-3 sm:grid-cols-3">
                             {Object.entries(result.scores ?? {}).map(([key, value]) => (
                                 <Metric
                                     key={key}
@@ -1812,15 +2607,15 @@ function ReportDetailModal({
                                 />
                             ))}
                         </div>
-                        <div className="keyword-row">
+                        <div className="flex flex-wrap gap-1.5">
                             {result.keywords?.map((item) => (
-                                <span key={item}>{item}</span>
+                                <Badge key={item} variant="secondary">{item}</Badge>
                             ))}
                         </div>
                         {result.sections?.map((section) => (
-                            <article key={section.heading} className="report-section">
+                            <article key={section.heading} className="rounded-md border bg-muted/35 p-3">
                                 <h3>{section.heading}</h3>
-                                <p>{section.content}</p>
+                                <p className="text-muted-foreground">{section.content}</p>
                             </article>
                         ))}
                         <ListBlock title="行动建议" items={result.actions ?? []} />
@@ -1833,14 +2628,18 @@ function ReportDetailModal({
                             }}
                         />
                         <FeedbackPanel report={report} onFeedback={onFeedback} />
-                        {result.closing && <div className="closing-card">{result.closing}</div>}
+                        {result.closing && <div className="rounded-md border bg-card p-3 leading-7 text-muted-foreground">{result.closing}</div>}
                     </div>
                 )}
                 {report && (
-                    <div className="action-row pt-2">
+                    <div className="flex flex-wrap gap-2 pt-2">
                         <Action onClick={() => onCopy(report)}>
                             <Copy size={14} />
                             复制
+                        </Action>
+                        <Action onClick={() => onDownload(report)}>
+                            <Download size={14} />
+                            下载
                         </Action>
                         <Action onClick={() => onFavorite(report)}>
                             {report.isFavorite ? "取消收藏" : "收藏"}
@@ -1864,18 +2663,79 @@ function ReportDetailModal({
     );
 }
 
-function ListBlock({ title, items }: { title: string; items: string[] }) {
+function ListBlock({ title, items }: { title: string; items: Array<ReportActionItem | ReportWarningItem> }) {
     if (!items.length) return null;
+    const formatter = title === "风险提醒" ? formatWarningItem : formatActionItem;
     return (
-        <div className="list-block">
+        <div className="rounded-md border bg-card p-3">
             <h3>{title}</h3>
             <ul>
                 {items.map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={formatter(item)}>{formatter(item)}</li>
                 ))}
             </ul>
         </div>
     );
+}
+
+function getReportExportText(report: AstrologyReport) {
+    return formatReportResultForExport(report.result) || report.resultText || "";
+}
+
+function formatReportResultForExport(result?: AstrologyReport["result"] | null) {
+    if (!result) return "";
+    const lines = [`# ${result.title}`, "", result.summary, ""];
+    if (result.keywords?.length) {
+        lines.push(`关键词：${result.keywords.join("、")}`, "");
+    }
+    const scores = Object.entries(result.scores ?? {});
+    if (scores.length) {
+        lines.push("## 评分");
+        for (const [key, value] of scores) {
+            lines.push(`- ${scoreLabel(key)}：${Math.round(value)}%`);
+        }
+        lines.push("");
+    }
+    if (result.lucky) {
+        const luckyLines = [
+            result.lucky.color ? `- 幸运色：${result.lucky.color}` : "",
+            typeof result.lucky.number === "number" ? `- 幸运数字：${result.lucky.number}` : "",
+            result.lucky.direction ? `- 方位：${result.lucky.direction}` : "",
+            result.lucky.timeRange ? `- 时间段：${result.lucky.timeRange}` : "",
+        ].filter(Boolean);
+        if (luckyLines.length) lines.push("## 幸运锚点", ...luckyLines, "");
+    }
+    if (result.evidence?.length) {
+        lines.push("## 判断依据");
+        for (const item of result.evidence) {
+            const confidence = item.confidence ? `（${confidenceLabel(item.confidence)}）` : "";
+            lines.push(`- ${item.source}${confidence}：${item.insight}`);
+        }
+        lines.push("");
+    }
+    for (const section of result.sections ?? []) {
+        lines.push(`## ${section.heading}`, section.content, "");
+    }
+    if (result.actions?.length) {
+        lines.push("## 行动建议", ...result.actions.map((item) => `- ${formatActionItem(item)}`), "");
+    }
+    if (result.warnings?.length) {
+        lines.push("## 风险提醒", ...result.warnings.map((item) => `- ${formatWarningItem(item)}`), "");
+    }
+    if (result.reviewChecklist?.length) {
+        lines.push("## 复盘清单");
+        for (const item of result.reviewChecklist) {
+            const timebox = item.timebox ? `[${item.timebox}] ` : "";
+            lines.push(`- ${timebox}${item.item}`);
+            lines.push(`  依据：${item.evidenceSource}；验证点：${item.why}`);
+        }
+        lines.push("");
+    }
+    if (result.followUps?.length) {
+        lines.push("## 继续追问", ...result.followUps.map((item) => `- ${item}`), "");
+    }
+    lines.push(result.closing || "");
+    return lines.join("\n").trim();
 }
 
 type ProfileCompletion = { percent: number; missing: string[] };
@@ -1895,6 +2755,39 @@ function calculateProfileCompletion(profile: Partial<AstrologyProfileInput>): Pr
     return { percent: Math.round((filled.length / fields.length) * 100), missing };
 }
 
+function calculatePartnerCompletion(partner: PartnerInput): ProfileCompletion {
+    const fields: Array<[keyof PartnerInput, string]> = [
+        ["name", "称呼"],
+        ["birthDate", "出生日期"],
+        ["birthTime", "出生时间"],
+        ["birthPlace", "出生地点"],
+        ["zodiacSign", "星座"],
+        ["relationshipStatus", "关系场景"],
+    ];
+    const filled = fields.filter(([key]) => Boolean(partner[key]));
+    const missing = fields.filter(([key]) => !partner[key]).map(([, label]) => label);
+    return { percent: Math.round((filled.length / fields.length) * 100), missing };
+}
+
+function getQuestionQuality(question: string): QuestionQuality {
+    const trimmed = question.trim();
+    const hasScene = /关系|工作|事业|财富|感情|沟通|选择|机会|复合|推进|决定|状态/.test(trimmed);
+    const hasTime = /今天|明天|本周|这周|近期|未来|7天|一周|一个月|现在|当前/.test(trimmed);
+    const hasGoal = /应该|适合|要不要|如何|怎么|风险|机会|行动|建议|避开|观察/.test(trimmed);
+    const hasDetail = trimmed.length >= 18;
+    const checks = [
+        { label: "有具体场景", passed: hasScene },
+        { label: "有时间范围", passed: hasTime },
+        { label: "有决策目标", passed: hasGoal },
+        { label: "信息足够", passed: hasDetail },
+    ];
+    const score = Math.max(
+        10,
+        Math.round((checks.filter((item) => item.passed).length / checks.length) * 100),
+    );
+    return { score, checks };
+}
+
 function scoreLabel(key: string) {
     return (
         (
@@ -1910,6 +2803,26 @@ function scoreLabel(key: string) {
     );
 }
 
+function questionQualityLabel(level: "weak" | "usable" | "strong") {
+    return (
+        {
+            weak: "需补充",
+            usable: "可使用",
+            strong: "信息充分",
+        }[level] ?? "可使用"
+    );
+}
+
+function confidenceLabel(confidence: "low" | "medium" | "high") {
+    return (
+        {
+            low: "低置信",
+            medium: "中置信",
+            high: "高置信",
+        }[confidence] ?? "参考"
+    );
+}
+
 function formatCredits(value?: number | string | null) {
     const numberValue = Number(value ?? 0);
     if (!Number.isFinite(numberValue)) return "0";
@@ -1918,6 +2831,32 @@ function formatCredits(value?: number | string | null) {
 
 function isReportBusy(status: AstrologyReport["status"]) {
     return status === "pending" || status === "processing";
+}
+
+function formatActionItem(item: ReportActionItem) {
+    if (typeof item === "string") return item;
+    return [item.item, item.reason, item.timebox].filter(Boolean).join(" · ");
+}
+
+function getActionItemTitle(item: ReportActionItem) {
+    return typeof item === "string" ? item : item.item;
+}
+
+function formatWarningItem(item: ReportWarningItem) {
+    if (typeof item === "string") return item;
+    return [item.title, item.detail].filter(Boolean).join(" · ");
+}
+
+function getWarningItemTitle(item: ReportWarningItem) {
+    return typeof item === "string" ? item : item.title;
+}
+
+function formatReportTime(value?: string | null) {
+    if (!value) return "未知时间";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "未知时间";
+    const pad = (input: number) => String(input).padStart(2, "0");
+    return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -1939,172 +2878,3 @@ function getErrorMessage(error: unknown, fallback: string) {
     }
     return fallback;
 }
-
-const styles = `
-* { box-sizing: border-box; }
-body { margin: 0; }
-.astro-shell { --astro-surface: var(--card); --astro-border: var(--border); --astro-muted: var(--muted-foreground); --astro-soft: color-mix(in oklab, var(--muted-foreground) 72%, transparent); --astro-accent: var(--primary); --astro-accent-soft: color-mix(in oklab, var(--primary) 9%, transparent); --astro-danger: var(--destructive); min-height: 100vh; overflow-x: hidden; color: var(--foreground); background: color-mix(in oklab, var(--muted) 28%, var(--background)); font-family: Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
-.astro-page { width: min(1180px, 100%); margin: 0 auto; padding: 18px 18px 34px; }
-.app-header { display: block; margin-bottom: 12px; }
-.header-panel, .panel, .report-panel, .generation-panel, .readiness-card, .daily-panel { border: 1px solid var(--astro-border); background: var(--astro-surface); box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 5%, transparent); }
-.panel p, .daily-panel p, .generation-panel p, .readiness-card p { margin: 3px 0 0; color: var(--astro-muted); line-height: 1.6; }
-.header-panel { cursor: pointer; border-radius: 10px; padding: 10px 12px; transition: border-color .16s ease, box-shadow .16s ease; }
-.header-panel:hover { border-color: color-mix(in oklab, var(--astro-accent) 35%, var(--astro-border)); }
-.profile-meta, .header-stats span { color: var(--astro-muted); font-size: 12px; }
-.header-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
-.header-stats span { border: 1px solid var(--astro-border); border-radius: 999px; padding: 4px 8px; background: var(--muted); color: var(--muted-foreground); }
-.data-status { display: flex; align-items: center; gap: 8px; margin: -2px 0 12px; border: 1px solid color-mix(in oklab, var(--astro-accent) 22%, var(--astro-border)); border-radius: 8px; background: var(--astro-accent-soft); padding: 9px 11px; color: var(--astro-accent); font-size: 12px; line-height: 1.45; }
-.data-status svg { flex: 0 0 auto; }
-.work-tabs { margin-bottom: 12px; }
-.work-tabs-list { width: 100%; overflow-x: auto; justify-content: flex-start; }
-.work-tab { min-width: 128px; height: auto; padding: 8px 10px; gap: 6px; }
-.work-tab span { font-weight: 600; }
-.work-tab small { display: block; color: var(--muted-foreground); font-size: 11px; font-weight: 400; line-height: 1.2; }
-.work-grid, .today-layout, .profile-layout { display: grid; grid-template-columns: minmax(0,1.08fr) minmax(320px,.92fr); gap: 14px; align-items: start; }
-.side-stack { display: grid; gap: 14px; }
-.panel, .report-panel, .generation-panel, .readiness-card, .daily-panel { border-radius: 10px; padding: 16px; }
-.daily-panel { display: grid; gap: 16px; }
-.daily-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.daily-head h2 { margin: 6px 0 0; font-size: clamp(24px, 3vw, 34px); line-height: 1.12; font-weight: 700; }
-.daily-head p { max-width: 640px; font-size: 14px; }
-.panel-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
-.compact-heading { align-items: center; justify-content: space-between; }
-.panel-heading h2, .report-head h2, .generation-panel h3, .readiness-card h3 { margin: 0; font-size: 20px; font-weight: 700; }
-.panel-kicker { display: inline-flex; align-items: center; gap: 6px; color: var(--astro-accent); font-size: 12px; font-weight: 650; }
-.panel-icon { display: grid; width: 38px; height: 38px; place-items: center; flex: 0 0 auto; border-radius: 9px; background: var(--astro-accent-soft); color: var(--astro-accent); }
-.intent-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
-.intent-button { min-height: 74px; border: 1px solid var(--astro-border); border-radius: 9px; padding: 10px 11px; color: var(--astro-muted); background: var(--background); text-align: left; transition: border-color .16s ease, background-color .16s ease; }
-.intent-button svg { color: var(--astro-accent); }
-.intent-button span { display: block; margin-top: 6px; color: var(--foreground); font-weight: 650; }
-.intent-button small { display: block; margin-top: 2px; color: var(--astro-muted); line-height: 1.35; }
-.intent-button.active, .intent-button:hover { border-color: color-mix(in oklab, var(--astro-accent) 38%, var(--astro-border)); background: var(--astro-accent-soft); }
-.context-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; border: 1px solid var(--astro-border); border-radius: 8px; padding: 9px 10px; color: var(--astro-muted); background: var(--muted); font-size: 13px; }
-.context-strip strong { color: var(--foreground); }
-.context-strip [data-slot="button"] { margin-left: auto; }
-.form-section { margin-top: 15px; }
-.two-cols { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
-.field { display: grid; gap: 7px; }
-.astro-label { color: var(--foreground); font-weight: 600; }
-.astro-control { min-height: 42px; }
-.astro-select { width: 148px; }
-.template-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.generation-footer, .primary-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
-.cost-hint, .generation-cost-row { display: flex; flex-wrap: wrap; gap: 8px; color: var(--astro-muted); font-size: 12px; }
-.cost-hint span, .generation-cost-row span { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--astro-border); border-radius: 999px; padding: 6px 9px; background: var(--muted); }
-.astro-primary { font-weight: 600; }
-.astro-secondary { }
-.astro-danger { }
-.generation-panel ul { margin: 12px 0; padding: 0; list-style: none; display: grid; gap: 8px; }
-.generation-panel li { border-left: 2px solid color-mix(in oklab, var(--astro-accent) 38%, var(--astro-border)); padding-left: 10px; color: var(--foreground); font-size: 13px; line-height: 1.55; }
-.missing-note, .relation-note { display: flex; gap: 8px; margin-top: 12px; border-radius: 8px; background: var(--astro-accent-soft); padding: 10px; color: var(--astro-accent); font-size: 13px; line-height: 1.55; }
-.readiness-card { display: grid; gap: 12px; }
-.progress-line { height: 8px; overflow: hidden; border-radius: 999px; background: var(--muted); }
-.progress-line span { display: block; height: 100%; border-radius: inherit; background: var(--astro-accent); }
-.readiness-bottom { display: flex; justify-content: space-between; align-items: center; color: var(--astro-muted); }
-.report-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.report-head p { margin: 4px 0 0; color: var(--astro-muted); font-size: 12px; }
-.report-content { display: grid; gap: 14px; }
-.report-summary { margin: 0; border-left: 3px solid color-mix(in oklab, var(--astro-accent) 42%, var(--astro-border)); padding-left: 12px; color: var(--foreground); line-height: 1.75; }
-.keyword-row { display: flex; flex-wrap: wrap; gap: 7px; }
-.keyword-row span { border: 1px solid color-mix(in oklab, var(--astro-accent) 20%, var(--astro-border)); border-radius: 999px; background: var(--astro-accent-soft); padding: 5px 9px; color: var(--astro-accent); font-size: 12px; }
-.report-section, .list-block, .closing-card, .action-list, .followup-panel, .feedback-panel { border: 1px solid var(--astro-border); border-radius: 9px; background: var(--background); padding: 13px; }
-.report-section h3, .list-block h3, .list-title { margin: 0; color: var(--foreground); font-size: 14px; font-weight: 650; }
-.report-section p, .list-block li { color: var(--astro-muted); font-size: 14px; line-height: 1.7; }
-.metric-grid, .lucky-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; }
-.lucky-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-.metric-card, .lucky-card { border: 1px solid var(--astro-border); border-radius: 8px; background: var(--muted); padding: 12px; }
-.metric-card span, .lucky-card span { display: block; color: var(--astro-muted); font-size: 12px; }
-.metric-card strong, .lucky-card strong { display: block; margin-top: 4px; font-size: 21px; }
-.lucky-card strong { font-size: 15px; }
-.action-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.action-list { display: grid; gap: 8px; }
-.action-item { display: flex; align-items: flex-start; gap: 8px; color: var(--astro-muted); font-size: 13px; line-height: 1.55; }
-.action-item input { margin-top: 3px; accent-color: var(--astro-accent); }
-.followup-panel { display: grid; gap: 10px; }
-.followup-panel p { margin: 3px 0 0; color: var(--astro-muted); font-size: 12px; }
-.followup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.followup-actions [data-slot="button"] { height: auto; min-height: 32px; white-space: normal; text-align: left; }
-.feedback-panel { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.feedback-panel p { margin: 3px 0 0; color: var(--astro-muted); font-size: 12px; }
-.feedback-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-.feedback-actions [data-slot="button"].active { border-color: color-mix(in oklab, var(--astro-accent) 34%, var(--astro-border)); background: var(--astro-accent-soft); color: var(--astro-accent); }
-.status-box, .empty-state { display: flex; gap: 12px; align-items: flex-start; min-height: 150px; border: 1px dashed var(--astro-border); border-radius: 9px; background: var(--muted); padding: 18px; color: var(--astro-muted); }
-.empty-state { display: grid; align-content: center; }
-.status-box strong, .empty-state strong { color: var(--foreground); }
-.status-box p, .empty-state p { margin: 6px 0 0; line-height: 1.65; }
-.status-box.danger { border-color: color-mix(in oklab, var(--astro-danger) 30%, var(--astro-border)); background: color-mix(in oklab, var(--astro-danger) 10%, var(--background)); }
-.status-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.profile-list, .history-list { display: grid; gap: 10px; }
-.profile-card, .history-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; border: 1px solid var(--astro-border); border-radius: 9px; padding: 13px; color: var(--foreground); background: var(--background); text-align: left; transition: border-color .16s ease, background-color .16s ease; }
-.profile-card:hover, .profile-card.active, .history-card:hover { border-color: color-mix(in oklab, var(--astro-accent) 35%, var(--astro-border)); background: var(--astro-accent-soft); }
-.profile-card strong, .history-card strong { display: block; }
-.profile-card span, .history-card span, .profile-card small { display: block; margin-top: 4px; color: var(--astro-muted); font-size: 12px; }
-.mini-actions { display: flex; gap: 5px; flex-shrink: 0; }
-.mini-actions span { border: 1px solid var(--astro-border); border-radius: 8px; background: var(--muted); padding: 5px 8px; color: var(--astro-muted); }
-.mini-actions .danger { color: var(--astro-danger); }
-.form-submit { margin-top: 14px; }
-.history-score { text-align: right; flex-shrink: 0; }
-.history-score b { display: block; font-size: 23px; }
-.history-score small { color: var(--astro-accent); }
-.pagination-row { display: flex; justify-content: flex-end; margin-top: 14px; }
-.list-block ul { margin: 10px 0 0; padding-left: 18px; }
-.closing-card { color: var(--astro-muted); line-height: 1.7; }
-.header-panel { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 10px; border-radius: 8px; }
-.profile-main { display: flex; min-width: 0; align-items: center; gap: 8px; }
-.profile-main svg { color: var(--astro-accent); flex: 0 0 auto; }
-.profile-main strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 650; }
-.profile-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--astro-muted); font-size: 12px; }
-.header-stats { justify-content: flex-end; margin-top: 0; }
-.header-stats b { border: 1px solid var(--astro-border); border-radius: 999px; padding: 4px 8px; background: var(--astro-accent-soft); color: var(--astro-accent); font-size: 12px; }
-.panel, .report-panel, .generation-panel, .readiness-card, .daily-panel { border-radius: 8px; }
-.daily-head h2 { font-size: clamp(22px, 2.6vw, 30px); }
-.context-row { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; border: 1px solid var(--astro-border); border-radius: 8px; background: var(--muted); padding: 9px 10px; font-size: 12px; color: var(--astro-muted); }
-.context-row strong { color: var(--foreground); font-weight: 650; }
-.intent-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
-.intent-strip::-webkit-scrollbar, .work-tabs-list::-webkit-scrollbar { display: none; }
-.intent-button { min-width: 118px; min-height: auto; border-radius: 8px; padding: 9px 10px; }
-.intent-button small { max-width: 140px; font-size: 11px; }
-.ai-cue { display: flex; align-items: flex-start; gap: 7px; border-radius: 8px; background: var(--astro-accent-soft); padding: 9px 10px; color: var(--astro-accent); font-size: 12px; line-height: 1.45; }
-.ai-cue svg { margin-top: 1px; flex: 0 0 auto; }
-.relationship-summary { display: grid; gap: 3px; margin-top: 12px; border: 1px solid var(--astro-border); border-radius: 8px; background: var(--background); padding: 11px; }
-.relationship-summary strong { font-size: 15px; }
-.relationship-summary span { color: var(--astro-muted); font-size: 12px; }
-.form-group-title { margin: 14px 0 8px; color: var(--astro-muted); font-size: 12px; font-weight: 650; }
-.compact-fields { grid-template-columns: repeat(3, minmax(0,1fr)); }
-.cost-hint.compact { justify-content: flex-end; flex-shrink: 0; }
-.work-grid, .today-layout, .profile-layout, .report-content { animation: astroFade .18s ease-out; }
-@keyframes astroFade { from { opacity: .65; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-@media (max-width: 900px) {
-    .work-grid, .today-layout, .profile-layout { grid-template-columns: 1fr; }
-    .work-tab small { display: none; }
-    .daily-head { display: grid; }
-}
-@media (max-width: 760px) {
-    .astro-page { padding: 12px; }
-    .app-header { margin-bottom: 10px; }
-    .header-panel { min-height: 50px; align-items: flex-start; flex-direction: column; gap: 7px; padding: 10px 12px; }
-    .profile-main { width: 100%; }
-    .header-stats { justify-content: flex-start; }
-    .header-stats span:nth-child(2), .header-stats span:nth-child(3) { display: none; }
-    .work-tabs-list { padding-bottom: 2px; }
-    .work-tab { min-width: 64px; padding: 8px 6px; gap: 4px; }
-    .work-tab small { display: none; }
-    .panel, .report-panel, .generation-panel, .readiness-card, .daily-panel { border-radius: 9px; padding: 14px; }
-    .daily-panel { gap: 13px; }
-    .daily-head h2 { font-size: 24px; line-height: 1.14; }
-    .daily-head p { font-size: 13px; line-height: 1.5; }
-    .cost-hint.compact { justify-content: flex-start; }
-    .intent-grid, .two-cols, .metric-grid, .lucky-grid { grid-template-columns: 1fr; }
-    .compact-fields { grid-template-columns: 1fr; }
-    .intent-button { min-width: 108px; }
-    .intent-button small { display: none; }
-    .generation-footer, .primary-actions, .report-head, .compact-heading { align-items: stretch; flex-direction: column; }
-    .primary-actions { flex-direction: row; }
-    .primary-actions .astro-primary, .primary-actions .astro-secondary { flex: 1 1 0; padding-left: 8px; padding-right: 8px; }
-    .feedback-panel { align-items: flex-start; flex-direction: column; }
-    .feedback-actions { justify-content: flex-start; }
-    .context-strip [data-slot="button"] { margin-left: 0; }
-    .profile-card, .history-card { align-items: flex-start; }
-    .history-score { text-align: left; }
-}
-`;

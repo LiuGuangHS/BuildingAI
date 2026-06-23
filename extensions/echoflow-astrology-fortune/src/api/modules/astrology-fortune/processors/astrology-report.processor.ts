@@ -40,7 +40,10 @@ export class AstrologyReportProcessor extends WorkerHost {
                 status: report?.status ?? "missing",
             };
         } catch (error) {
-            await this.astrologyFortuneService.markReportCrashed(id, error);
+            await this.astrologyFortuneService.markReportCrashed(id, error, {
+                failureType: "worker_job_failed",
+                failureReason: error instanceof Error ? error.message : String(error),
+            });
             throw error;
         }
     }

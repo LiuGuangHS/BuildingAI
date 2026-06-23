@@ -15,7 +15,6 @@ export type AstrologyProfileInput = {
 
 export type AstrologyProfile = AstrologyProfileInput & {
     id: string;
-    userId: string;
     zodiacSign: string;
     chineseZodiac: string;
     personalitySnapshot: Record<string, unknown>;
@@ -24,15 +23,38 @@ export type AstrologyProfile = AstrologyProfileInput & {
     updatedAt: string;
 };
 
+export type ConsoleAstrologyProfile = AstrologyProfile & {
+    userId: string;
+};
+
+export type AstrologyGenerationStatus = {
+    canGenerate: boolean;
+    unavailableReason?: string | null;
+    prices: {
+        daily: number;
+        report: number;
+        compatibility: number;
+        decision: number;
+    };
+};
+
 export type AstrologyReportResult = {
     title: string;
     summary: string;
     scores?: Record<string, number>;
     keywords?: string[];
     lucky?: { color?: string; number?: number; direction?: string; timeRange?: string };
+    evidence?: Array<{ source: string; insight: string; confidence?: "low" | "medium" | "high" }>;
     sections?: Array<{ heading: string; content: string }>;
-    actions?: string[];
-    warnings?: string[];
+    actions?: Array<string | { item: string; reason?: string; timebox?: string }>;
+    warnings?: Array<string | { title: string; detail?: string }>;
+    reviewChecklist?: Array<{
+        item: string;
+        why: string;
+        evidenceSource: string;
+        timebox?: string;
+    }>;
+    followUps?: string[];
     closing?: string;
 };
 
@@ -68,6 +90,12 @@ export type AstrologyReport = {
             language?: string;
             sourceReportId?: string;
             hasTargetProfile?: boolean;
+            questionQuality?: {
+                level?: "weak" | "usable" | "strong";
+                score?: number;
+                signals?: string[];
+                missing?: string[];
+            };
         };
     }) | null;
     createdAt: string;
@@ -151,6 +179,9 @@ export type QueryAstrologyReportsParams = {
     status?: AstrologyReportStatus;
     profileId?: string;
     isFavorite?: boolean;
+};
+
+export type ConsoleQueryAstrologyReportsParams = QueryAstrologyReportsParams & {
     userId?: string;
     modelId?: string;
     providerId?: string;
@@ -160,6 +191,9 @@ export type QueryAstrologyProfilesParams = {
     page?: number;
     pageSize?: number;
     keyword?: string;
+};
+
+export type ConsoleQueryAstrologyProfilesParams = QueryAstrologyProfilesParams & {
     userId?: string;
 };
 

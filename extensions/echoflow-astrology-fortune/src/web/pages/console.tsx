@@ -63,7 +63,7 @@ import {
     useDeleteConsoleAstrologyReportMutation,
     useUpdateAstrologyFortuneSettingMutation,
 } from "../services/console/astrology-fortune";
-import type { AstrologyProfile, AstrologyReport, AstrologyReportStats, AstrologyReportStatus, AstrologyReportType, QueryAstrologyReportsParams } from "../services/types";
+import type { AstrologyReportStats, AstrologyReportStatus, AstrologyReportType, ConsoleAstrologyProfile, ConsoleAstrologyReport, ConsoleQueryAstrologyReportsParams } from "../services/types";
 
 type SettingForm = {
     defaultModelId: string;
@@ -87,7 +87,7 @@ type ProfileFilters = {
 };
 
 type ConsoleTab = "overview" | "settings" | "reports" | "tasks" | "profiles";
-type DeleteTarget = { source: "row" | "detail"; report: AstrologyReport };
+type DeleteTarget = { source: "row" | "detail"; report: ConsoleAstrologyReport };
 
 const PAGE_SIZE = 20;
 const CONSOLE_BASE_PATH = `/extension/${packageJson.name}/console`;
@@ -147,7 +147,7 @@ export default function AstrologyFortuneConsolePage({ section = "overview" }: { 
 
     const settingQuery = useAstrologyFortuneSettingQuery();
     const modelsQuery = useAvailableLlmModelsQuery();
-    const reportStatsParams = useMemo<QueryAstrologyReportsParams>(() => ({
+    const reportStatsParams = useMemo<ConsoleQueryAstrologyReportsParams>(() => ({
         reportType: reportFilters.reportType === "all" ? undefined : reportFilters.reportType,
         status: reportFilters.status === "all" ? undefined : reportFilters.status,
         userId: reportFilters.userId || undefined,
@@ -534,7 +534,7 @@ function ReportsPanel({
     onCleanupStale,
 }: {
     filters: ReportFilters;
-    reports: AstrologyReport[];
+    reports: ConsoleAstrologyReport[];
     total: number;
     loading: boolean;
     deletingId?: string;
@@ -544,7 +544,7 @@ function ReportsPanel({
     onApplyFilters: () => void;
     onResetFilters: () => void;
     onOpen: (id: string) => void;
-    onDelete: (report: AstrologyReport) => void;
+    onDelete: (report: ConsoleAstrologyReport) => void;
     onCleanupStale: () => void;
 }) {
     return (
@@ -646,11 +646,11 @@ function TasksPanel({
     onDelete,
 }: {
     stats: AstrologyReportStats;
-    reports: AstrologyReport[];
+    reports: ConsoleAstrologyReport[];
     cleanupLoading: boolean;
     onCleanupStale: () => void;
     onOpen: (id: string) => void;
-    onDelete: (report: AstrologyReport) => void;
+    onDelete: (report: ConsoleAstrologyReport) => void;
 }) {
     const taskReports = reports.filter((report) => report.status !== "success");
     return (
@@ -732,7 +732,7 @@ function ProfilesPanel({
     onResetFilters,
 }: {
     filters: ProfileFilters;
-    profiles: AstrologyProfile[];
+    profiles: ConsoleAstrologyProfile[];
     total: number;
     loading: boolean;
     PaginationComponent: React.FC<{ className?: string }>;
@@ -811,13 +811,35 @@ function ReportDetailDialog({
     onOpenChange,
     onDelete,
 }: {
-    report: AstrologyReport | null;
+    report: ConsoleAstrologyReport | null;
     loading: boolean;
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onDelete: (report: AstrologyReport) => void;
+    onDelete: (report: ConsoleAstrologyReport) => void;
 }) {
     const metadata = report?.providerMetadata ?? {};
+    const evidence = report ? (report.result?.evidence ?? []).filter((item) => item.source || item.insight).slice(0, 5) : [];
+    const reviewChecklist = report
+        ? (report.result?.reviewChecklist ?? []).filter((item) => item.item || item.why || item.evidenceSource).slice(0, 4)
+        : [];
+    const scores = report
+        ? Object.entries(report.result?.scores ?? {})
+            .filter(([, value]) => typeof value === "number" && Number.isFinite(value))
+            .slice(0, 6)
+        : [];
+    const keywords = report ? (report.result?.keywords ?? []).filter(Boolean).slice(0, 8) : [];
+    const lucky = report ? report.result?.lucky : undefined;
+    const luckyItems = lucky
+        ? [
+            ["幸运色", lucky.color],
+            ["幸运数字", typeof lucky.number === "number" && Number.isFinite(lucky.number) ? String(lucky.number) : undefined],
+            ["方位", lucky.direction],
+            ["时间段", lucky.timeRange],
+        ].filter(([, value]) => Boolean(value))
+        : [];
+    const actions = report ? (report.result?.actions ?? []).filter(Boolean).slice(0, 6) : [];
+    const warnings = report ? (report.result?.warnings ?? []).filter(Boolean).slice(0, 6) : [];
+    const followUps = report ? (report.result?.followUps ?? []).filter(Boolean).slice(0, 6) : [];
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-h-[88vh] overflow-auto sm:max-w-3xl">
@@ -840,8 +862,124 @@ function ReportDetailDialog({
                             <Detail label="模型 ID" value={report.modelId} />
                             <Detail label="Provider ID" value={report.providerId} />
                             <Detail label="退款异常" value={formatMetadataValue(metadata.refundError)} />
+                            <Detail label="失败类型" value={formatMetadataValue(metadata.failureType)} />
+                            <Detail label="失败原因" value={formatMetadataValue(metadata.failureReason)} />
+                            <Detail label="AI 修复重试" value={formatAiRepairAttempt(metadata.aiRepairAttempted)} />
+                            <Detail label="修复结果" value={formatAiRepairResult(metadata.aiRepairAttempted, metadata.aiRepairSucceeded)} />
+                            <Detail label="修复原因" value={formatMetadataValue(metadata.aiRepairReason)} />
                         </div>
                         {report.errorMessage && <div className="text-destructive rounded-md border p-3 text-sm">{report.errorMessage}</div>}
+                        {!!scores.length && (
+                            <section className="rounded-md border bg-card p-4">
+                                <div className="mb-3 flex items-center gap-2">
+                                    <h3 className="text-sm font-semibold">评分</h3>
+                                </div>
+                                <div className="grid gap-2 sm:grid-cols-3">
+                                    {scores.map(([key, value]) => (
+                                        <div key={key} className="rounded-md bg-muted p-3">
+                                            <div className="text-muted-foreground text-xs">{scoreLabel(key)}</div>
+                                            <div className="mt-1 text-lg font-semibold leading-none">{Math.round(value)}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+                        {!!keywords.length && (
+                            <section className="rounded-md border bg-card p-4">
+                                <div className="mb-3 flex items-center gap-2">
+                                    <h3 className="text-sm font-semibold">关键词</h3>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {keywords.map((keyword) => <Badge key={keyword} variant="secondary">{keyword}</Badge>)}
+                                </div>
+                            </section>
+                        )}
+                        {!!luckyItems.length && (
+                            <section className="rounded-md border bg-card p-4">
+                                <div className="mb-3 flex items-center gap-2">
+                                    <h3 className="text-sm font-semibold">幸运锚点</h3>
+                                </div>
+                                <div className="grid gap-2 sm:grid-cols-4">
+                                    {luckyItems.map(([label, value]) => (
+                                        <div key={label} className="rounded-md bg-muted p-3">
+                                            <div className="text-muted-foreground text-xs">{label}</div>
+                                            <div className="mt-1 text-sm font-medium">{value}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+                        {!!evidence.length && (
+                            <section className="rounded-md border bg-card p-4">
+                                <div className="mb-3 flex items-center gap-2">
+                                    <ShieldCheck className="text-primary size-4" />
+                                    <h3 className="text-sm font-semibold">判断依据</h3>
+                                </div>
+                                <div className="space-y-3">
+                                    {evidence.map((item, index) => (
+                                        <div key={`${item.source}-${index}`} className="rounded-md bg-muted p-3">
+                                            <div className="mb-1 flex flex-wrap items-center gap-2">
+                                                <span className="text-sm font-medium">{item.source}</span>
+                                                {item.confidence && <Badge variant="outline">{confidenceLabel(item.confidence)}</Badge>}
+                                            </div>
+                                            <p className="text-muted-foreground text-sm leading-6">{item.insight}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+                        {!!reviewChecklist.length && (
+                            <section className="rounded-md border bg-card p-4">
+                                <div className="mb-3 flex items-center gap-2">
+                                    <CheckCircle2 className="text-primary size-4" />
+                                    <h3 className="text-sm font-semibold">复盘清单</h3>
+                                </div>
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    {reviewChecklist.map((item, index) => (
+                                        <div key={`${item.item}-${index}`} className="rounded-md bg-muted p-3">
+                                            <div className="text-sm font-medium leading-6">{item.item}</div>
+                                            <p className="text-muted-foreground mt-2 text-xs leading-5">依据：{item.evidenceSource || "未标注"}</p>
+                                            <p className="text-muted-foreground mt-1 text-xs leading-5">验证点：{item.why || "未标注"}</p>
+                                            {item.timebox && <p className="text-muted-foreground mt-1 text-xs leading-5">时间：{item.timebox}</p>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+                        {!!actions.length && (
+                            <section className="rounded-md border bg-card p-4">
+                                <div className="mb-3 flex items-center gap-2">
+                                    <h3 className="text-sm font-semibold">行动建议</h3>
+                                </div>
+                                <div className="grid gap-2 md:grid-cols-2">
+                                    {actions.map((action, index) => (
+                                        <div key={`${action}-${index}`} className="rounded-md bg-muted p-3 text-sm leading-6">{action}</div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+                        {!!warnings.length && (
+                            <section className="rounded-md border bg-card p-4">
+                                <div className="mb-3 flex items-center gap-2">
+                                    <h3 className="text-sm font-semibold">风险提醒</h3>
+                                </div>
+                                <div className="space-y-2">
+                                    {warnings.map((warning, index) => (
+                                        <div key={`${warning}-${index}`} className="rounded-md bg-muted p-3 text-sm leading-6 text-muted-foreground">{warning}</div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+                        {!!followUps.length && (
+                            <section className="rounded-md border bg-card p-4">
+                                <div className="mb-3 flex items-center gap-2">
+                                    <h3 className="text-sm font-semibold">继续追问</h3>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {followUps.map((question, index) => <Badge key={`${question}-${index}`} variant="outline">{question}</Badge>)}
+                                </div>
+                            </section>
+                        )}
                         <article className="rounded-md bg-muted p-4">
                             <p className="text-sm leading-7">{report.result?.summary || report.resultText || "暂无内容"}</p>
                             {report.result?.sections?.map((section) => (
@@ -1016,6 +1154,25 @@ function StatusBadge({ status }: { status: AstrologyReportStatus }) {
     return <Badge variant={variant}>{statusLabel(status)}</Badge>;
 }
 
+function confidenceLabel(confidence: "low" | "medium" | "high") {
+    if (confidence === "high") return "高置信";
+    if (confidence === "medium") return "中置信";
+    return "低置信";
+}
+
+function scoreLabel(key: string) {
+    const labels: Record<string, string> = {
+        overall: "整体",
+        love: "关系",
+        career: "事业",
+        wealth: "财富",
+        mood: "情绪",
+        health: "身心",
+        social: "人际",
+    };
+    return labels[key] ?? key;
+}
+
 function normalizePrice(value: string) {
     const numberValue = Number(value);
     return Number.isFinite(numberValue) && numberValue >= 0 ? numberValue : 0;
@@ -1068,6 +1225,17 @@ function formatMetadataValue(value: unknown) {
     } catch {
         return String(value);
     }
+}
+
+function formatAiRepairAttempt(value: unknown) {
+    if (value === true) return "已尝试";
+    if (value === false) return "未触发";
+    return undefined;
+}
+
+function formatAiRepairResult(attempted: unknown, succeeded: unknown) {
+    if (attempted !== true) return undefined;
+    return succeeded === true ? "成功" : "失败";
 }
 
 function getErrorMessage(error: unknown, fallback: string) {

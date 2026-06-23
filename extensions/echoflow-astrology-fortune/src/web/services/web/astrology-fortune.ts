@@ -1,11 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiHttpClient } from "../base";
-import type { AstrologyProfile, AstrologyProfileInput, AstrologyReport, GenerateAstrologyReportParams, PaginatedResponse, QueryAstrologyReportsParams, UpdateReportFeedbackParams } from "../types";
+import type { AstrologyGenerationStatus, AstrologyProfile, AstrologyProfileInput, AstrologyReport, GenerateAstrologyReportParams, PaginatedResponse, QueryAstrologyReportsParams, UpdateReportFeedbackParams } from "../types";
 
+const GENERATION_STATUS_QUERY_KEY = ["echoflow-astrology-fortune", "generation-status"] as const;
 const PROFILE_QUERY_KEY = ["echoflow-astrology-fortune", "profiles"] as const;
 const REPORT_QUERY_KEY = ["echoflow-astrology-fortune", "reports"] as const;
 const quietQueryOptions = { retry: false, staleTime: 30_000 } as const;
+
+export function getAstrologyGenerationStatus() {
+    return apiHttpClient.get<AstrologyGenerationStatus>("/astrology-fortune/generation-status", { silent: true });
+}
 
 export function createAstrologyProfile(params: AstrologyProfileInput) {
     return apiHttpClient.post<AstrologyProfile>("/astrology-fortune/profiles", params);
@@ -20,7 +25,7 @@ export function deleteAstrologyProfile(profileId: string) {
 }
 
 export function listAstrologyProfiles() {
-    return apiHttpClient.get<PaginatedResponse<AstrologyProfile>>("/astrology-fortune/profiles", { params: { pageSize: 50 }, silent: true });
+    return apiHttpClient.get<PaginatedResponse<AstrologyProfile>>("/astrology-fortune/profiles", { query: { pageSize: 50 }, silent: true });
 }
 
 export function generateAstrologyReport(params: GenerateAstrologyReportParams) {
@@ -28,7 +33,7 @@ export function generateAstrologyReport(params: GenerateAstrologyReportParams) {
 }
 
 export function listAstrologyReports(params?: QueryAstrologyReportsParams) {
-    return apiHttpClient.get<PaginatedResponse<AstrologyReport>>("/astrology-fortune/reports", { params, silent: true });
+    return apiHttpClient.get<PaginatedResponse<AstrologyReport>>("/astrology-fortune/reports", { query: params, silent: true });
 }
 
 export function updateReportFavorite(reportId: string, isFavorite: boolean) {
@@ -45,6 +50,10 @@ export function deleteAstrologyReport(reportId: string) {
 
 export function useAstrologyProfilesQuery() {
     return useQuery({ queryKey: PROFILE_QUERY_KEY, queryFn: listAstrologyProfiles, ...quietQueryOptions });
+}
+
+export function useAstrologyGenerationStatusQuery() {
+    return useQuery({ queryKey: GENERATION_STATUS_QUERY_KEY, queryFn: getAstrologyGenerationStatus, ...quietQueryOptions });
 }
 
 export function useCreateAstrologyProfileMutation() {
