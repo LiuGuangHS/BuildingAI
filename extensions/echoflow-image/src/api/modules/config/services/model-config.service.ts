@@ -6,8 +6,8 @@ import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import {
     assertPublicHttpUrl,
-    normalizeProviderConfig,
     normalizePublicHttpUrl,
+    resolveProviderEndpointCredential,
 } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 
@@ -25,6 +25,7 @@ import { ImagePolicyConfig } from "../../../db/entities/image-policy-config.enti
 import { CreateModelConfigDto, QueryModelConfigDto, UpdateModelConfigDto, ImageModelEndpointDto } from "../dto";
 import {
     BUILT_IN_IMAGE_MODEL_CONFIGS,
+    DEFAULT_IMAGE_GATEWAY_BASE_URL,
     getBuiltInImageModel,
     type BuiltInImageModelConfig,
 } from "./image-model-catalog";
@@ -188,22 +189,11 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     }
 
     async resolveEndpointCredential(endpoint: ImageModelEndpoint) {
-        if (!endpoint.secretId) {
-            throw HttpErrorFactory.badRequest("请先为接入点选择主站密钥");
-        }
-        const secretConfig = await this.secretService.getConfigKeyValuePairs(endpoint.secretId);
-        const values = normalizeProviderConfig(secretConfig);
-        const apiKey = values.apiKey;
-        const baseUrl = endpoint.baseUrlOverride ||
-            values.baseURL ||
-            "https://api.openai.com/v1";
-        if (!apiKey) {
-            throw HttpErrorFactory.badRequest("主站密钥中未找到 apiKey/api_key 字段");
-        }
-        return {
-            apiKey,
-            baseUrl: await assertPublicHttpUrl(baseUrl, { label: "Base URL" }),
-        };
+        return resolveProviderEndpointCredential(endpoint, {
+            defaultBaseUrl: DEFAULT_IMAGE_GATEWAY_BASE_URL,
+            label: "Base URL",
+            secretConfigResolver: (secretId) => this.secretService.getConfigKeyValuePairs(secretId),
+        });
     }
 
     async resolveRuntimeEndpoint(config: ResolvedImageModelConfig) {
@@ -401,15 +391,43 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             capabilities: this.enforceProtocolCapabilities(config.requestContract, config.capabilities),
             defaultParams: config.defaultParams,
             allowedParams: config.allowedParams ?? {},
-            endpoints: config.endpoints ?? [],
+            endpoints: this.normalizeEndpointConfigs(config.endpoints, []),
             sortOrder: config.sortOrder,
         };
     }
 
     private toOperationalView(config: ImageModelConfig) {
+        const resolved = this.toResolvedConfig(config);
         return {
-            ...this.toResolvedConfig(config),
-            endpoints: config.endpoints ?? [],
+            id: resolved.id,
+            aiModelId: resolved.aiModelId,
+            provider: resolved.provider,
+            model: resolved.model,
+            externalModelId: resolved.externalModelId,
+            requestContract: resolved.requestContract,
+            displayName: resolved.displayName,
+            description: resolved.description,
+            enabled: resolved.enabled,
+            visibleToUser: resolved.visibleToUser,
+            capabilities: resolved.capabilities,
+            defaultParams: resolved.defaultParams,
+            allowedParams: resolved.allowedParams,
+            endpoints: resolved.endpoints.map((endpoint) => ({
+                id: endpoint.id,
+                name: endpoint.name,
+                secretId: endpoint.secretId,
+                secretName: endpoint.secretName,
+                baseUrlOverride: endpoint.baseUrlOverride,
+                enabled: endpoint.enabled,
+                priority: endpoint.priority,
+                requestTimeoutMs: endpoint.requestTimeoutMs,
+                testTimeoutMs: endpoint.testTimeoutMs,
+                maxRetries: endpoint.maxRetries,
+                retryDelayMs: endpoint.retryDelayMs,
+            })),
+            sortOrder: resolved.sortOrder,
+            createdAt: config.createdAt,
+            updatedAt: config.updatedAt,
         };
     }
 

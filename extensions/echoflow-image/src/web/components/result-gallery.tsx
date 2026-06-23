@@ -1,6 +1,6 @@
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
+import { Card, CardContent } from "@buildingai/ui/components/ui/card";
 import { cn } from "@buildingai/ui/lib/utils";
 import { Copy, Download, ExternalLink, ImageIcon, Images, LayoutPanelTop, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -15,10 +15,20 @@ interface ResultGalleryProps {
     images?: GeneratedImageRecord[];
     isLoading?: boolean;
     onOpenCanvas?: () => void;
+    variant?: "card" | "stage";
 }
 
-export function ResultGallery({ generation, images, isLoading, onOpenCanvas }: ResultGalleryProps) {
+function getStatusLabel(status?: ImageGenerationStatus | string) {
+    if (status === ImageGenerationStatus.SUCCEEDED) return "已完成";
+    if (status === ImageGenerationStatus.FAILED) return "失败";
+    if (status === ImageGenerationStatus.PROCESSING) return "生成中";
+    if (status === ImageGenerationStatus.PENDING) return "排队中";
+    return status;
+}
+
+export function ResultGallery({ generation, images, isLoading, onOpenCanvas, variant = "card" }: ResultGalleryProps) {
     const resolvedImages = images ?? generation?.resultImages ?? [];
+    const isStage = variant === "stage";
 
     const copyText = async (text?: string) => {
         if (!text) return;
@@ -34,34 +44,38 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas }: R
         for (let i = 0; i < resolvedImages.length; i++) {
             const src = resolveImageSrc(resolvedImages[i]);
             if (src) {
-                await new Promise((r) => setTimeout(r, 300));
                 downloadImage(src, `echoflow-image-${generation?.id || "result"}-${i + 1}.png`);
             }
         }
     };
 
     return (
-        <Card className={cn(
-            "gap-0 overflow-hidden rounded-md py-0 transition-all duration-300",
-            resolvedImages.length > 0 && "border-primary/10 bg-gradient-to-br from-background via-background to-primary/[0.03] shadow-md",
-        )}>
-            <CardHeader className="border-b bg-card/70 px-4 py-4 md:px-5">
-                <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                            <div className={cn(
-                                "flex size-8 items-center justify-center rounded-lg",
-                                resolvedImages.length > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+        <Card
+            className={cn(
+                "gap-0 overflow-hidden rounded-lg py-0 shadow-sm",
+                isStage && "min-h-[28rem] md:min-h-[34rem]",
+                !isStage && resolvedImages.length > 0 && "border-primary/10 bg-gradient-to-br from-background via-background to-primary/[0.03]",
+            )}
+        >
+            <div className="border-b bg-card/70 px-4 py-4">
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                            <span className={cn(
+                                "flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground",
+                                resolvedImages.length > 0 && "bg-primary/10 text-primary",
                             )}>
                                 <ImageIcon className="size-4" />
+                            </span>
+                            <div className="min-w-0">
+                                <h2 className={cn("truncate font-semibold", isStage ? "text-base" : "text-lg")}>结果舞台</h2>
+                                <p className="truncate text-xs text-muted-foreground">
+                                    {resolvedImages.length > 0
+                                        ? `${resolvedImages.length} 张结果，可下载或继续整理到画布`
+                                        : "生成完成后，结果会停在这里供你挑选。"}
+                                </p>
                             </div>
-                            生成结果
-                        </CardTitle>
-                        <CardDescription>
-                            {resolvedImages.length > 0
-                                ? `${resolvedImages.length} 张图片`
-                                : "填写提示词并生成后，结果会显示在这里"}
-                        </CardDescription>
+                        </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                         {resolvedImages.length > 0 && onOpenCanvas && (
@@ -86,55 +100,69 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas }: R
                             <Badge
                                 variant={
                                     generation.status === ImageGenerationStatus.SUCCEEDED ? "default"
-                                    : generation.status === ImageGenerationStatus.FAILED ? "destructive"
-                                    : "secondary"
+                                        : generation.status === ImageGenerationStatus.FAILED ? "destructive"
+                                            : "secondary"
                                 }
                                 className="shrink-0"
                             >
-                                {generation.status === ImageGenerationStatus.SUCCEEDED ? "成功"
-                                 : generation.status === ImageGenerationStatus.FAILED ? "失败"
-                                 : generation.status === ImageGenerationStatus.PROCESSING ? "生成中"
-                                 : generation.status}
+                                {getStatusLabel(generation.status)}
                             </Badge>
                         )}
                     </div>
                 </div>
-            </CardHeader>
-            <CardContent className="p-4 md:p-5">
+            </div>
+            <CardContent className={cn(isStage ? "p-3 md:p-4" : "p-4 md:p-5")}>
                 {isLoading ? (
                     <ResultSkeleton />
                 ) : generation?.status === ImageGenerationStatus.FAILED ? (
-                    <div className="flex min-h-[420px] flex-col items-center justify-center rounded-md border border-dashed border-destructive/30 bg-destructive/[0.03] px-4 text-center">
+                    <div className="flex min-h-[18rem] flex-col items-center justify-center rounded-lg border border-dashed bg-muted/10 p-4 text-center md:min-h-[28.5rem]">
                         <div className="mb-4 rounded-full bg-destructive/10 p-3">
                             <ImageIcon className="size-8 text-destructive" />
                         </div>
                         <p className="font-semibold text-destructive">生成失败</p>
                         <p className="mt-2 max-w-xs text-sm text-muted-foreground">
-                            {generation?.errorMessage || "未知错误，请重试"}
+                            {generation?.errorMessage || "任务没有完成。如果已经扣费，将按账务结果处理退款。"}
                         </p>
                     </div>
                 ) : resolvedImages.length === 0 ? (
-                    <div className="relative flex min-h-[420px] overflow-hidden rounded-md border border-dashed border-border/70 bg-muted/10 px-4 text-center">
-                        <div className="pointer-events-none absolute inset-0 grid grid-cols-3 gap-3 p-4 opacity-60">
-                            {Array.from({ length: 6 }).map((_, index) => (
-                                <div
-                                    key={index}
-                                    className={cn(
-                                        "rounded-md border bg-background/70",
-                                        index === 0 && "row-span-2",
-                                        index === 3 && "col-span-2",
-                                    )}
-                                />
-                            ))}
-                        </div>
-                        <div className="relative m-auto flex max-w-xs flex-col items-center">
-                            <div className="mb-4 rounded-full bg-background/90 p-4 shadow-sm">
-                                <Sparkles className="size-8 text-muted-foreground/60" />
+                    <div className="relative flex min-h-[18rem] overflow-hidden rounded-lg border border-dashed bg-muted/10 px-4 text-center md:min-h-[28.5rem]">
+                        {isStage ? (
+                            <div className="ef-image-stage-grid" aria-hidden="true" />
+                        ) : (
+                            <div className="pointer-events-none absolute inset-0 grid grid-cols-3 gap-3 p-4 opacity-60">
+                                {Array.from({ length: 6 }).map((_, index) => (
+                                    <div
+                                        key={index}
+                                        className={cn(
+                                            "rounded-md border bg-background/70",
+                                            index === 0 && "row-span-2",
+                                            index === 3 && "col-span-2",
+                                        )}
+                                    />
+                                ))}
                             </div>
-                            <p className="font-medium text-muted-foreground">等待创作</p>
-                            <p className="mt-1.5 text-sm text-muted-foreground/70">
-                                输入提示词并点击生成后，作品会在这里预览
+                        )}
+                        <div className="relative m-auto flex max-w-sm flex-col items-center text-center">
+                            <div className="flex size-16 items-center justify-center rounded-lg border bg-background text-muted-foreground shadow-sm">
+                                <Sparkles className="size-8" />
+                            </div>
+                            <p className="mt-4 font-semibold">画面还没开始</p>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                                输入提示词后提交生成，结果会停在这里等待你挑选。
                             </p>
+                            <div className="mt-8 grid w-full max-w-lg grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
+                                {["待开始", "排队中", "生成中", "处理结果"].map((step, index) => (
+                                    <span
+                                        key={step}
+                                        className={cn(
+                                            "rounded-md border bg-background px-2 py-1.5",
+                                            index === 0 && "border-primary/35 bg-primary/5 text-primary",
+                                        )}
+                                    >
+                                        {step}
+                                    </span>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 ) : (
@@ -145,48 +173,35 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas }: R
                                 整理到画布
                             </Button>
                         )}
-                        <div className={cn(
-                            "grid gap-3",
-                            resolvedImages.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2",
-                        )}>
+                        <div
+                            className={cn(
+                                "grid gap-3",
+                                resolvedImages.length === 1 ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2",
+                            )}
+                        >
                             {resolvedImages.map((image, index) => {
                                 const src = resolveImageSrc(image);
                                 return (
-                                    <div key={index} className="group relative overflow-hidden rounded-xl border bg-background shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
+                                    <div key={index} className="group overflow-hidden rounded-lg border bg-background shadow-sm transition hover:border-primary/25 hover:shadow-md">
                                         {src ? (
                                             <>
                                                 <div className="relative aspect-square overflow-hidden">
                                                     <img
                                                         src={src}
                                                         alt={`生成图片 ${index + 1}`}
-                                                        className="size-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                                                        className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                                                         loading="lazy"
                                                     />
-                                                    <div className="absolute inset-x-0 bottom-0 flex items-end justify-end gap-1.5 bg-gradient-to-t from-black/50 via-black/20 to-transparent p-3 md:opacity-0 md:transition-opacity md:group-hover:opacity-100">
+                                                    <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                                                         {onOpenCanvas && (
-                                                            <Button
-                                                                size="icon-sm"
-                                                                variant="secondary"
-                                                                className="size-8 bg-white/90 hover:bg-white"
-                                                                onClick={onOpenCanvas}
-                                                            >
+                                                            <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" onClick={onOpenCanvas}>
                                                                 <LayoutPanelTop className="size-3.5" />
                                                             </Button>
                                                         )}
-                                                        <Button
-                                                            size="icon-sm"
-                                                            variant="secondary"
-                                                            className="size-8 bg-white/90 hover:bg-white"
-                                                            onClick={() => window.open(src, "_blank", "noopener,noreferrer")}
-                                                        >
+                                                        <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" onClick={() => window.open(src, "_blank", "noopener,noreferrer")}>
                                                             <ExternalLink className="size-3.5" />
                                                         </Button>
-                                                        <Button
-                                                            size="icon-sm"
-                                                            variant="secondary"
-                                                            className="size-8 bg-white/90 hover:bg-white"
-                                                            onClick={() => downloadImage(src, `echoflow-image-${generation?.id || "result"}-${index + 1}.png`)}
-                                                        >
+                                                        <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" onClick={() => downloadImage(src, `echoflow-image-${generation?.id || "result"}-${index + 1}.png`)}>
                                                             <Download className="size-3.5" />
                                                         </Button>
                                                     </div>
@@ -207,12 +222,7 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas }: R
                                                 <p className="line-clamp-2 flex-1 text-xs italic text-muted-foreground">
                                                     &ldquo;{image.revisedPrompt}&rdquo;
                                                 </p>
-                                                <Button
-                                                    size="icon-sm"
-                                                    variant="ghost"
-                                                    className="-mr-1 shrink-0"
-                                                    onClick={() => copyText(image.revisedPrompt)}
-                                                >
+                                                <Button size="icon-sm" variant="ghost" className="-mr-1 shrink-0" onClick={() => copyText(image.revisedPrompt)}>
                                                     <Copy className="size-3" />
                                                 </Button>
                                             </div>

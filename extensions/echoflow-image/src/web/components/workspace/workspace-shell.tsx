@@ -1,7 +1,5 @@
-import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
-import { cn } from "@buildingai/ui/lib/utils";
-import { History, WandSparkles } from "lucide-react";
+import { Database, History, Sparkles, WandSparkles } from "lucide-react";
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -18,40 +16,42 @@ export function WorkspaceShell({ mode, onModeChange, children, quickActions }: W
     const navigate = useNavigate();
 
     return (
-        <div className="min-h-screen bg-background px-4 py-4 md:px-6 md:py-6 lg:px-8">
-            <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4">
-                <header className="rounded-xl border bg-card/95 px-4 py-4 shadow-sm backdrop-blur md:px-5">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                        <div className="flex min-w-0 items-start gap-3">
-                            <div className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                                <WandSparkles className="size-5" />
-                            </div>
-                            <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <h1 className="text-[1.6rem] font-semibold leading-none">AI 绘画</h1>
-                                    <Badge variant="secondary">主站生图模型</Badge>
-                                    <Badge variant="outline">OpenAI-compatible</Badge>
-                                </div>
-                                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-                                    生成模式适合快速出图，无限画布适合拖拽、组合和迭代。两种模式共享同一套模型、计费和历史。
-                                </p>
-                            </div>
+        <div className="min-w-0 bg-muted/20 p-2 sm:p-2.5">
+            <div className="flex min-w-0 flex-col gap-2.5">
+                <header className="grid min-w-0 items-center gap-2.5 rounded-lg border bg-card/95 p-2 shadow-sm sm:p-3 md:grid-cols-[minmax(13rem,auto)_auto_minmax(0,1fr)_auto]">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
+                            <WandSparkles className="size-4" />
+                        </span>
+                        <div className="min-w-0">
+                            <h1 className="truncate text-lg font-semibold leading-none">EchoFlowAI 绘画</h1>
+                            <p className="mt-1 hidden text-xs text-muted-foreground md:block">按当前账号可用模型生成，作品可继续整理到画布。</p>
                         </div>
+                    </div>
 
-                        <div className="flex flex-col gap-3 xl:items-end">
-                            <WorkspaceModeSwitch value={mode} onChange={onModeChange} />
-                            <div className="flex flex-wrap items-center gap-2">
-                                {quickActions}
-                                <Button variant="outline" size="sm" onClick={() => navigate("history")} className="rounded-md">
-                                    <History className="size-4" />
-                                    全部历史
-                                </Button>
-                            </div>
-                        </div>
+                    <WorkspaceModeSwitch value={mode} onChange={onModeChange} />
+
+                    <div className="hidden min-w-0 flex-wrap items-center gap-1.5 md:flex" aria-label="模型与能力">
+                        <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2.5 py-2 text-xs text-muted-foreground">
+                            <Database className="size-3.5" />
+                            主站生图模型
+                        </span>
+                        <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2.5 py-2 text-xs text-muted-foreground">
+                            <Sparkles className="size-3.5" />
+                            OpenAI-compatible
+                        </span>
+                    </div>
+
+                    <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5 md:ml-0">
+                        {quickActions}
+                        <Button variant="outline" size="sm" onClick={() => navigate("history")} className="rounded-md">
+                            <History className="size-4" />
+                            <span className="hidden sm:inline">历史</span>
+                        </Button>
                     </div>
                 </header>
 
-                <div className={cn("min-h-0", mode === "canvas" ? "flex-1" : "")}>{children}</div>
+                <div className={mode === "canvas" ? "min-h-0 flex-1" : "min-h-0"}>{children}</div>
             </div>
         </div>
     );

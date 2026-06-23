@@ -1,9 +1,7 @@
 import { BaseService } from "@buildingai/base";
-import { generateText } from "@buildingai/ai-sdk";
-import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants/shared/account-log.constants";
-import { FileUploadService } from "@buildingai/core/modules";
+import { ACTION } from "@buildingai/constants/shared/account-log.constants";
+import { FileStorageService, FileUploadService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AccountLog } from "@buildingai/db/entities";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThan, Like, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -11,14 +9,14 @@ import {
     ExtensionBillingService,
     ExtensionNotificationService,
     PublicAiModelService,
+    assertPublicHttpUrl,
     buildDefinedWhere,
-    normalizeProviderConfig,
+    normalizePublicHttpUrl,
+    safeJsonParse,
 } from "@buildingai/extension-sdk";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import type { Queue } from "bullmq";
-import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Readable } from "node:stream";
 
@@ -60,14 +58,13 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     constructor(
         @InjectRepository(ImageGeneration)
         private readonly generationRepository: Repository<ImageGeneration>,
-        @InjectRepository(AccountLog)
-        private readonly accountLogRepository: Repository<AccountLog>,
         private readonly aiModelService: PublicAiModelService,
         private readonly billingService: ExtensionBillingService,
         private readonly modelConfigService: ModelConfigService,
         private readonly billingRuleService: BillingRuleService,
         private readonly policyService: PolicyService,
         private readonly fileUploadService: FileUploadService,
+        private readonly fileStorageService: FileStorageService,
         private readonly notificationService: ExtensionNotificationService,
         @InjectQueue(IMAGE_GENERATION_QUEUE)
         private readonly generationQueue: Queue,
@@ -136,7 +133,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
         const effectiveConfig = await this.modelConfigService.findEnabledByModel(dto.modelId);
         const runtime = await this.modelConfigService.resolveRuntimeEndpoint(effectiveConfig);
-        const normalizedRequest = this.normalizeGenerationRequest(dto, effectiveConfig);
+        const normalizedRequest = await this.normalizeGenerationRequest(dto, effectiveConfig);
         const normalizedDto = {
             ...dto,
             referenceImageUrl: normalizedRequest.referenceImageUrl,
@@ -151,7 +148,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             responseFormat: normalizedRequest.responseFormat,
             outputFormat: normalizedRequest.outputFormat,
         };
-        this.validateAllowedParams(normalizedDto, effectiveConfig);
+        this.validateAllowedParams(normalizedDto, effectiveConfig, normalizedRequest.sourceImages);
         const usage = await this.getUserPolicyUsage(userId);
         const modelConfigId = effectiveConfig.id;
         const policy = await this.policyService.validateGeneration(modelConfigId, normalizedDto, usage.activeCount, usage.todayCount);
@@ -342,8 +339,8 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             const storedResult = await this.storeResultImages(saved.id, result.images);
             saved.resultImages = storedResult.images;
             saved.storageFiles = storedResult.storageFiles;
-            saved.rawRequest = result.rawRequest;
-            saved.rawResponse = result.rawResponse;
+            saved.rawRequest = this.compactRawPayload(result.rawRequest);
+            saved.rawResponse = this.compactRawPayload(result.rawResponse);
             saved.status = ImageGenerationStatus.SUCCEEDED;
             saved.progress = 100;
             saved.completedAt = new Date();
@@ -364,6 +361,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
                     await this.refundGenerationBilling(saved, `Refund for failed generation ${saved.id}`);
                 } catch (refundError) {
                     saved.billingStatus = ImageGenerationBillingStatus.DEDUCTED;
+                    await this.recordRefundFailureMetadata(saved, refundError);
                     saved.errorMessage = this.truncateText(
                         `${saved.errorMessage} (退款失败，请联系管理员)`,
                         2000,
@@ -472,6 +470,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
                 await this.refundGenerationBilling(saved, `Refund for crashed generation ${saved.id}`);
             } catch (refundError) {
                 saved.billingStatus = ImageGenerationBillingStatus.DEDUCTED;
+                await this.recordRefundFailureMetadata(saved, refundError);
                 saved.errorMessage = this.truncateText(
                     `${saved.errorMessage} (退款失败，请联系管理员)`,
                     2000,
@@ -485,6 +484,30 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
         await this.generationRepository.save(saved);
         await this.notifyTerminalStatus(saved);
+    }
+
+    private async recordRefundFailureMetadata(record: ImageGeneration, error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        const update = {
+            rawResponse: {
+                ...(record.rawResponse ?? {}),
+                metadata: {
+                    ...(typeof record.rawResponse?.metadata === "object" && record.rawResponse.metadata !== null
+                        ? record.rawResponse.metadata
+                        : {}),
+                    refundError: this.truncateText(message, 1000),
+                    refundFailedAt: new Date().toISOString(),
+                },
+            },
+        };
+        record.rawResponse = update.rawResponse;
+        try {
+            await this.generationRepository.update(record.id, update);
+        } catch (metadataError) {
+            this.logger.warn(
+                `Persist image generation ${record.id} refund failure metadata failed: ${metadataError instanceof Error ? metadataError.message : String(metadataError)}`,
+            );
+        }
     }
 
     private async notifyTerminalStatus(record: ImageGeneration) {
@@ -664,19 +687,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     async enhancePrompt(dto: PromptEnhanceDto) {
         if (dto.modelId) {
             try {
-                const modelInfo = await this.aiModelService.getModelInfo(dto.modelId);
-                const providerConfig = normalizeProviderConfig(
-                    await this.aiModelService.getProviderConfig(modelInfo.id),
-                );
-                if (!providerConfig.apiKey || !providerConfig.baseURL) {
-                    throw new Error("缺少主站 LLM 接入配置");
-                }
-                const provider = await this.aiModelService.getProviderAdapter(modelInfo.id, providerConfig);
-                if (!provider.supports("language")) {
-                    throw new Error("所选主站模型不支持文本生成");
-                }
-                const result = await generateText({
-                    model: provider(modelInfo.model).model,
+                const result = await this.aiModelService.generateText(dto.modelId, {
                     system: [
                         "You are a professional AI image prompt director.",
                         "Rewrite the user's idea into a concise, production-ready image generation prompt.",
@@ -821,14 +832,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         action: (typeof ACTION)[keyof typeof ACTION],
         manager?: EntityManager,
     ) {
-        const repository = manager?.getRepository(AccountLog) ?? this.accountLogRepository;
-        return repository.exists({
-            where: {
-                associationNo,
-                accountType: ACCOUNT_LOG_TYPE.PLUGIN_DEC,
-                action,
-            } as FindOptionsWhere<AccountLog>,
-        });
+        return this.billingService.hasBillingLog({ associationNo, action }, manager);
     }
 
     private async generateWithProvider(
@@ -945,11 +949,11 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
     }
 
-    private normalizeGenerationRequest(dto: CreateGenerationDto, modelConfig: Pick<ImageModelConfig, "capabilities" | "defaultParams" | "requestContract">) {
-        const sourceImages = this.normalizeSourceImages(dto);
+    private async normalizeGenerationRequest(dto: CreateGenerationDto, modelConfig: Pick<ImageModelConfig, "capabilities" | "defaultParams" | "requestContract">) {
+        const sourceImages = await this.normalizeSourceImages(dto);
         const primarySourceImage = sourceImages[0];
         const referenceImageUrl = primarySourceImage?.url;
-        const maskImageUrl = this.normalizeReferenceImageUrl(dto.maskImageUrl, Boolean(dto.maskImageFileId));
+        const maskImageUrl = await this.normalizeReferenceImageUrl(dto.maskImageUrl, Boolean(dto.maskImageFileId));
         const hasReferenceImage = sourceImages.length > 0;
         const hasMaskImage = Boolean(maskImageUrl || dto.maskImageFileId);
         const mode =
@@ -981,14 +985,17 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         };
     }
 
-    private validateAllowedParams(dto: CreateGenerationDto, modelConfig: Pick<ImageModelConfig, "allowedParams" | "capabilities" | "defaultParams" | "requestContract">) {
+    private validateAllowedParams(
+        dto: CreateGenerationDto,
+        modelConfig: Pick<ImageModelConfig, "allowedParams" | "capabilities" | "defaultParams" | "requestContract">,
+        sourceImages: ImageSourceRecord[],
+    ) {
         const allowed = modelConfig.allowedParams ?? {};
         const capabilities = modelConfig.capabilities ?? {};
         const size = dto.size ?? modelConfig.defaultParams?.size;
         const quality = dto.quality ?? modelConfig.defaultParams?.quality;
         const style = dto.style ?? modelConfig.defaultParams?.style;
         const count = dto.n ?? modelConfig.defaultParams?.n ?? 1;
-        const sourceImages = this.normalizeSourceImages(dto);
 
         const hasReferenceImage = sourceImages.length > 0;
         if (!hasReferenceImage && capabilities.textToImage === false) {
@@ -1083,6 +1090,57 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         return text.length > maxLength ? text.slice(0, maxLength) + "..." : text;
     }
 
+    private compactRawPayload(payload: Record<string, unknown>): Record<string, unknown> {
+        const MAX_STRING_LENGTH = 10_000;
+        const MAX_TOTAL_LENGTH = 60_000;
+        let stringTruncations = 0;
+        let binaryOmissions = 0;
+
+        try {
+            const text = JSON.stringify(payload, (key, value) => {
+                if (typeof value !== "string") return value;
+
+                const lowerKey = key.toLowerCase();
+                if (lowerKey.includes("b64_json") || lowerKey.includes("base64")) {
+                    binaryOmissions++;
+                    return "[omitted base64 payload]";
+                }
+                if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(value)) {
+                    binaryOmissions++;
+                    return value.replace(/;base64,.+$/i, ";base64,[omitted]");
+                }
+                if (lowerKey.includes("image_url") && value.length > MAX_STRING_LENGTH) {
+                    binaryOmissions++;
+                    return "data:image/*;base64,[omitted]";
+                }
+                if (value.length > MAX_STRING_LENGTH) {
+                    stringTruncations++;
+                    return `${value.slice(0, MAX_STRING_LENGTH)}...[truncated ${value.length - MAX_STRING_LENGTH} chars]`;
+                }
+                return value;
+            });
+
+            if (text.length > MAX_TOTAL_LENGTH) {
+                this.logger.warn(
+                    `Raw image payload exceeded ${MAX_TOTAL_LENGTH} chars (actual ${text.length}), truncating`,
+                );
+                return {
+                    _truncated: true,
+                    _originalLength: text.length,
+                    preview: text.slice(0, MAX_TOTAL_LENGTH),
+                };
+            }
+
+            const result = safeJsonParse<Record<string, unknown>>(text);
+            if (!result) return { preview: text.slice(0, MAX_TOTAL_LENGTH) };
+            if (stringTruncations > 0) result._stringTruncations = stringTruncations;
+            if (binaryOmissions > 0) result._binaryOmissions = binaryOmissions;
+            return result;
+        } catch {
+            return { _truncated: true, _error: "raw payload is not serializable" };
+        }
+    }
+
     private async storeResultImages(
         generationId: string,
         images: Array<{ url?: string; b64Json?: string; mimeType?: string; revisedPrompt?: string }>,
@@ -1093,7 +1151,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         for (const [index, img] of images.entries()) {
             if (img.url) {
                 storedImages.push({
-                    url: this.normalizeResultImageUrl(img.url),
+                    url: await this.normalizeResultImageUrl(img.url),
                     mimeType: img.mimeType,
                     revisedPrompt: img.revisedPrompt,
                 });
@@ -1114,11 +1172,17 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             const year = String(now.getFullYear());
             const month = String(now.getMonth() + 1).padStart(2, "0");
             const relativePath = path.posix.join("generated", year, month, `${generationId}-${index + 1}.${extension}`);
-            const absolutePath = path.join(this.getExtensionUploadRoot(), relativePath);
             const buffer = Buffer.from(this.stripBase64DataUrl(img.b64Json), "base64");
 
-            await mkdir(path.dirname(absolutePath), { recursive: true });
-            await writeFile(absolutePath, buffer);
+            await this.fileStorageService.saveBuffer(
+                buffer,
+                {
+                    path: path.posix.dirname(relativePath),
+                    fileName: path.posix.basename(relativePath),
+                    fullPath: relativePath,
+                },
+                { extensionId: "echoflow-image" },
+            );
 
             const url = `/echoflow-image/uploads/${relativePath}`;
             const storageFile = {
@@ -1143,64 +1207,30 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
     }
 
-    private normalizeResultImageUrl(raw: string): string {
+    private async normalizeResultImageUrl(raw: string): Promise<string> {
         try {
-            const url = new URL(raw);
-            if (!["http:", "https:"].includes(url.protocol)) {
-                throw new Error("unsupported protocol");
-            }
-            if (url.username || url.password) {
-                throw new Error("credentials not allowed");
-            }
-            if (this.isPrivateOrLocalHost(url.hostname)) {
-                throw new Error("private host not allowed");
-            }
+            const url = new URL(await assertPublicHttpUrl(raw, { label: "图片结果 URL" }));
             return url.toString();
         } catch {
             throw HttpErrorFactory.badRequest("图片服务返回了不安全的图片地址");
         }
     }
 
-    private normalizeReferenceImageUrl(raw?: string, trustedFile = false): string | undefined {
+    private async normalizeReferenceImageUrl(raw?: string, trustedFile = false): Promise<string | undefined> {
+        if (trustedFile) return undefined;
         if (!raw) return undefined;
         const value = raw.trim();
         if (!value) return undefined;
 
         try {
-            const url = new URL(value);
-            if (!["http:", "https:"].includes(url.protocol)) {
-                throw new Error("unsupported protocol");
-            }
-            if (url.username || url.password) {
-                throw new Error("credentials not allowed");
-            }
-            if (!trustedFile && this.isPrivateOrLocalHost(url.hostname)) {
-                throw new Error("private host not allowed");
-            }
+            const url = new URL(await assertPublicHttpUrl(value, { label: "参考图 URL" }));
             return url.toString().slice(0, 2000);
         } catch {
             throw HttpErrorFactory.badRequest("参考图地址无效或不安全；平台上传文件请提交 fileId");
         }
     }
 
-    private isPrivateOrLocalHost(hostname: string): boolean {
-        const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-        return (
-            host === "localhost" ||
-            host === "0.0.0.0" ||
-            host === "127.0.0.1" ||
-            host === "::1" ||
-            host.endsWith(".local") ||
-            host.startsWith("10.") ||
-            host.startsWith("127.") ||
-            host.startsWith("169.254.") ||
-            host.startsWith("192.168.") ||
-            /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
-            /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
-        );
-    }
-
-    private normalizeSourceImages(dto: CreateGenerationDto): ImageSourceRecord[] {
+    private async normalizeSourceImages(dto: CreateGenerationDto): Promise<ImageSourceRecord[]> {
         const images = [
             ...(dto.sourceImages ?? []),
             ...(dto.referenceImageUrl || dto.referenceImageFileId
@@ -1212,7 +1242,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
         for (const item of images) {
             const fileId = item.fileId;
-            const url = this.normalizeReferenceImageUrl(item.url, Boolean(fileId));
+            const url = fileId ? undefined : await this.normalizeReferenceImageUrl(item.url);
             const key = fileId || url;
             if (!key || seen.has(key)) continue;
             seen.add(key);
@@ -1266,43 +1296,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         return Buffer.concat(chunks);
     }
 
-    private getExtensionUploadRoot(): string {
-        return path.join(this.resolveExtensionRoot(), "storage", "uploads");
-    }
-
-    private resolveExtensionRoot(): string {
-        const directCandidates = [
-            path.resolve(__dirname),
-            path.resolve(process.cwd(), "extensions", "echoflow-image"),
-            path.resolve(process.cwd(), "..", "..", "extensions", "echoflow-image"),
-            path.resolve(process.cwd()),
-        ];
-
-        for (const start of directCandidates) {
-            const root = this.findExtensionRootFrom(start);
-            if (root) return root;
-        }
-
-        return path.resolve(process.cwd(), "extensions", "echoflow-image");
-    }
-
-    private findExtensionRootFrom(start: string): string | undefined {
-        let current = start;
-        for (let depth = 0; depth < 8; depth += 1) {
-            if (
-                path.basename(current) === "echoflow-image" &&
-                existsSync(path.join(current, "manifest.json")) &&
-                existsSync(path.join(current, "package.json"))
-            ) {
-                return current;
-            }
-            const parent = path.dirname(current);
-            if (parent === current) break;
-            current = parent;
-        }
-        return undefined;
-    }
-
     private isUniqueConstraintError(error: unknown): boolean {
         const dbError = error as { code?: string; constraint?: string; message?: string };
         return (
@@ -1320,7 +1313,6 @@ export const generationModuleEntities = [
     ImageBillingRule,
     ImagePolicyConfig,
     ImagePromptTemplate,
-    AccountLog,
 ];
 
 export const generationModuleProviders = [

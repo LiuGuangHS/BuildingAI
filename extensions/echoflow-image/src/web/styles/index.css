@@ -1,3 +1,14 @@
 @import "@buildingai/ui/styles/index.css";
 @import "@buildingai/ui/styles/base.css";
 @import "@buildingai/ui/styles/utils.css";
+
+.ef-image-stage-grid {
+    position: absolute;
+    inset: 0.75rem;
+    opacity: 0.7;
+    background-image:
+        linear-gradient(color-mix(in oklab, var(--border) 52%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in oklab, var(--border) 52%, transparent) 1px, transparent 1px);
+    background-size: 2rem 2rem;
+    mask-image: radial-gradient(circle at 50% 48%, black, transparent 78%);
+}

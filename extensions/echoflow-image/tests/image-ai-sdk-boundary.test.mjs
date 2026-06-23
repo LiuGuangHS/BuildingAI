@@ -6,15 +6,14 @@ const generationServiceSource = readFileSync(
     new URL("../src/api/modules/generation/services/generation.service.ts", import.meta.url),
     "utf8",
 );
+const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
 
-test("image prompt optimization uses ai-sdk only after resolving the main-system model adapter", () => {
-    const adapterIndex = generationServiceSource.indexOf("this.aiModelService.getProviderAdapter(modelInfo.id, providerConfig)");
-    const generateIndex = generationServiceSource.indexOf("const result = await generateText(");
-
-    assert.ok(generationServiceSource.includes('from "@buildingai/ai-sdk"'));
+test("image prompt optimization uses the extension SDK text generation entrypoint", () => {
+    assert.equal(generationServiceSource.includes('from "@buildingai/ai-sdk"'), false);
+    assert.equal(packageSource.includes("@buildingai/ai-sdk"), false);
     assert.ok(generationServiceSource.includes("PublicAiModelService"));
-    assert.ok(generationServiceSource.includes("normalizeProviderConfig"));
-    assert.ok(generationServiceSource.includes("this.aiModelService.getProviderConfig(modelInfo.id)"));
-    assert.ok(adapterIndex > 0);
-    assert.ok(generateIndex > adapterIndex);
+    assert.ok(generationServiceSource.includes("this.aiModelService.generateText("));
+    assert.equal(generationServiceSource.includes("this.aiModelService.getProviderConfig(modelInfo.id)"), false);
+    assert.equal(generationServiceSource.includes("this.aiModelService.getProviderAdapter("), false);
+    assert.equal(generationServiceSource.includes("const result = await generateText("), false);
 });

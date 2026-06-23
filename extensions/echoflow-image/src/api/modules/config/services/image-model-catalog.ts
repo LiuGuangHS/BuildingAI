@@ -13,6 +13,8 @@ export const ECHOFLOW_IMAGE_MODEL = {
     OPENAI_COMPATIBLE_IMAGE: "openai-compatible-image",
 } as const;
 
+export const DEFAULT_IMAGE_GATEWAY_BASE_URL = "https://api.openai.com/v1";
+
 export type EchoFlowImageModel =
     (typeof ECHOFLOW_IMAGE_MODEL)[keyof typeof ECHOFLOW_IMAGE_MODEL];
 

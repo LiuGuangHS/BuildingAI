@@ -1,15 +1,31 @@
 import { defineRouteOption } from "@buildingai/web-core";
+import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
+import { lazy, Suspense, type ReactNode } from "react";
 
 import packageJson from "./../../package.json";
-import WebDetailPage from "./pages/detail";
-import WebHistoryPage from "./pages/history";
-import ConsoleDetailPage from "./pages/console/detail";
-import ConsoleHistoryPage from "./pages/console/history";
-import EchoflowImageConsolePage from "./pages/console/index";
-import ConsoleModelsPage from "./pages/console/models";
-import ConsolePoliciesPage from "./pages/console/policies";
-import ConsoleTemplatesPage from "./pages/console/templates";
-import EchoflowImagePublicPage from "./pages/index";
+
+const EchoflowImagePublicPage = lazy(() => import("./pages/index"));
+const WebHistoryPage = lazy(() => import("./pages/history"));
+const WebDetailPage = lazy(() => import("./pages/detail"));
+const EchoflowImageConsolePage = lazy(() => import("./pages/console/index"));
+const ConsoleModelsPage = lazy(() => import("./pages/console/models"));
+const ConsolePoliciesPage = lazy(() => import("./pages/console/policies"));
+const ConsoleTemplatesPage = lazy(() => import("./pages/console/templates"));
+const ConsoleHistoryPage = lazy(() => import("./pages/console/history"));
+const ConsoleDetailPage = lazy(() => import("./pages/console/detail"));
+
+function LazyPage({ children }: { children: ReactNode }) {
+    return <Suspense fallback={<RouteLoading />}>{children}</Suspense>;
+}
+
+function RouteLoading() {
+    return (
+        <div className="mx-auto grid w-full max-w-[1480px] gap-3 p-3 md:p-4" role="status" aria-live="polite">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-64 w-full rounded-lg" />
+        </div>
+    );
+}
 
 export const routeOption = defineRouteOption({
     base: `extension/${packageJson.name}`,
@@ -17,15 +33,15 @@ export const routeOption = defineRouteOption({
     routes: [
         {
             index: true,
-            element: <EchoflowImagePublicPage />,
+            element: <LazyPage><EchoflowImagePublicPage /></LazyPage>,
         },
         {
             path: "history",
-            element: <WebHistoryPage />,
+            element: <LazyPage><WebHistoryPage /></LazyPage>,
         },
         {
             path: "history/:id",
-            element: <WebDetailPage />,
+            element: <LazyPage><WebDetailPage /></LazyPage>,
         },
     ],
     consoleMenus: [
@@ -58,27 +74,27 @@ export const routeOption = defineRouteOption({
     consoleRoutes: [
         {
             index: true,
-            element: <EchoflowImageConsolePage />,
+            element: <LazyPage><EchoflowImageConsolePage /></LazyPage>,
         },
         {
             path: "models",
-            element: <ConsoleModelsPage />,
+            element: <LazyPage><ConsoleModelsPage /></LazyPage>,
         },
         {
             path: "policies",
-            element: <ConsolePoliciesPage />,
+            element: <LazyPage><ConsolePoliciesPage /></LazyPage>,
         },
         {
             path: "templates",
-            element: <ConsoleTemplatesPage />,
+            element: <LazyPage><ConsoleTemplatesPage /></LazyPage>,
         },
         {
             path: "history",
-            element: <ConsoleHistoryPage />,
+            element: <LazyPage><ConsoleHistoryPage /></LazyPage>,
         },
         {
             path: "history/:id",
-            element: <ConsoleDetailPage />,
+            element: <LazyPage><ConsoleDetailPage /></LazyPage>,
         },
     ],
 });

@@ -319,7 +319,9 @@ export function InspirationBoard({ generation, compact = false }: InspirationBoa
                 <CardContent className={cn("p-0", compact ? "h-[600px]" : "h-[640px]")}>
                     <Tldraw
                         persistenceKey="echoflow-image:inspiration-board:v1"
-                        onMount={(editor) => (editorRef.current = editor)}
+                        onMount={(editor) => {
+                            editorRef.current = editor;
+                        }}
                     />
                 </CardContent>
             </Card>

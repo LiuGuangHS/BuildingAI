@@ -1,14 +1,15 @@
 import { HttpErrorFactory } from "@buildingai/errors";
+import { buildDefinedWhere, safeJsonParse } from "@buildingai/extension-sdk/utils/pure";
 
 import { type GeneratedImageRecord } from "../../../db/entities/image-generation.entity";
 import type { ImageRequestContract } from "../../../db/entities/image-model-config.entity";
+import { DEFAULT_IMAGE_GATEWAY_BASE_URL } from "../../config/services/image-model-catalog";
 import {
     buildImageFilename,
     downloadReferenceImageFromUrl,
     normalizeImageBaseURL,
     normalizeImageMimeType,
     requestImageResponseText,
-    safeJsonParse,
 } from "./image-http-client";
 
 export interface OpenAIImageClientConfig {
@@ -67,7 +68,7 @@ export class OpenAIImageClient {
             throw HttpErrorFactory.badRequest("图片模型接入点绑定的主站密钥缺少 apiKey/api_key 字段");
         }
         this.apiKey = config.apiKey;
-        this.baseURL = normalizeImageBaseURL(config.baseURL || "https://api.openai.com/v1");
+        this.baseURL = normalizeImageBaseURL(config.baseURL || DEFAULT_IMAGE_GATEWAY_BASE_URL);
     }
 
     async testConnection(model: string, requestContract: ImageRequestContract = "responses") {
@@ -100,7 +101,7 @@ export class OpenAIImageClient {
             });
         }
 
-        const body = removeUndefined({
+        const body = buildDefinedWhere<Record<string, unknown>>({
             model: options.model,
             input: [
                 {
@@ -109,7 +110,7 @@ export class OpenAIImageClient {
                 },
             ],
             tools: [
-                removeUndefined({
+                buildDefinedWhere<Record<string, unknown>>({
                     type: "image_generation",
                     size: options.size,
                     quality: options.quality,
@@ -136,7 +137,7 @@ export class OpenAIImageClient {
             return this.generateImagesEdit(options, references, mask);
         }
 
-        const body = removeUndefined({
+        const body = buildDefinedWhere<Record<string, unknown>>({
             model: options.model,
             prompt: options.prompt,
             n: 1,
@@ -297,10 +298,6 @@ export class OpenAIImageClient {
         const base64 = Buffer.from(arrayBuffer).toString("base64");
         return `data:${reference.mimeType};base64,${base64}`;
     }
-}
-
-function removeUndefined<T extends Record<string, unknown>>(value: T) {
-    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
 function dedupeReferenceImages(images: ReferenceImageInput[]) {

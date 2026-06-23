@@ -4,7 +4,10 @@ import test from "node:test";
 
 const files = [
     new URL("../src/api/modules/config/services/model-config.service.ts", import.meta.url),
+    new URL("../src/api/modules/generation/services/generation.service.ts", import.meta.url),
     new URL("../src/api/modules/generation/services/image-http-client.ts", import.meta.url),
+    new URL("../../echoflow-contract-generation/src/api/modules/contract-generation/services/contract-generation.service.ts", import.meta.url),
+    new URL("../../echoflow-video/src/api/modules/generation/services/generation.service.ts", import.meta.url),
     new URL("../../echoflow-video/src/api/modules/generation/services/model-config.service.ts", import.meta.url),
     new URL("../../echoflow-video/src/api/modules/generation/services/video-http-client.ts", import.meta.url),
 ];
@@ -16,6 +19,11 @@ test("media model endpoints reuse extension-sdk public HTTP URL guards", () => {
         assert.match(source, /@buildingai\/extension-sdk/);
         assert.doesNotMatch(source, /function\s+isPrivateOrLocalHost\b/);
         assert.doesNotMatch(source, /private\s+isPrivateOrLocalHost\b/);
+        assert.doesNotMatch(source, /function\s+isPrivateOrReservedIp\b/);
+        assert.doesNotMatch(source, /function\s+isPrivateOrReservedIpv4\b/);
+        assert.doesNotMatch(source, /isIP\(/);
+        assert.doesNotMatch(source, /node:net/);
+        assert.doesNotMatch(source, /node:dns\/promises/);
     }
 });
 
@@ -26,4 +34,48 @@ test("media endpoint persistence validates DNS-backed public Base URLs", () => {
         assert.match(source, /assertPublicHttpUrl/);
         assert.match(source, /normalizeEndpointConfigsForSave/);
     }
+});
+
+test("media provider HTTP requests reuse the extension SDK provider client", () => {
+    const imageHttpClient = readFileSync(
+        new URL("../src/api/modules/generation/services/image-http-client.ts", import.meta.url),
+        "utf8",
+    );
+    const imageGenerationService = readFileSync(
+        new URL("../src/api/modules/generation/services/generation.service.ts", import.meta.url),
+        "utf8",
+    );
+    const openaiImageClient = readFileSync(
+        new URL("../src/api/modules/generation/services/openai-image-client.ts", import.meta.url),
+        "utf8",
+    );
+    const videoHttpClient = readFileSync(
+        new URL("../../echoflow-video/src/api/modules/generation/services/video-http-client.ts", import.meta.url),
+        "utf8",
+    );
+
+    assert.match(imageHttpClient, /requestProviderText/);
+    assert.match(imageHttpClient, /safeJsonParse/);
+    assert.match(imageGenerationService, /safeJsonParse/);
+    assert.doesNotMatch(imageGenerationService, /JSON\.parse\(text\)/);
+    assert.match(openaiImageClient, /@buildingai\/extension-sdk/);
+    assert.doesNotMatch(openaiImageClient, /safeJsonParse,\s*\n}\s+from\s+"\.\/image-http-client"/);
+    assert.match(videoHttpClient, /requestProviderJson/);
+    assert.match(videoHttpClient, /testProviderJsonEndpoint/);
+    assert.doesNotMatch(videoHttpClient, /\bfetch\(/);
+    assert.doesNotMatch(videoHttpClient, /function\s+sleep\b/);
+});
+
+test("image reference URL download reuses the extension SDK public HTTP downloader", () => {
+    const imageHttpClient = readFileSync(
+        new URL("../src/api/modules/generation/services/image-http-client.ts", import.meta.url),
+        "utf8",
+    );
+
+    assert.match(imageHttpClient, /downloadPublicHttpUrl/);
+    assert.doesNotMatch(imageHttpClient, /node:http/);
+    assert.doesNotMatch(imageHttpClient, /node:https/);
+    assert.doesNotMatch(imageHttpClient, /resolvePublicHttpUrl/);
+    assert.doesNotMatch(imageHttpClient, /ResolvedPublicHttpUrl/);
+    assert.doesNotMatch(imageHttpClient, /lookup:/);
 });

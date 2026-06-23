@@ -1,12 +1,12 @@
 import { Button } from "@buildingai/ui/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
+import { Card, CardContent } from "@buildingai/ui/components/ui/card";
 import { createRequestId } from "@buildingai/http";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
-import { ChevronDown, Lightbulb, Plus, Sparkles, Trash2, WandSparkles, Zap } from "lucide-react";
+import { ChevronDown, ImagePlus, Plus, ShieldCheck, Sparkles, Trash2, WandSparkles, Zap } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
@@ -32,10 +32,12 @@ interface GenerationFormProps {
 }
 
 const promptTemplates = [
-    { label: "赛博朋克", prompt: "赛博朋克风格的未来城市，雨夜，霓虹灯，高细节，4k，电影级光照" },
-    { label: "自然风光", prompt: "壮丽的自然风光，雪山与湖泊，黄金时刻光线，超高细节，照片级写实" },
-    { label: "动漫角色", prompt: "精美的动漫风格角色插画，柔和色彩，精致线条，日系动画风格" },
-    { label: "产品渲染", prompt: "专业产品摄影，极简白色背景，柔和工作室灯光，商业级质感" },
+    { label: "雨夜街景", prompt: "未来城市雨后街道，霓虹倒影落在湿润路面，低机位构图，电影感光影，清晰细节" },
+    { label: "山湖清晨", prompt: "清晨山间湖泊，薄雾、雪山倒影和自然柔光，照片级写实，画面干净" },
+    { label: "枫叶庭院", prompt: "日式庭院，枫叶、石灯、木质回廊和秋日柔光，安静克制，细节丰富" },
+    { label: "产品静物", prompt: "极简产品静物摄影，浅色背景，柔和工作室光，材质清晰，商业级质感" },
+    { label: "机甲战场", prompt: "未来机甲站在雾气战场，金属结构清晰，低角度构图，电影感，强细节" },
+    { label: "室内软装", prompt: "现代室内空间，落地窗、织物沙发、植物与自然光，温和色彩，高级家居摄影" },
 ];
 
 function normalizeOptionalString(value?: string) {
@@ -166,8 +168,8 @@ export function GenerationForm({
         if (enhanced?.prompt) {
             setPrompt(enhanced.prompt);
         } else {
-            const styleHint = style === "natural" ? "自然色彩，真实光影" : "鲜明色彩，强视觉冲击";
-            const qualityHint = quality === "hd" ? "超高细节，清晰边缘，专业质感" : "构图完整，主体明确，细节丰富";
+            const styleHint = style === "natural" ? "自然色彩，真实光影" : "鲜明色彩，视觉张力";
+            const qualityHint = quality === "hd" ? "超高细节，边缘清晰，质感精致" : "构图完整，主体明确，细节丰富";
             setPrompt(`${value}，${styleHint}，${qualityHint}，画面干净，背景协调`);
         }
         if (!negativePrompt.trim()) {
@@ -220,21 +222,17 @@ export function GenerationForm({
     };
 
     const hasContent = !!(prompt || negativePrompt || hasReferenceImage);
+    const templateItems = [...templates.map((template) => ({ label: template.title, prompt: template.prompt })), ...promptTemplates].slice(0, 6);
 
     return (
-        <Card className="gap-0 overflow-hidden rounded-md py-0 shadow-sm">
-            <CardHeader className="border-b bg-card/70 px-4 py-4 md:px-5">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                        <CardTitle className="flex items-center gap-2.5 text-lg">
-                            <div className="bg-primary/10 flex size-9 items-center justify-center rounded-md">
-                                <WandSparkles className="text-primary size-5" />
-                            </div>
-                            创作台
-                        </CardTitle>
-                        <CardDescription className="mt-1">先描述画面，再确认模型与消耗</CardDescription>
-                    </div>
-                    <div className="flex shrink-0 gap-1.5">
+        <Card className="gap-0 overflow-hidden rounded-lg py-0 shadow-sm">
+            <CardContent className="p-0">
+                <form onSubmit={handleSubmit}>
+                    <div className="flex items-center justify-between gap-3 border-b bg-muted/20 p-4">
+                        <div className="min-w-0">
+                            <p className="text-xs font-medium text-primary">创作指令</p>
+                            <h2 className="mt-1 text-base font-semibold leading-none">描述你要的画面</h2>
+                        </div>
                         {hasContent && (
                             <Button
                                 type="button"
@@ -242,326 +240,309 @@ export function GenerationForm({
                                 size="sm"
                                 disabled={loading}
                                 onClick={clearAll}
-                                className="text-muted-foreground hover:text-destructive h-8"
+                                className="h-8 shrink-0 text-muted-foreground hover:text-destructive"
                             >
                                 <Trash2 className="size-3.5" />
-                                <span className="ml-1.5 hidden sm:inline">清空</span>
+                                清空
                             </Button>
                         )}
                     </div>
-                </div>
-            </CardHeader>
 
-            <CardContent className="p-4 md:p-5">
-                <form onSubmit={handleSubmit}>
-                    {/* ── Prompt area ── */}
-                    <div className="space-y-2">
-                        <div className="flex items-end justify-between">
-                            <Label className="text-sm font-medium">提示词</Label>
-                            <span className={cn("text-xs tabular-nums transition-colors", promptColor)}>
-                                {prompt.length}/4000
-                            </span>
-                        </div>
-                        <Textarea
-                            value={prompt}
-                            onChange={(event) => setPrompt(event.target.value)}
-                            placeholder="描述你想生成的画面，例如：赛博朋克风格的未来城市，雨夜，霓虹灯，高细节..."
-                            className="min-h-32 resize-y border-primary/20 text-sm leading-relaxed transition-all focus-within:border-primary/60 focus-within:shadow-sm placeholder:text-muted-foreground/60"
-                            disabled={loading}
-                            required
-                        />
-                    </div>
-
-                    {/* ── Template chips ── */}
-                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                        <Lightbulb className="text-amber-500 size-3.5 shrink-0" />
-                        <span className="text-muted-foreground mr-1 text-xs">灵感：</span>
-                        <Button
-                            type="button"
-                            disabled={loading || !prompt.trim()}
-                            onClick={handleEnhancePrompt}
-                            variant="outline"
-                            className={cn(
-                                "h-auto rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary transition-all",
-                                "hover:bg-primary/10 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50",
-                            )}
-                        >
-                            润色当前提示词
-                        </Button>
-                        {[...templates.map((template) => ({ label: template.title, prompt: template.prompt })), ...promptTemplates].slice(0, 6).map((template) => (
-                            <Button
-                                key={template.label}
-                                type="button"
-                                variant="outline"
-                                disabled={loading}
-                                onClick={() => setPrompt(template.prompt)}
-                                className={cn(
-                                    "h-auto rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs font-medium transition-all",
-                                    "hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
-                                    "active:scale-95",
-                                )}
-                            >
-                                {template.label}
-                            </Button>
-                        ))}
-                    </div>
-
-                    {/* ── Model + Reference row ── */}
-                    <div className="mt-4 rounded-md border bg-muted/15 p-3">
+                    <div className="space-y-4 p-4">
                         <div className="space-y-2">
-                            <div className="flex flex-wrap items-end justify-between gap-2">
-                                <Label className="text-sm font-medium">图片模型</Label>
-                                <span className="text-xs text-muted-foreground">
-                                    {size} · {quality === "hd" ? "HD" : "标准"} · {imageCount} 张
+                            <div className="flex items-end justify-between gap-3">
+                                <Label className="text-sm font-medium">提示词</Label>
+                                <span className={cn("text-xs tabular-nums transition-colors", promptColor)}>
+                                    {prompt.length}/4000
                                 </span>
                             </div>
-                            <Select value={modelId} onValueChange={setModelId} disabled={loading || modelsLoading} required>
-                                <SelectTrigger
-                                    className={cn(
-                                        "w-full border-primary/20 transition-all focus-within:border-primary/60",
-                                        !modelId && "text-muted-foreground",
-                                    )}
+                            <Textarea
+                                value={prompt}
+                                onChange={(event) => setPrompt(event.target.value)}
+                                placeholder="描述画面、主体、环境、光线与风格。例如：未来城市雨后街道，霓虹倒影，电影感，超清细节。"
+                                className="min-h-36 resize-y bg-background text-sm leading-relaxed placeholder:text-muted-foreground/60 sm:min-h-40"
+                                disabled={loading}
+                                required
+                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    type="button"
+                                    disabled={loading || !prompt.trim()}
+                                    onClick={handleEnhancePrompt}
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-primary/30 bg-primary/5 text-primary"
                                 >
-                                    <SelectValue placeholder={modelsLoading ? "加载模型中..." : "选择图片模型"} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {models.length === 0 && !modelsLoading && (
-                                        <div className="text-muted-foreground px-3 py-5 text-center text-xs leading-relaxed">
-                                            <p className="mb-1 font-medium">没有可用的图片模型</p>
-                                            <p>请先在主系统模型管理中启用 text-to-image 模型</p>
+                                    <WandSparkles className="size-3.5" />
+                                    优化提示词
+                                </Button>
+                                <span className="text-xs text-muted-foreground">支持中文、英文，也支持中英混写。</span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-3 text-xs">
+                                <span className="font-semibold">灵感推荐</span>
+                                <span className="hidden text-muted-foreground sm:inline">点一下快速填入</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1.5">
+                                {templateItems.map((template) => (
+                                    <Button
+                                        key={template.label}
+                                        type="button"
+                                        disabled={loading}
+                                        onClick={() => setPrompt(template.prompt)}
+                                        variant="outline"
+                                        size="sm"
+                                        className="min-w-0 justify-start rounded-md bg-muted/20 text-xs"
+                                    >
+                                        <Plus className="size-3.5 shrink-0" />
+                                        <span className="truncate">{template.label}</span>
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <section className="rounded-lg border bg-muted/10 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <Label className="text-sm font-medium">模型与参考图</Label>
+                                    <p className="mt-1 text-xs text-muted-foreground">只显示当前账号可用的生图模型。</p>
+                                </div>
+                                <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                                    <span className="size-1.5 rounded-full bg-emerald-500" />
+                                    主站配置
+                                </span>
+                            </div>
+
+                            <div className="mt-3 space-y-2">
+                                <Select value={modelId} onValueChange={setModelId} disabled={loading || modelsLoading} required>
+                                    <SelectTrigger className={cn("w-full", !modelId && "text-muted-foreground")}>
+                                        <SelectValue placeholder={modelsLoading ? "加载模型中..." : "选择图片模型"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {models.length === 0 && !modelsLoading && (
+                                            <div className="px-3 py-5 text-center text-xs leading-relaxed text-muted-foreground">
+                                                <p className="mb-1 font-medium">没有可用的图片模型</p>
+                                                <p>请先在主系统模型管理中启用 text-to-image 模型。</p>
+                                            </div>
+                                        )}
+                                        {models.map((model) => (
+                                            <SelectItem key={model.id} value={model.id}>
+                                                <div className="flex min-w-0 flex-col">
+                                                    <span className="truncate">{model.name}</span>
+                                                    <span className="truncate text-xs text-muted-foreground">
+                                                        {model.providerName || model.provider} / {model.model}
+                                                    </span>
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {selectedModel && (
+                                    <p className="truncate text-xs text-muted-foreground">
+                                        {selectedModel.providerName || selectedModel.provider} / {selectedModel.model}
+                                        {canUseImageToImage ? " / 支持参考图" : " / 文生图"}
+                                        {canUseMultiReference ? " / 多参考" : ""}
+                                    </p>
+                                )}
+                            </div>
+
+                            {canUseImageToImage && (
+                                <div className="mt-3 grid gap-3">
+                                    <ReferenceImageUpload
+                                        value={referenceImageUrl}
+                                        label="参考图"
+                                        description="上传或粘贴一张参考图"
+                                        disabled={loading || !selectedModel}
+                                        helperText="上传后将使用图生图模式。"
+                                        onChange={(url, fileId) => {
+                                            setReferenceImageUrl(url);
+                                            setReferenceImageFileId(fileId);
+                                        }}
+                                    />
+                                    {canUseMultiReference && (
+                                        <div className="space-y-2">
+                                            {additionalReferenceImages.map((item, index) => (
+                                                <div key={index} className="relative">
+                                                    <ReferenceImageUpload
+                                                        value={item.url}
+                                                        label={`参考图 ${index + 2}`}
+                                                        description="额外参考图"
+                                                        disabled={loading || !hasReferenceImage}
+                                                        helperText="作为额外参考参与生成。"
+                                                        onChange={(url, fileId) => {
+                                                            setAdditionalReferenceImages((prev) =>
+                                                                prev.map((image, currentIndex) =>
+                                                                    currentIndex === index ? { url, fileId } : image,
+                                                                ),
+                                                            );
+                                                        }}
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon-sm"
+                                                        disabled={loading}
+                                                        className="absolute right-1 top-1 text-destructive hover:text-destructive"
+                                                        onClick={() =>
+                                                            setAdditionalReferenceImages((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
+                                                        }
+                                                    >
+                                                        <Trash2 className="size-3.5" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={loading || !hasReferenceImage || additionalReferenceImages.length >= 3}
+                                                onClick={() => setAdditionalReferenceImages((prev) => [...prev, {}])}
+                                            >
+                                                <ImagePlus className="size-3.5" />
+                                                添加参考图
+                                            </Button>
                                         </div>
                                     )}
-                                    {models.map((model) => (
-                                        <SelectItem key={model.id} value={model.id}>
-                                            <div className="flex min-w-0 flex-col">
-                                                <span className="truncate">{model.name}</span>
-                                                <span className="text-muted-foreground truncate text-xs">
-                                                    {model.providerName || model.provider} · {model.model}
-                                                </span>
-                                            </div>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            {selectedModel && (
-                                <p className="text-muted-foreground truncate text-xs">
-                                    {selectedModel.providerName || selectedModel.provider} · {selectedModel.model}
-                                    {canUseImageToImage ? " · 支持参考图" : " · 文生图"}
-                                </p>
+                                </div>
                             )}
-                        </div>
+                        </section>
 
-                        {canUseImageToImage && (
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                <ReferenceImageUpload
-                                    value={referenceImageUrl}
-                                    disabled={loading || !selectedModel}
-                                    helperText="上传参考图后将使用图生图模式。"
-                                    onChange={(url, fileId) => {
-                                        setReferenceImageUrl(url);
-                                        setReferenceImageFileId(fileId);
-                                    }}
-                                />
-                                {canUseMultiReference && (
-                                    <div className="space-y-2">
-                                        {additionalReferenceImages.map((item, index) => (
-                                            <div key={index} className="relative">
-                                                <ReferenceImageUpload
-                                                    value={item.url}
-                                                    label={`参考图 ${index + 2}`}
-                                                    description="Echoflow Image reference image"
-                                                    disabled={loading || !hasReferenceImage}
-                                                    helperText="作为额外参考图参与生成。"
-                                                    onChange={(url, fileId) => {
-                                                        setAdditionalReferenceImages((prev) =>
-                                                            prev.map((image, currentIndex) =>
-                                                                currentIndex === index ? { url, fileId } : image,
-                                                            ),
-                                                        );
-                                                    }}
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon-sm"
-                                                    disabled={loading}
-                                                    className="absolute right-1 top-1 text-destructive hover:text-destructive"
-                                                    onClick={() =>
-                                                        setAdditionalReferenceImages((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
-                                                    }
-                                                >
-                                                    <Trash2 className="size-3.5" />
-                                                </Button>
-                                            </div>
-                                        ))}
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={loading || !hasReferenceImage || additionalReferenceImages.length >= 3}
-                                            onClick={() => setAdditionalReferenceImages((prev) => [...prev, {}])}
-                                        >
-                                            <Plus className="size-3.5" />
-                                            添加参考图
-                                        </Button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                        <div className="overflow-hidden rounded-lg border">
+                            <Button
+                                type="button"
+                                disabled={loading}
+                                onClick={() => setShowAdvanced(!showAdvanced)}
+                                className="flex h-auto w-full items-center justify-between rounded-none px-3 py-2.5 text-sm font-medium hover:bg-muted/30"
+                                variant="ghost"
+                            >
+                                <span className="flex items-center gap-2">
+                                    <ChevronDown
+                                        className={cn(
+                                            "size-4 text-muted-foreground transition-transform duration-200",
+                                            showAdvanced && "rotate-180",
+                                        )}
+                                    />
+                                    高级设置
+                                </span>
+                                <span className="text-xs font-normal text-muted-foreground">
+                                    {size} / {quality === "hd" ? "HD" : "标准"} / {style === "vivid" ? "生动" : "自然"}
+                                </span>
+                            </Button>
+                            {showAdvanced && (
+                                <div className="border-t p-3">
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-medium">尺寸</Label>
+                                            <Select value={size} onValueChange={setSize} disabled={loading}>
+                                                <SelectTrigger className="h-9 w-full text-sm">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {sizeOptions.map((option) => (
+                                                        <SelectItem key={option} value={option}>
+                                                            {option}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
 
-                    {/* ── Collapsible advanced settings ── */}
-                    <div className="mt-3 rounded-md border border-border/60">
-                        <Button
-                            type="button"
-                            disabled={loading}
-                            onClick={() => setShowAdvanced(!showAdvanced)}
-                            className={cn(
-                                "flex h-auto w-full items-center justify-between px-4 py-2.5 text-sm font-medium transition-colors",
-                                "hover:bg-muted/30",
-                            )}
-                        >
-                            <span className="flex items-center gap-2">
-                                <ChevronDown
-                                    className={cn(
-                                        "size-4 text-muted-foreground transition-transform duration-200",
-                                        showAdvanced && "rotate-180",
-                                    )}
-                                />
-                                高级设置
-                            </span>
-                            <span className="text-muted-foreground text-xs font-normal">
-                                {size} · {quality === "hd" ? "HD" : "标准"} · {style === "vivid" ? "生动" : "自然"}
-                            </span>
-                        </Button>
-                        <div
-                            className={cn(
-                                "grid transition-all duration-200 ease-in-out",
-                                showAdvanced
-                                    ? "grid-rows-[1fr] opacity-100"
-                                    : "grid-rows-[0fr] opacity-0",
-                            )}
-                        >
-                            <div className="overflow-hidden">
-                                <div className="grid gap-4 px-4 pb-4 pt-1 md:grid-cols-2 xl:grid-cols-3">
-                                    {/* Size */}
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-medium">尺寸</Label>
-                                        <Select value={size} onValueChange={setSize} disabled={loading}>
-                                            <SelectTrigger className="h-9 w-full text-sm">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {sizeOptions.map((option) => (
-                                                    <SelectItem key={option} value={option}>
-                                                        {option}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-medium">
+                                                生成数量{isDalle3Like && <span className="ml-1 text-muted-foreground">(DALL-E 3 限制为 1)</span>}
+                                            </Label>
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                max={isDalle3Like ? 1 : 4}
+                                                value={isDalle3Like ? 1 : n}
+                                                disabled={loading || isDalle3Like}
+                                                onChange={(event) => setN(event.target.value)}
+                                                className="h-9"
+                                            />
+                                        </div>
 
-                                    {/* Count */}
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-medium">
-                                            生成数量{isDalle3Like && <span className="text-muted-foreground ml-1">(DALL·E 3 限制为 1)</span>}
-                                        </Label>
-                                        <Input
-                                            type="number"
-                                            min={1}
-                                            max={isDalle3Like ? 1 : 4}
-                                            value={isDalle3Like ? 1 : n}
-                                            disabled={loading || isDalle3Like}
-                                            onChange={(event) => setN(event.target.value)}
-                                            className="h-9"
-                                        />
-                                    </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-medium">质量</Label>
+                                            <Select value={quality} onValueChange={setQuality} disabled={loading}>
+                                                <SelectTrigger className="h-9 w-full text-sm"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    {qualityOptions.map((option) => (
+                                                        <SelectItem key={option} value={option}>
+                                                            {option === "hd" ? "HD" : option === "standard" ? "Standard" : option}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
 
-                                    {/* Quality */}
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-medium">质量</Label>
-                                        <Select value={quality} onValueChange={setQuality} disabled={loading}>
-                                            <SelectTrigger className="h-9 w-full text-sm"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                {qualityOptions.map((option) => (
-                                                    <SelectItem key={option} value={option}>
-                                                        {option === "hd" ? "HD" : option === "standard" ? "Standard" : option}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-medium">风格</Label>
+                                            <Select value={style} onValueChange={setStyle} disabled={loading}>
+                                                <SelectTrigger className="h-9 w-full text-sm"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    {styleOptions.map((option) => (
+                                                        <SelectItem key={option} value={option}>
+                                                            {option === "vivid" ? "Vivid (生动)" : option === "natural" ? "Natural (自然)" : option}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
 
-                                    {/* Style */}
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-medium">风格</Label>
-                                        <Select value={style} onValueChange={setStyle} disabled={loading}>
-                                            <SelectTrigger className="h-9 w-full text-sm"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                {styleOptions.map((option) => (
-                                                    <SelectItem key={option} value={option}>
-                                                        {option === "vivid" ? "Vivid (生动)" : option === "natural" ? "Natural (自然)" : option}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                        <div className="space-y-2 sm:col-span-2">
+                                            <Label className="text-xs font-medium">返回格式</Label>
+                                            <Select
+                                                value={responseFormat}
+                                                onValueChange={(value) => setResponseFormat(value as ImageResponseFormat)}
+                                                disabled={loading}
+                                            >
+                                                <SelectTrigger className="h-9 w-full text-sm"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value={ImageResponseFormat.B64_JSON}>b64_json (兼容性更好)</SelectItem>
+                                                    <SelectItem value={ImageResponseFormat.URL}>url (服务商链接)</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
 
-                                    {/* Response format */}
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-medium">返回格式</Label>
-                                        <Select
-                                            value={responseFormat}
-                                            onValueChange={(value) => setResponseFormat(value as ImageResponseFormat)}
-                                            disabled={loading}
-                                        >
-                                            <SelectTrigger className="h-9 w-full text-sm"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value={ImageResponseFormat.B64_JSON}>b64_json (兼容性更好)</SelectItem>
-                                                <SelectItem value={ImageResponseFormat.URL}>url (服务商链接)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    {/* Negative prompt */}
-                                    <div className="space-y-2 md:col-span-2 xl:col-span-3">
-                                        <Label className="text-xs font-medium">
-                                            反向提示词
-                                            <span className="text-muted-foreground ml-1 font-normal">(可选，将追加到生成请求)</span>
-                                        </Label>
-                                        <Textarea
-                                            value={negativePrompt}
-                                            onChange={(event) => setNegativePrompt(event.target.value)}
-                                            placeholder="描述你不希望在画面中出现的内容..."
-                                            className="min-h-16 resize-none text-sm"
-                                            disabled={loading}
-                                        />
+                                        <div className="space-y-2 sm:col-span-2">
+                                            <Label className="text-xs font-medium">
+                                                反向提示词
+                                                <span className="ml-1 font-normal text-muted-foreground">可选</span>
+                                            </Label>
+                                            <Textarea
+                                                value={negativePrompt}
+                                                onChange={(event) => setNegativePrompt(event.target.value)}
+                                                placeholder="不希望出现在画面里的内容，例如：水印、错误文字、低清晰度。"
+                                                className="min-h-16 resize-none text-sm"
+                                                disabled={loading}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
 
-                    {/* ── Submit row ── */}
-                    <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 flex flex-col gap-3 border-t bg-card/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur supports-[backdrop-filter]:bg-card/85 sm:flex-row sm:items-center sm:justify-between md:-mx-5 md:-mb-5 md:px-5">
-                        <div className="flex items-center gap-2">
-                            <div className="bg-muted/40 flex items-center gap-1.5 rounded-md border px-3 py-1.5">
-                                <Zap className="text-amber-500 size-3.5" />
-                                <span className="text-xs font-medium">
-                                    预计消耗 <span className="text-primary font-bold">{visibleEstimatedPower}</span> 算力
-                                </span>
-                            </div>
+                    <div className="flex flex-col gap-3 border-t bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="grid gap-1.5 text-xs text-muted-foreground sm:flex sm:flex-wrap sm:items-center">
+                            <span className="inline-flex items-center gap-1.5 text-foreground">
+                                <Zap className="size-4 text-amber-500" />
+                                预计消耗 <strong className="text-base text-amber-700">{visibleEstimatedPower}</strong> 算力
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                                <ShieldCheck className="size-3.5" />
+                                失败按账务结果退款
+                            </span>
                         </div>
                         <Button
                             type="submit"
                             size="lg"
                             disabled={!prompt.trim() || !modelId || loading}
                             loading={loading}
-                            className={cn(
-                                "group relative overflow-hidden shadow-sm transition-all",
-                                "active:scale-[0.98] disabled:opacity-50",
-                                "w-full sm:min-w-44 sm:w-auto",
-                            )}
+                            className="min-h-11 rounded-lg shadow-sm sm:min-w-36"
                         >
                             <Sparkles className="size-4" />
                             开始生成

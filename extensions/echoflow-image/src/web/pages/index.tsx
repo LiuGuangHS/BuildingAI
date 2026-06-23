@@ -1,21 +1,21 @@
 import { useDocumentHead } from "@buildingai/hooks";
 import { Button } from "@buildingai/ui/components/ui/button";
-import { useEffect, useMemo, useState } from "react";
+import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
+import { RefreshCcw } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { ErrorState } from "../components/error-state";
 import { GenerationForm } from "../components/generation-form";
 import { HistoryList } from "../components/history-list";
-import { ResultGallery } from "../components/result-gallery";
-import { CreativeCanvasWorkspace } from "../components/canvas/creative-canvas-workspace";
 import { QuickGeneratePanel } from "../components/panels/quick-generate-panel";
-import { WorkspaceShell } from "../components/workspace/workspace-shell";
+import { ResultGallery } from "../components/result-gallery";
 import type { WorkspaceMode } from "../components/workspace/mode-switch";
+import { WorkspaceShell } from "../components/workspace/workspace-shell";
 import {
     useWebCreateGenerationMutation,
     useWebDeleteGenerationMutation,
-    useWebGenerationDetailQuery,
     useWebEstimateBillingMutation,
+    useWebGenerationDetailQuery,
     useWebGenerationListQuery,
     useWebImageModelOptionsQuery,
     useWebPromptEnhanceMutation,
@@ -25,8 +25,26 @@ import {
 import type { CreateGenerationParams, ImageGeneration } from "../services/types/generation";
 import { ImageGenerationStatus } from "../services/types/generation";
 
+const CreativeCanvasWorkspace = lazy(() =>
+    import("../components/canvas/creative-canvas-workspace").then((module) => ({
+        default: module.CreativeCanvasWorkspace,
+    })),
+);
+
+function CanvasLoading() {
+    return (
+        <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]" role="status" aria-live="polite">
+            <div className="space-y-4">
+                <Skeleton className="h-40 rounded-lg" />
+                <Skeleton className="h-32 rounded-lg" />
+            </div>
+            <Skeleton className="min-h-[32rem] rounded-lg" />
+        </div>
+    );
+}
+
 export default function EchoflowImagePublicPage() {
-    useDocumentHead({ title: "AI图像工作台" });
+    useDocumentHead({ title: "EchoFlowAI 绘画" });
 
     const [mode, setMode] = useState<WorkspaceMode>("quick");
     const [currentGeneration, setCurrentGeneration] = useState<ImageGeneration | undefined>();
@@ -113,7 +131,7 @@ export default function EchoflowImagePublicPage() {
             responseFormat: generation.responseFormat,
         });
         setMode("quick");
-        toast.success("已复用参数到创作台");
+        toast.success("参数已回填");
     };
 
     const isGenerating = createMutation.isPending || retryMutation.isPending || currentIsRunning;
@@ -123,6 +141,7 @@ export default function EchoflowImagePublicPage() {
                 generation={currentGeneration}
                 isLoading={isGenerating && !currentGeneration?.resultImages?.length}
                 onOpenCanvas={() => setMode("canvas")}
+                variant="stage"
             />
         ),
         [currentGeneration, isGenerating],
@@ -130,19 +149,27 @@ export default function EchoflowImagePublicPage() {
     const quickHistory = useMemo(
         () =>
             historyError ? (
-                <ErrorState
-                    title="加载历史失败"
-                    message="无法获取最近作品，请检查网络后重试"
-                    onRetry={() => refetchHistory()}
-                />
+                <section className="rounded-lg border bg-muted/20 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <h2 className="truncate text-sm font-semibold">最近作品</h2>
+                            <p className="truncate text-xs text-muted-foreground">最近作品暂时没有加载，当前生成不受影响。</p>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => refetchHistory()} className="rounded-md">
+                            <RefreshCcw className="size-3.5" />
+                            重试
+                        </Button>
+                    </div>
+                </section>
             ) : (
                 <HistoryList
                     items={historyData?.items || []}
                     loading={historyLoading}
                     detailBasePath="history"
                     title="最近作品"
-                    description="点击缩略图查看、复用或重试"
+                    description="复用参数或重试失败任务"
                     compact
+                    variant="filmstrip"
                     onDelete={handleDelete}
                     onRetry={handleRetry}
                     onReuse={handleReuse}
@@ -157,19 +184,14 @@ export default function EchoflowImagePublicPage() {
             onModeChange={setMode}
             quickActions={
                 mode === "quick" ? (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                            refetchHistory()
-                        }
-                    >
-                        刷新历史
+                    <Button variant="outline" size="sm" onClick={() => refetchHistory()} className="rounded-md">
+                        <RefreshCcw className="size-4" />
+                        <span className="hidden sm:inline">刷新</span>
                     </Button>
                 ) : null
             }
         >
-            {mode === "quick" ? (
+            <div hidden={mode !== "quick"}>
                 <QuickGeneratePanel isGenerating={isGenerating} result={quickResult} history={quickHistory}>
                     <GenerationForm
                         loading={isGenerating}
@@ -189,14 +211,17 @@ export default function EchoflowImagePublicPage() {
                         }}
                         onEnhancePrompt={async (data) => {
                             const result = await promptEnhanceMutation.mutateAsync(data);
-                            toast.success(result.source === "ai" ? "已使用 AI 润色提示词" : "已使用本地规则润色提示词");
+                            toast.success(result.source === "ai" ? "提示词已润色" : "已用本地规则润色");
                             return result;
                         }}
                         onSubmit={handleSubmit}
                     />
                 </QuickGeneratePanel>
-            ) : (
-                <CreativeCanvasWorkspace generation={currentGeneration} onReturnToGenerate={() => setMode("quick")} />
+            </div>
+            {mode === "canvas" && (
+                <Suspense fallback={<CanvasLoading />}>
+                    <CreativeCanvasWorkspace generation={currentGeneration} onReturnToGenerate={() => setMode("quick")} />
+                </Suspense>
             )}
         </WorkspaceShell>
     );

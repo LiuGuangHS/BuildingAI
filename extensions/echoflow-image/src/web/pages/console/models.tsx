@@ -9,6 +9,7 @@ import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
 import { useSecretsListQuery } from "@buildingai/services/console";
+import { safeJsonParse } from "@buildingai/stores";
 import { CheckCircle2, KeyRound, Plus, Save, SlidersHorizontal, Trash2, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -213,8 +214,17 @@ function ModelOperationsEditor({
         setDefaultParamsText(JSON.stringify(value?.defaultParams ?? {}, null, 2));
         setAllowedParamsText(JSON.stringify(value?.allowedParams ?? {}, null, 2));
         setEndpoints((value?.endpoints?.length ? value.endpoints : [makeEndpoint()]).map((endpoint, index) => ({
-            ...endpoint,
             id: endpoint.id || `endpoint-${index + 1}`,
+            name: endpoint.name,
+            secretId: endpoint.secretId,
+            secretName: endpoint.secretName,
+            baseUrlOverride: endpoint.baseUrlOverride,
+            enabled: endpoint.enabled,
+            priority: endpoint.priority,
+            requestTimeoutMs: endpoint.requestTimeoutMs,
+            testTimeoutMs: endpoint.testTimeoutMs,
+            maxRetries: endpoint.maxRetries,
+            retryDelayMs: endpoint.retryDelayMs,
         })));
         setBaseCost(String(billingRule?.baseCost ?? 1));
         setTextToImageMultiplier(String(billingRule?.textToImageMultiplier ?? 1));
@@ -393,7 +403,20 @@ function EndpointEditor({
     onRemove: () => void;
     onTest: () => void;
 }) {
-    const patch = (data: Partial<ImageModelEndpoint>) => onChange({ ...value, ...data });
+    const patch = (data: Partial<ImageModelEndpoint>) =>
+        onChange({
+            id: value.id,
+            name: data.name ?? value.name,
+            secretId: data.secretId ?? value.secretId,
+            secretName: data.secretName ?? value.secretName,
+            baseUrlOverride: data.baseUrlOverride ?? value.baseUrlOverride,
+            enabled: data.enabled ?? value.enabled,
+            priority: data.priority ?? value.priority,
+            requestTimeoutMs: data.requestTimeoutMs ?? value.requestTimeoutMs,
+            testTimeoutMs: data.testTimeoutMs ?? value.testTimeoutMs,
+            maxRetries: data.maxRetries ?? value.maxRetries,
+            retryDelayMs: data.retryDelayMs ?? value.retryDelayMs,
+        });
     return (
         <div className="space-y-3 rounded-md border p-3">
             <div className="flex items-center justify-between gap-2">
@@ -476,10 +499,10 @@ function SwitchField({
     onCheckedChange: (checked: boolean) => void;
 }) {
     return (
-        <label className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-            <span>{label}</span>
+        <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+            <Label>{label}</Label>
             <Switch checked={checked} onCheckedChange={onCheckedChange} />
-        </label>
+        </div>
     );
 }
 
@@ -513,7 +536,7 @@ function serializeEndpoint(endpoint: ImageModelEndpoint, index: number): SaveMod
 }
 
 function parseJsonObject(value: string, label: string) {
-    const parsed = JSON.parse(value || "{}");
+    const parsed = safeJsonParse<unknown>(value || "{}");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error(`${label}必须是 JSON 对象`);
     }

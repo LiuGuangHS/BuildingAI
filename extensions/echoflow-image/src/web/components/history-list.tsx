@@ -23,6 +23,7 @@ type HistoryListProps = {
     description?: string;
     showUserId?: boolean;
     compact?: boolean;
+    variant?: "default" | "filmstrip";
     onDelete?: (id: string) => Promise<void> | void;
     onRetry?: (id: string) => Promise<void> | void;
     onReuse?: (generation: HistoryListItem) => void;
@@ -47,9 +48,10 @@ export function HistoryList({
     loading,
     detailBasePath = "/console/history",
     title = "生成历史",
-    description = "查看、重试或删除你的历史作品",
+    description = "查看、重试或删除历史作品",
     showUserId = false,
     compact = false,
+    variant = "default",
     onDelete,
     onRetry,
     onReuse,
@@ -79,6 +81,104 @@ export function HistoryList({
             setRetryingId(null);
         }
     };
+
+    const confirmDialog = (
+        <ConfirmDialog
+            open={!!deleteTarget}
+            title="删除生成记录"
+            description="确定要删除这条生成记录吗？此操作不可撤销。"
+            confirmText="删除"
+            destructive
+            loading={deleting}
+            onConfirm={handleDelete}
+            onCancel={() => setDeleteTarget(null)}
+        />
+    );
+
+    if (variant === "filmstrip") {
+        return (
+            <>
+                <section className="rounded-lg border bg-card/95 p-3 shadow-sm">
+                    <div className="mb-2.5 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <h2 className="truncate text-sm font-semibold">{title}</h2>
+                            <p className="truncate text-xs text-muted-foreground">{description}</p>
+                        </div>
+                        {!loading && items.length > 0 && (
+                            <Badge variant="secondary" className="shrink-0">{items.length}</Badge>
+                        )}
+                    </div>
+                    {loading ? (
+                        <HistorySkeleton />
+                    ) : items.length === 0 ? (
+                        <div className="flex min-h-14 items-center justify-center gap-2 rounded-md border border-dashed text-center text-xs text-muted-foreground">
+                            <HistoryIcon className="size-4" />
+                            <span>完成一次生成后会出现在这里</span>
+                        </div>
+                    ) : (
+                        <div className="grid gap-2 xl:grid-flow-col xl:auto-cols-[minmax(11rem,12.5rem)] xl:grid-cols-none xl:overflow-x-auto xl:pb-0.5">
+                            {items.map((item) => {
+                                const src = resolveImageSrc(item.resultImages?.[0]);
+                                const isRetrying = retryingId === item.id;
+                                const openDetail = () => navigate(`${detailBasePath}/${item.id}`);
+                                return (
+                                    <div
+                                        key={item.id}
+                                        role="button"
+                                        tabIndex={0}
+                                        className="flex min-w-0 items-center gap-2 rounded-lg border bg-background p-1.5 text-left transition hover:border-primary/30 hover:bg-muted/20 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                                        onClick={openDetail}
+                                        onKeyDown={(event) => {
+                                            if (event.key === "Enter" || event.key === " ") {
+                                                event.preventDefault();
+                                                openDetail();
+                                            }
+                                        }}
+                                    >
+                                        <span className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                                            {src ? (
+                                                <img src={src} alt={item.prompt} className="size-full object-cover" />
+                                            ) : (
+                                                <ImageIcon className="size-5 text-muted-foreground" />
+                                            )}
+                                            {item.status === ImageGenerationStatus.PROCESSING && (
+                                                <span className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+                                                    <span className="size-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span className="min-w-0 flex-1 text-left">
+                                            <span className="block truncate text-xs font-medium">{item.prompt}</span>
+                                            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                                                <TimeText value={item.createdAt} variant="relative" />
+                                            </span>
+                                        </span>
+                                        <span
+                                            className="flex shrink-0 items-center gap-0.5"
+                                            onClick={(event) => event.stopPropagation()}
+                                            onKeyDown={(event) => event.stopPropagation()}
+                                        >
+                                            {onRetry && (
+                                                <Button size="icon-sm" variant="ghost" disabled={isRetrying} loading={isRetrying} onClick={() => handleRetry(item.id)} title="重试">
+                                                    <RefreshCcw className="size-3.5" />
+                                                </Button>
+                                            )}
+                                            {onReuse && (
+                                                <Button size="icon-sm" variant="ghost" onClick={() => onReuse(item)} title="复用参数">
+                                                    <CopyPlus className="size-3.5" />
+                                                </Button>
+                                            )}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </section>
+                {confirmDialog}
+            </>
+        );
+    }
 
     return (
         <>
@@ -120,7 +220,7 @@ export function HistoryList({
                                     return (
                                         <div
                                             key={item.id}
-                                            className="group cursor-pointer overflow-hidden rounded-md border bg-background transition-all duration-200 hover:border-primary/30 hover:shadow-sm"
+                                            className="group cursor-pointer overflow-hidden rounded-md border bg-background transition hover:border-primary/30 hover:shadow-sm"
                                             onClick={() => navigate(`${detailBasePath}/${item.id}`)}
                                         >
                                             <div className="relative aspect-square bg-muted">
@@ -136,10 +236,7 @@ export function HistoryList({
                                                         <div className="size-5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
                                                     </div>
                                                 )}
-                                                <Badge
-                                                    variant={statusVariantMap[item.status] || "secondary"}
-                                                    className="absolute left-2 top-2 text-[10px]"
-                                                >
+                                                <Badge variant={statusVariantMap[item.status] || "secondary"} className="absolute left-2 top-2 text-[10px]">
                                                     {statusLabelMap[item.status] || item.status}
                                                 </Badge>
                                             </div>
@@ -147,10 +244,7 @@ export function HistoryList({
                                                 <p className="line-clamp-1 text-xs font-medium">{item.prompt}</p>
                                                 <div className="mt-1 flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
                                                     <TimeText value={item.createdAt} variant="relative" />
-                                                    <div
-                                                        className="flex shrink-0 items-center gap-0.5 opacity-100"
-                                                        onClick={(event) => event.stopPropagation()}
-                                                    >
+                                                    <div className="flex shrink-0 items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
                                                         {onRetry && (
                                                             <Button size="icon-sm" variant="ghost" disabled={isRetrying} loading={isRetrying} onClick={() => handleRetry(item.id)}>
                                                                 <RefreshCcw className="size-3.5" />
@@ -170,7 +264,7 @@ export function HistoryList({
                                 return (
                                     <div
                                         key={item.id}
-                                        className="group flex cursor-pointer items-center gap-3 rounded-xl border bg-background p-3 transition-all duration-200 hover:border-primary/30 hover:bg-muted/30 hover:shadow-sm"
+                                        className="group flex cursor-pointer items-center gap-3 rounded-xl border bg-background p-3 transition hover:border-primary/30 hover:bg-muted/30 hover:shadow-sm"
                                         onClick={() => navigate(`${detailBasePath}/${item.id}`)}
                                     >
                                         <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
@@ -202,16 +296,13 @@ export function HistoryList({
                                             </div>
                                             <p className="line-clamp-1 text-sm font-medium">{item.prompt}</p>
                                             <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                                {item.modelName || item.modelId} · {item.size} · {item.n} 张 · 扣费 {item.billingAmount}
+                                                {item.modelName || item.modelId} / {item.size} / {item.n} 张 / 扣费 {item.billingAmount}
                                             </p>
                                             {showUserId && (
                                                 <p className="mt-0.5 truncate text-xs text-muted-foreground">用户 {item.userId}</p>
                                             )}
                                         </div>
-                                        <div
-                                            className="flex shrink-0 items-center gap-0.5 md:opacity-0 md:transition-opacity md:group-hover:opacity-100"
-                                            onClick={(event) => event.stopPropagation()}
-                                        >
+                                        <div className="flex shrink-0 items-center gap-0.5 md:opacity-0 md:transition-opacity md:group-hover:opacity-100" onClick={(event) => event.stopPropagation()}>
                                             {onRetry && (
                                                 <Button size="icon-sm" variant="ghost" disabled={isRetrying} loading={isRetrying} onClick={() => handleRetry(item.id)}>
                                                     <RefreshCcw className="size-3.5" />
@@ -235,17 +326,7 @@ export function HistoryList({
                     )}
                 </CardContent>
             </Card>
-
-            <ConfirmDialog
-                open={!!deleteTarget}
-                title="删除生成记录"
-                description="确定要删除这条生成记录吗？此操作不可撤销。"
-                confirmText="删除"
-                destructive
-                loading={deleting}
-                onConfirm={handleDelete}
-                onCancel={() => setDeleteTarget(null)}
-            />
+            {confirmDialog}
         </>
     );
 }

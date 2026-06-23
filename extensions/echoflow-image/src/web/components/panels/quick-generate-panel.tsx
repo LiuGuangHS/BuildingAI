@@ -10,16 +10,13 @@ interface QuickGeneratePanelProps {
 
 export function QuickGeneratePanel({ children, result, history, isGenerating }: QuickGeneratePanelProps) {
     return (
-        <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(560px,0.95fr)_minmax(520px,1fr)]">
-            <div className="min-w-0">
-                {children}
-            </div>
-
-            <div className="min-w-0 space-y-4 xl:sticky xl:top-6">
-                <div className={cn("min-w-0", isGenerating && "rounded-md ring-1 ring-primary/15")}>
+        <div className="grid min-w-0 gap-2.5 xl:grid-cols-[minmax(340px,390px)_minmax(0,1fr)] xl:items-start">
+            <section className="min-w-0 xl:sticky xl:top-2.5">{children}</section>
+            <div className="grid min-w-0 content-start gap-2.5">
+                <section className={cn("min-w-0 rounded-lg", isGenerating && "ring-1 ring-primary/25")}>
                     {result}
-                </div>
-                <div className="min-w-0">{history}</div>
+                </section>
+                <section className="min-w-0">{history}</section>
             </div>
         </div>
     );

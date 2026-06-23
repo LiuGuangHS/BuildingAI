@@ -16,6 +16,7 @@ import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
+import { safeJsonParse } from "@buildingai/stores";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -134,7 +135,7 @@ function TemplateEditor({ value, onSave, onCancel }: { value?: ImagePromptTempla
                     <Button variant="outline" onClick={onCancel}>取消</Button>
                     <Button onClick={() => {
                         try {
-                            onSave({ title, category, prompt, negativePrompt, enabled, defaultParams: JSON.parse(defaultParams) });
+                            onSave({ title, category, prompt, negativePrompt, enabled, defaultParams: parseDefaultParams(defaultParams) });
                         } catch {
                             toast.error("默认参数 JSON 格式错误");
                         }
@@ -157,4 +158,12 @@ function createDraft(): ImagePromptTemplate {
         createdAt: "",
         updatedAt: "",
     };
+}
+
+function parseDefaultParams(value: string) {
+    const parsed = safeJsonParse<unknown>(value || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("默认参数 JSON 格式错误");
+    }
+    return parsed as Record<string, unknown>;
 }

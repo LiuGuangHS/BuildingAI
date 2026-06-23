@@ -11,7 +11,14 @@ interface ReferenceImageUploadProps {
     description?: string;
 }
 
-export function ReferenceImageUpload({ value, onChange, disabled, helperText, label = "上传参考图", description = "Echoflow Image reference image" }: ReferenceImageUploadProps) {
+export function ReferenceImageUpload({
+    value,
+    onChange,
+    disabled,
+    helperText,
+    label = "上传参考图",
+    description = "EchoFlowAI image reference",
+}: ReferenceImageUploadProps) {
     return (
         <div className="space-y-2">
             <ImageUpload
@@ -22,14 +29,14 @@ export function ReferenceImageUpload({ value, onChange, disabled, helperText, la
                 disabled={disabled}
                 params={{ description, extensionId: "echoflow-image" }}
                 placeholder={
-                    <div className="text-muted-foreground flex flex-col items-center gap-2 text-xs">
+                    <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
                         <ImagePlus className="size-7" />
                         <span>{label}</span>
                     </div>
                 }
                 onChange={(url, result?: UploadFileResult) => onChange(url, result?.id)}
             />
-            <p className="text-muted-foreground text-xs leading-relaxed">
+            <p className="text-xs leading-relaxed text-muted-foreground">
                 {helperText || "上传参考图后将使用图生图模式。"}
             </p>
         </div>
