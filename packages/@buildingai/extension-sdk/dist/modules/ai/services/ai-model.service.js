@@ -21,6 +21,7 @@ const typeorm_1 = require("@buildingai/db/@nestjs/typeorm");
 const entities_1 = require("@buildingai/db/entities");
 const typeorm_2 = require("@buildingai/db/typeorm");
 const common_1 = require("@nestjs/common");
+const provider_config_1 = require("../provider-config");
 /**
  * Public AI Model Service
  */
@@ -77,6 +78,19 @@ let PublicAiModelService = PublicAiModelService_1 = class PublicAiModelService {
         const model = await this.getModelInfo(modelId);
         const provider = (0, ai_sdk_1.getProvider)(model.provider.provider, config);
         return provider;
+    }
+    async generateText(modelId, params) {
+        const model = await this.getModelInfo(modelId);
+        const providerConfig = (0, provider_config_1.normalizeProviderConfig)(await this.getProviderConfig(modelId));
+        const provider = (0, ai_sdk_1.getProvider)(model.provider.provider, providerConfig);
+        if (!provider.supports("language")) {
+            throw new Error("The ai model does not support text generation.");
+        }
+        const request = {
+            ...params,
+            model: provider(model.model).model,
+        };
+        return (0, ai_sdk_1.generateTextWithUsage)(request, { model: model.model });
     }
 };
 exports.PublicAiModelService = PublicAiModelService;

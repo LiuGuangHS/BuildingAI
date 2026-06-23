@@ -1,10 +1,20 @@
-import { BaseProviderSettings, getProvider } from "@buildingai/ai-sdk";
+import { BaseProviderSettings, generateTextWithUsage, getProvider } from "@buildingai/ai-sdk";
 import { BaseService } from "@buildingai/base";
 import { SecretService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { AiModel, Secret } from "@buildingai/db/entities";
 import { Repository } from "@buildingai/db/typeorm";
 import { Injectable, Logger } from "@nestjs/common";
+
+import { normalizeProviderConfig } from "../provider-config";
+
+type GenerateTextWithUsageParams = Parameters<typeof generateTextWithUsage>[0];
+export type PublicAiGenerateTextParams = GenerateTextWithUsageParams extends infer T
+    ? T extends unknown
+        ? Omit<T, "model">
+        : never
+    : never;
+export type PublicAiGenerateTextResult = Awaited<ReturnType<typeof generateTextWithUsage>>;
 
 /**
  * Public AI Model Service
@@ -76,5 +86,21 @@ export class PublicAiModelService {
         const model = await this.getModelInfo(modelId);
         const provider = getProvider(model.provider.provider, config);
         return provider;
+    }
+
+    async generateText(modelId: string, params: PublicAiGenerateTextParams): Promise<PublicAiGenerateTextResult> {
+        const model = await this.getModelInfo(modelId);
+        const providerConfig = normalizeProviderConfig(await this.getProviderConfig(modelId));
+        const provider = getProvider(model.provider.provider, providerConfig);
+        if (!provider.supports("language")) {
+            throw new Error("The ai model does not support text generation.");
+        }
+
+        const request = {
+            ...params,
+            model: provider(model.model).model,
+        } as GenerateTextWithUsageParams;
+
+        return generateTextWithUsage(request, { model: model.model });
     }
 }

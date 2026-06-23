@@ -3,13 +3,20 @@ import { useAuthStore } from "@buildingai/stores";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-export const useRefreshUser = (manualOnly: boolean = false) => {
+type UseRefreshUserOptions = {
+    manualOnly?: boolean;
+    silent?: boolean;
+};
+
+export const useRefreshUser = (options: UseRefreshUserOptions | boolean = {}) => {
+    const resolvedOptions = typeof options === "boolean" ? { manualOnly: options } : options;
     const token = useAuthStore((state) => state.auth.token);
     const setUserInfo = useAuthStore((state) => state.authActions.setUserInfo);
     const queryClient = useQueryClient();
 
     const { data, refetch, isFetching } = useUserInfoQuery({
-        enabled: Boolean(token) && !manualOnly,
+        enabled: Boolean(token) && !resolvedOptions.manualOnly,
+        requestConfig: { silent: resolvedOptions.silent },
     });
 
     // Clear query cache and userInfo when token is removed (logout)

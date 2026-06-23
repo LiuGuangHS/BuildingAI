@@ -37,11 +37,12 @@ import { ReactNode, useMemo } from "react";
 
 export const ExtensionMainLayout = ({ children }: { children: ReactNode }) => {
   useHeadRenderer();
-  useRefreshUser();
+  useRefreshUser({ silent: true });
 
   const identifier = useMemo(() => parseExtensionIdentifierFromLocation(), []);
   const { data: extension } = useWebExtensionDetailQuery(identifier || "", {
     enabled: !!identifier,
+    requestConfig: { silent: true },
   });
 
   useDocumentHead({

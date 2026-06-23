@@ -8,6 +8,10 @@ export function getLocalStorage(): StorageAdapter {
     return window.localStorage;
 }
 
+export function getSessionStorage(): StorageAdapter {
+    return window.sessionStorage;
+}
+
 export function safeJsonParse<T>(raw: string | null): T | undefined {
     if (!raw) return undefined;
     try {

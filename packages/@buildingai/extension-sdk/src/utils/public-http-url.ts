@@ -1,4 +1,5 @@
 import { HttpErrorFactory } from "@buildingai/errors";
+import { isPrivateOrReservedIp } from "@buildingai/utils";
 import type { LookupAddress } from "node:dns";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -7,55 +8,18 @@ export interface PublicHttpUrlOptions {
     label?: string;
 }
 
+export interface ResolvedPublicHttpUrl {
+    normalized: string;
+    url: URL;
+    address: string;
+    family: 4 | 6;
+}
+
 function normalizeHostname(hostname: string) {
     return hostname.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
 }
 
-function isPrivateOrReservedIpv4(address: string) {
-    const parts = address.split(".").map((part) => Number(part));
-    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
-        return true;
-    }
-
-    const [a = 0, b = 0, c = 0] = parts;
-    return (
-        a === 0 ||
-        a === 10 ||
-        a === 127 ||
-        (a === 100 && b >= 64 && b <= 127) ||
-        (a === 169 && b === 254) ||
-        (a === 172 && b >= 16 && b <= 31) ||
-        (a === 192 && b === 0 && (c === 0 || c === 2)) ||
-        (a === 192 && b === 168) ||
-        (a === 198 && (b === 18 || b === 19)) ||
-        (a === 198 && b === 51 && c === 100) ||
-        (a === 203 && b === 0 && c === 113) ||
-        a >= 224
-    );
-}
-
-function isPrivateOrReservedIpv6(address: string) {
-    const normalized = address.toLowerCase();
-    return (
-        normalized === "::" ||
-        normalized === "::1" ||
-        normalized.startsWith("fc") ||
-        normalized.startsWith("fd") ||
-        normalized.startsWith("fe80:") ||
-        normalized.startsWith("ff") ||
-        normalized.startsWith("2001:db8:")
-    );
-}
-
-export function isPrivateOrReservedIp(address: string) {
-    const mapped = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
-    if (mapped?.[1]) return isPrivateOrReservedIpv4(mapped[1]);
-
-    const family = isIP(address);
-    if (family === 4) return isPrivateOrReservedIpv4(address);
-    if (family === 6) return isPrivateOrReservedIpv6(address);
-    return true;
-}
+export { isPrivateOrReservedIp } from "@buildingai/utils";
 
 export function normalizePublicHttpUrl(value: string, options: PublicHttpUrlOptions = {}) {
     const label = options.label ?? "URL";
@@ -89,13 +53,19 @@ export function normalizePublicHttpUrl(value: string, options: PublicHttpUrlOpti
     return trimmed;
 }
 
-export async function assertPublicHttpUrl(value: string, options: PublicHttpUrlOptions = {}) {
+export async function resolvePublicHttpUrl(value: string, options: PublicHttpUrlOptions = {}): Promise<ResolvedPublicHttpUrl> {
     const normalized = normalizePublicHttpUrl(value, options);
     const label = options.label ?? "URL";
-    const hostname = normalizeHostname(new URL(normalized).hostname);
+    const url = new URL(normalized);
+    const hostname = normalizeHostname(url.hostname);
 
     if (isIP(hostname)) {
-        return normalized;
+        return {
+            normalized,
+            url,
+            address: hostname,
+            family: isIP(hostname) as 4 | 6,
+        };
     }
 
     let addresses: LookupAddress[];
@@ -107,6 +77,20 @@ export async function assertPublicHttpUrl(value: string, options: PublicHttpUrlO
     if (!addresses.length || addresses.some((item) => isPrivateOrReservedIp(item.address))) {
         throw HttpErrorFactory.badRequest(`${label} 不允许指向本机或内网地址`);
     }
+    const firstAddress = addresses[0];
+    if (!firstAddress) {
+        throw HttpErrorFactory.badRequest(`${label} 无法解析`);
+    }
 
-    return normalized;
+    return {
+        normalized,
+        url,
+        address: firstAddress.address,
+        family: firstAddress.family as 4 | 6,
+    };
+}
+
+export async function assertPublicHttpUrl(value: string, options: PublicHttpUrlOptions = {}) {
+    const resolved = await resolvePublicHttpUrl(value, options);
+    return resolved.normalized;
 }

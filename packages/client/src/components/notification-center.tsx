@@ -105,7 +105,7 @@ export function NotificationCenter({
   const { isLogin } = useAuthStore((state) => state.authActions);
   const { websiteConfig } = useConfigStore((state) => state.config);
   const [open, setOpen] = useState(false);
-  const siteName = websiteConfig?.webinfo?.name || "BuildingAI";
+  const siteName = websiteConfig?.webinfo?.name || "EchoFlowAI";
 
   const unreadCountQuery = useNotificationUnreadCountQuery({
     refetchInterval: 15_000,

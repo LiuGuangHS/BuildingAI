@@ -63,33 +63,6 @@ const DEFAULT_SCENES: SceneSeed[] = [
         contentTemplate: "如果你收到了这条消息，说明应用通知已经可以使用。",
         linkUrlTemplate: "/",
     },
-    {
-        sceneCode: "echoflow-video.generation.succeeded",
-        name: "视频生成完成",
-        description: "用户发起的视频生成任务处理成功。",
-        level: "success",
-        channels: ["in_app", "web_push", "wechat_oa_template"],
-        titleTemplate: "视频生成完成",
-        contentTemplate: "{{taskName}} 已处理完成，可前往查看结果。",
-    },
-    {
-        sceneCode: "echoflow-video.generation.failed",
-        name: "视频生成失败",
-        description: "用户发起的视频生成任务处理失败。",
-        level: "error",
-        channels: ["in_app", "web_push", "wechat_oa_template"],
-        titleTemplate: "视频生成失败",
-        contentTemplate: "{{taskName}} 处理失败，{{reason}}",
-    },
-    {
-        sceneCode: "billing.refunded",
-        name: "失败退款完成",
-        description: "付费任务失败后已退回积分。",
-        level: "warning",
-        channels: ["in_app", "web_push", "wechat_oa_template"],
-        titleTemplate: "积分已退回",
-        contentTemplate: "{{taskName}} 处理失败，已退回 {{amount}} 积分。",
-    },
 ];
 
 const NOTIFICATION_PREFERENCES_GROUP = "notification";
@@ -615,7 +588,7 @@ export class NotificationService implements ExtensionNotificationPort {
     }
 
     private async getSiteName() {
-        return this.dictService.get<string>("name", "BuildingAI", "webinfo");
+        return this.dictService.get<string>("name", "EchoFlowAI", "webinfo");
     }
 
     private async getScene(sceneCode: string) {

@@ -9,6 +9,14 @@ jest.mock("@buildingai/errors", () => ({
     },
 }));
 
+jest.mock("@buildingai/utils", () => ({
+    isPrivateOrReservedIp: (address: string) => {
+        if (address.startsWith("10.")) return true;
+        if (address.startsWith("203.0.113.")) return true;
+        return false;
+    },
+}));
+
 jest.mock("node:dns/promises", () => ({
     lookup: jest.fn(),
 }));

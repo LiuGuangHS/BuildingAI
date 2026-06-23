@@ -24,7 +24,7 @@ self.addEventListener("push", (event) => {
       });
     });
 
-  const title = data.title || "BuildingAI";
+  const title = data.title || "EchoFlowAI";
   const options = {
     body: data.body || "任务状态已更新",
     icon: data.icon || "/pwa-192x192.png",

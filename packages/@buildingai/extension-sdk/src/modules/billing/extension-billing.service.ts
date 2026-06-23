@@ -1,4 +1,4 @@
-import { ACCOUNT_LOG_TYPE } from "@buildingai/constants";
+import { ACCOUNT_LOG_TYPE, ACTION } from "@buildingai/constants";
 import { ACCOUNT_LOG_SOURCE } from "@buildingai/constants/shared/account-log.constants";
 import { BaseBillingService } from "@buildingai/core/modules";
 import {
@@ -16,6 +16,12 @@ export interface ExtensionPowerDeductionOptions extends Omit<
     PowerDeductionOptions,
     "source" | "accountType"
 > {}
+
+export interface ExtensionBillingLogExistsOptions {
+    associationNo: string;
+    action: (typeof ACTION)[keyof typeof ACTION];
+    accountType?: (typeof ACCOUNT_LOG_TYPE)[keyof typeof ACCOUNT_LOG_TYPE];
+}
 
 /**
  * Extension Billing Service
@@ -55,6 +61,24 @@ export class ExtensionBillingService {
     }
 
     /**
+     * Check whether a plugin billing log already exists for an association.
+     *
+     * Use this before refunding or retrying a plugin task so extensions can rely
+     * on the main billing ledger as the source of truth instead of querying
+     * account logs directly.
+     */
+    async hasBillingLog(opts: ExtensionBillingLogExistsOptions, entityManager?: EntityManager) {
+        const repository = entityManager?.getRepository(AccountLog) ?? this.accountLogRepository;
+        return repository.exists({
+            where: {
+                associationNo: opts.associationNo,
+                accountType: opts.accountType ?? ACCOUNT_LOG_TYPE.PLUGIN_DEC,
+                action: opts.action,
+            },
+        });
+    }
+
+    /**
      * Deduct user power
      *
      * @param opts - Power deduction options
@@ -67,7 +91,7 @@ export class ExtensionBillingService {
             throw new Error("Extension not found");
         }
 
-        const extensionName = (await getExtensionNameFromConfig(extensionIdentifier)) || "unknow";
+        const extensionName = (await getExtensionNameFromConfig(extensionIdentifier)) || "unknown";
 
         return await this.baseBillingService.deductUserPower(
             {
@@ -99,7 +123,7 @@ export class ExtensionBillingService {
             throw new Error("Extension not found");
         }
 
-        const extensionName = (await getExtensionNameFromConfig(extensionIdentifier)) || "unknow";
+        const extensionName = (await getExtensionNameFromConfig(extensionIdentifier)) || "unknown";
 
         return await this.baseBillingService.addUserPower(
             {

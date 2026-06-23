@@ -23,15 +23,15 @@ jest.mock("@buildingai/core/modules", () => ({
 }));
 
 describe("notification normalization helpers", () => {
-    it("allows relative and http notification links", () => {
+    it("allows relative notification links", () => {
         expect(normalizeNotificationLinkUrl("/extension/echoflow-video/?tab=history")).toBe(
             "/extension/echoflow-video/?tab=history",
         );
-        expect(normalizeNotificationLinkUrl("https://example.com/path")).toBe("https://example.com/path");
     });
 
     it("rejects unsafe notification links", () => {
         expect(() => normalizeNotificationLinkUrl("//evil.example/path")).toThrow();
+        expect(() => normalizeNotificationLinkUrl("https://example.com/path")).toThrow();
         expect(() => normalizeNotificationLinkUrl("javascript:alert(1)")).toThrow();
         expect(() => normalizeNotificationLinkUrl("https://user:pass@example.com/path")).toThrow();
         expect(() => normalizeNotificationLinkUrl(`/path/${"x".repeat(600)}`)).toThrow();
@@ -126,6 +126,60 @@ describe("extension notification SDK boundary", () => {
         expect(notificationPort.registerScenes).not.toHaveBeenCalled();
     });
 
+    it("registers explicit extension scenes when stack resolution is unavailable", async () => {
+        mockedGetExtensionIdentifierFromStack.mockReturnValue(null);
+        const notificationPort = {
+            registerScenes: jest.fn().mockResolvedValue(undefined),
+            notifyUser: jest.fn(),
+        };
+        const service = new ExtensionNotificationService(notificationPort);
+
+        await expect(
+            service.registerScenes("echoflow-video", [
+                {
+                    sceneCode: "echoflow-video.generation.succeeded",
+                    name: "视频生成完成",
+                    description: "视频生成完成",
+                    level: "success",
+                    titleTemplate: "视频生成完成",
+                    contentTemplate: "视频生成完成",
+                },
+            ]),
+        ).resolves.toBeUndefined();
+
+        expect(notificationPort.registerScenes).toHaveBeenCalledWith(
+            "echoflow-video",
+            [
+                expect.objectContaining({
+                    sceneCode: "echoflow-video.generation.succeeded",
+                    channels: ["in_app", "web_push"],
+                }),
+            ],
+        );
+    });
+
+    it("still requires stack resolution when scenes are registered without an explicit extensionId", async () => {
+        mockedGetExtensionIdentifierFromStack.mockReturnValue(null);
+        const notificationPort = {
+            registerScenes: jest.fn(),
+            notifyUser: jest.fn(),
+        };
+        const service = new ExtensionNotificationService(notificationPort);
+
+        await expect(
+            service.registerScenes([
+                {
+                    sceneCode: "echoflow-video.generation.succeeded",
+                    name: "视频生成完成",
+                    description: "视频生成完成",
+                    level: "success",
+                    titleTemplate: "视频生成完成",
+                    contentTemplate: "视频生成完成",
+                },
+            ]),
+        ).rejects.toThrow("Extension notification requires an explicit extensionId");
+    });
+
     it("ignores caller supplied extensionId when sending notifications", async () => {
         const notificationPort = {
             registerScenes: jest.fn(),
@@ -152,5 +206,18 @@ describe("extension notification SDK boundary", () => {
                 }),
             }),
         );
+    });
+});
+
+describe("notification platform default scene boundary", () => {
+    it("keeps EchoFlow video scenes registered by the video plugin, not platform defaults", async () => {
+        const source = require("node:fs").readFileSync(
+            require("node:path").resolve(__dirname, "notification.service.ts"),
+            "utf8",
+        );
+
+        expect(source).not.toContain('sceneCode: "echoflow-video.generation.succeeded"');
+        expect(source).not.toContain('sceneCode: "echoflow-video.generation.failed"');
+        expect(source).toContain('sceneCode: "system.test"');
     });
 });

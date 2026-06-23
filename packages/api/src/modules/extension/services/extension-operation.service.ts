@@ -683,7 +683,9 @@ export class ExtensionOperationService {
     }
 
     /**
-     * Upgrade extension by preserving data and storage directories
+     * Upgrade extension by preserving data and storage directories.
+     * Runtime files under storage, including storage/node_modules and uploads,
+     * are preserved by backing up and restoring the whole storage directory.
      * @param sourceDir New extension source directory
      * @param targetDir Existing extension directory
      */

@@ -50,9 +50,9 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
-import type { ExtensionMenuItem } from "../types";
+import type { ExtensionConsoleMenuIconName, ExtensionMenuItem } from "../types";
 
-const menuIconMap: Record<string, LucideIcon> = {
+const menuIconMap: Record<ExtensionConsoleMenuIconName, LucideIcon> = {
   "bar-chart-3": BarChart3,
   bell: Bell,
   bot: Bot,
@@ -86,9 +86,8 @@ const normalizePath = (path: string) => {
 };
 
 function MenuIcon({ name }: { name: ExtensionMenuItem["icon"] }) {
-  if (!name) return null;
-
-  const Icon = menuIconMap[name] ?? CircleHelp;
+  const Icon = name ? menuIconMap[name] ?? CircleHelp : null;
+  if (!Icon) return null;
   return <Icon className="size-4 shrink-0" aria-hidden="true" />;
 }
 

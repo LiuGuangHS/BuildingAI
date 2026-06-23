@@ -14,11 +14,11 @@ export function fetchWebExtensionDetail(identifier: string, config?: RequestConf
  */
 export function useWebExtensionDetailQuery(
     identifier: string,
-    options?: QueryOptionsUtil<Extension>,
+    options?: QueryOptionsUtil<Extension> & { requestConfig?: RequestConfig },
 ) {
     return useQuery<Extension>({
         queryKey: ["web", "extension", "detail", identifier],
-        queryFn: () => fetchWebExtensionDetail(identifier),
+        queryFn: () => fetchWebExtensionDetail(identifier, options?.requestConfig),
         enabled: !!identifier && options?.enabled !== false,
         ...options,
     });

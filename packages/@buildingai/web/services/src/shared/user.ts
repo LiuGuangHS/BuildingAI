@@ -1,12 +1,17 @@
+import type { RequestConfig } from "@buildingai/http";
 import type { QueryOptionsUtil, UserInfo } from "@buildingai/web-types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiHttpClient } from "../base";
 
-export function useUserInfoQuery(options?: QueryOptionsUtil<UserInfo>) {
+type UserInfoQueryOptions = QueryOptionsUtil<UserInfo> & {
+    requestConfig?: RequestConfig;
+};
+
+export function useUserInfoQuery(options?: UserInfoQueryOptions) {
     return useQuery<UserInfo>({
         queryKey: ["user", "info"],
-        queryFn: () => apiHttpClient.get<UserInfo>("/user/info"),
+        queryFn: () => apiHttpClient.get<UserInfo>("/user/info", options?.requestConfig),
         ...options,
     });
 }

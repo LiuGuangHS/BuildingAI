@@ -1,4 +1,7 @@
+import { HttpErrorFactory } from "@buildingai/errors";
 import { getProviderSecret } from "@buildingai/utils";
+
+import { assertPublicHttpUrl } from "../../utils/public-http-url";
 
 export type ProviderSecretFieldValue =
     | string
@@ -25,6 +28,34 @@ export type NormalizedProviderConfig = {
     webhookSecret: string;
 };
 
+export type ProviderEndpointCredentialInput = {
+    secretId?: string | null;
+    baseUrlOverride?: string | null;
+};
+
+export type ProviderEndpointCredentialOptions = {
+    defaultBaseUrl: string;
+    label?: string;
+    missingSecretMessage?: string;
+    missingApiKeyMessage?: string;
+    secretConfigResolver: (secretId: string) => Promise<Record<string, ProviderSecretFieldValue>>;
+};
+
+export type ProviderEndpointCredential = {
+    apiKey: string;
+    baseUrl: string;
+};
+
+export type ProviderSecretValueKey = keyof NormalizedProviderConfig;
+
+export type ProviderSecretValueOptions = {
+    secretId: string;
+    field: ProviderSecretValueKey;
+    missingSecretMessage?: string;
+    missingValueMessage?: string;
+    secretConfigResolver: (secretId: string) => Promise<Record<string, ProviderSecretFieldValue>>;
+};
+
 export function normalizeProviderConfig(
     config: Record<string, ProviderSecretFieldValue> = {},
 ): NormalizedProviderConfig {
@@ -34,6 +65,46 @@ export function normalizeProviderConfig(
         baseURL: getProviderSecret("baseUrl", providerSecretConfig),
         webhookSecret: getProviderSecret("webhookSecret", providerSecretConfig),
     };
+}
+
+export async function resolveProviderEndpointCredential(
+    input: ProviderEndpointCredentialInput,
+    options: ProviderEndpointCredentialOptions,
+): Promise<ProviderEndpointCredential> {
+    const secretId = input.secretId?.trim();
+    if (!secretId) {
+        throw HttpErrorFactory.badRequest(options.missingSecretMessage || "请先为接入点选择主站密钥");
+    }
+
+    const secretConfig = await options.secretConfigResolver(secretId);
+    const values = normalizeProviderConfig(secretConfig);
+    const apiKey = values.apiKey;
+    const baseUrl = input.baseUrlOverride || values.baseURL || options.defaultBaseUrl;
+    if (!apiKey) {
+        throw HttpErrorFactory.badRequest(options.missingApiKeyMessage || "主站密钥中未找到 apiKey/api_key 字段");
+    }
+
+    return {
+        apiKey,
+        baseUrl: await assertPublicHttpUrl(baseUrl, { label: options.label || "Base URL" }),
+    };
+}
+
+export async function resolveProviderSecretValue(
+    options: ProviderSecretValueOptions,
+): Promise<string> {
+    let secretConfig: Record<string, ProviderSecretFieldValue>;
+    try {
+        secretConfig = await options.secretConfigResolver(options.secretId);
+    } catch {
+        throw HttpErrorFactory.badRequest(options.missingSecretMessage || "主站密钥不存在或不可用");
+    }
+
+    const value = normalizeProviderConfig(secretConfig)[options.field];
+    if (!value) {
+        throw HttpErrorFactory.badRequest(options.missingValueMessage || `主站密钥中未找到 ${options.field} 字段`);
+    }
+    return value;
 }
 
 function normalizeProviderSecretConfig(

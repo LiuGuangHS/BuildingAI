@@ -1,13 +1,12 @@
-import { AuthService } from "@common/modules/auth/services/auth.service";
+import { AuthModule } from "@modules/auth/auth.module";
 import { ChannelModule } from "@modules/channel/channel.module";
-import { WxOaConfigService } from "@modules/channel/services/wxoaconfig.service";
 import { Module } from "@nestjs/common";
 
 import { WechatOaService } from "./services/wechatoa.service";
 
 @Module({
-    imports: [ChannelModule],
-    providers: [WechatOaService, WxOaConfigService, AuthService],
+    imports: [ChannelModule, AuthModule],
+    providers: [WechatOaService],
     exports: [WechatOaService],
 })
 export class WechatModule {}

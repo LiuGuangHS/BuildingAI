@@ -11,6 +11,7 @@ export * from "./helper.js";
 export * from "./http-client.js";
 export * from "./http-client.types.js";
 export * from "./http-error-handler.js";
+export * from "./ip.js";
 export * from "./is.js";
 export * from "./log.js";
 export * from "./message-content.utils.js";

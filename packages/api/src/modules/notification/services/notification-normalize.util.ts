@@ -111,23 +111,7 @@ export function normalizeNotificationLinkUrl(linkUrl?: string | null) {
         return trimmed;
     }
 
-    let url: URL;
-    try {
-        url = new URL(trimmed);
-    } catch {
-        throw HttpErrorFactory.badRequest("通知跳转链接格式无效");
-    }
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-        throw HttpErrorFactory.badRequest("通知跳转链接仅支持 HTTP 或 HTTPS");
-    }
-    if (url.username || url.password) {
-        throw HttpErrorFactory.badRequest("通知跳转链接不能包含凭据");
-    }
-    const normalized = url.toString();
-    if (normalized.length > FIELD_LIMITS.linkUrl) {
-        throw HttpErrorFactory.badRequest(`通知跳转链接不能超过 ${FIELD_LIMITS.linkUrl} 个字符`);
-    }
-    return normalized;
+    throw HttpErrorFactory.badRequest("通知跳转链接仅支持站内相对路径");
 }
 
 export function normalizeNotificationLinkTemplate(template?: string | null) {

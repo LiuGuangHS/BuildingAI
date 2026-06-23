@@ -15,7 +15,14 @@ const PUBLIC_HTTP_URL_EXPORTS = [
     "assertPublicHttpUrl",
     "isPrivateOrReservedIp",
     "normalizePublicHttpUrl",
+    "resolvePublicHttpUrl",
     "buildDefinedWhere",
+];
+
+const BILLING_EXPORTS = [
+    "ExtensionBillingService",
+    "ExtensionPowerDeductionOptions",
+    "ExtensionBillingLogExistsOptions",
 ];
 
 test("public HTTP URL helpers are exported from source and dist entrypoints", async () => {
@@ -39,4 +46,18 @@ test("public HTTP URL helper dist files exist for plugin runtime imports", async
         access(DIST_WHERE_DTS),
         access(DIST_WHERE_JS),
     ]);
+});
+
+test("extension billing helpers are exported from source and dist entrypoints", async () => {
+    const [srcIndex, distDts, distJs] = await Promise.all([
+        readFile(SRC_INDEX, "utf8"),
+        readFile(DIST_INDEX_DTS, "utf8"),
+        readFile(DIST_INDEX_JS, "utf8"),
+    ]);
+
+    for (const exportName of BILLING_EXPORTS) {
+        assert.match(srcIndex, new RegExp(`\\b${exportName}\\b`));
+        assert.match(distDts, new RegExp(`\\b${exportName}\\b`));
+    }
+    assert.match(distJs, /ExtensionBillingService/);
 });

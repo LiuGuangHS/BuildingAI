@@ -67,6 +67,8 @@ yarn-error.log*
 # extensions
 extensions/*
 !extensions/extensions.json
+!extensions/test-utils
+!extensions/test-utils/**
 !extensions/simple-blog
 !extensions/simple-blog/**
 !extensions/echoflow-image

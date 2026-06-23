@@ -1,8 +1,11 @@
-import { BaseProviderSettings } from "@buildingai/ai-sdk";
+import { BaseProviderSettings, generateTextWithUsage } from "@buildingai/ai-sdk";
 import { SecretService } from "@buildingai/core/modules";
 import { AiModel, Secret } from "@buildingai/db/entities";
 import { Repository } from "@buildingai/db/typeorm";
 import { Logger } from "@nestjs/common";
+type GenerateTextWithUsageParams = Parameters<typeof generateTextWithUsage>[0];
+export type PublicAiGenerateTextParams = GenerateTextWithUsageParams extends infer T ? T extends unknown ? Omit<T, "model"> : never : never;
+export type PublicAiGenerateTextResult = Awaited<ReturnType<typeof generateTextWithUsage>>;
 /**
  * Public AI Model Service
  */
@@ -31,5 +34,7 @@ export declare class PublicAiModelService {
      * @returns Provider
      */
     getProviderAdapter(modelId: string, config?: BaseProviderSettings): Promise<import("@buildingai/ai-sdk").CallableProvider>;
+    generateText(modelId: string, params: PublicAiGenerateTextParams): Promise<PublicAiGenerateTextResult>;
 }
+export {};
 //# sourceMappingURL=ai-model.service.d.ts.map

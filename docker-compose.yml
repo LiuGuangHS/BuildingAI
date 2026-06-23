@@ -97,6 +97,8 @@ services:
             - /buildingai/packages/@buildingai/upgrade/node_modules
             - /buildingai/packages/@buildingai/utils/node_modules
             - /buildingai/packages/@buildingai/wechat-sdk/node_modules
+            - /buildingai/packages/@buildingai/ai-toolkit/node_modules
+            - /buildingai/packages/@buildingai/llm-file-parser/node_modules
         ports:
             - "${SERVER_PORT:-4090}:${SERVER_PORT:-4090}"
         environment:

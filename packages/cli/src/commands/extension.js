@@ -18,7 +18,7 @@ const TEMPLATE_FILE = "buildingai-extension-starter";
 
 const RELEASES_DIR = path.join(rootDir, "releases");
 
-const RELEASE_COPY_ALLOWLIST = [
+export const RELEASE_COPY_ALLOWLIST = [
     ".output",
     "build",
     "src",

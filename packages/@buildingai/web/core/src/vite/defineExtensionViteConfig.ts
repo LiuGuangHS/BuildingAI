@@ -1,12 +1,28 @@
-import babel from "@rolldown/plugin-babel";
+import { createRequire } from "node:module";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig, type UserConfig } from "vite";
 
+const require = createRequire(import.meta.url);
+
 // https://vite.dev/config/
 export const defineExtensionViteConfig = (packageJson: { name: string }, config?: UserConfig) => {
+    const plugins = [react(), tailwindcss()];
+    const babelModule = (() => {
+        try {
+            return require("@rolldown/plugin-babel");
+        } catch {
+            return null;
+        }
+    })();
+
+    if (babelModule) {
+        const babel = babelModule.default ?? babelModule;
+        plugins.push(babel({ presets: [reactCompilerPreset()] }));
+    }
+
     return defineConfig({
-        plugins: [react(), tailwindcss(), babel({ presets: [reactCompilerPreset()] })],
+        plugins,
         resolve: {
             tsconfigPaths: true,
         },

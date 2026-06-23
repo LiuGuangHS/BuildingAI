@@ -104,6 +104,9 @@ catalogs:
       specifier: ^4.1.100
       version: 4.1.100
   dev:
+    '@playwright/test':
+      specifier: ^1.61.0
+      version: 1.61.0
     '@types/node':
       specifier: ^24.12.0
       version: 24.12.0
@@ -606,9 +609,12 @@ importers:
 
   extensions/echoflow-ai-town:
     dependencies:
-      '@buildingai/ai-sdk':
+      '@buildingai/cache':
         specifier: workspace:*
-        version: link:../../packages/@buildingai/ai-sdk
+        version: link:../../packages/@buildingai/cache
+      '@buildingai/constants':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/constants
       '@buildingai/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -618,9 +624,6 @@ importers:
       '@buildingai/decorators':
         specifier: workspace:*
         version: link:../../packages/@buildingai/decorators
-      '@buildingai/errors':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/errors
       '@buildingai/extension-sdk':
         specifier: workspace:*
         version: link:../../packages/@buildingai/extension-sdk
@@ -630,12 +633,12 @@ importers:
       '@buildingai/services':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/services
+      '@buildingai/stores':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/stores
       '@buildingai/ui':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/ui
-      '@buildingai/utils':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/utils
       '@buildingai/web-core':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/core
@@ -665,7 +668,7 @@ importers:
         version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       vite-tsconfig-paths:
         specifier: catalog:web
-        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@24.12.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
     devDependencies:
       '@buildingai/eslint-config':
         specifier: workspace:*
@@ -673,9 +676,6 @@ importers:
       '@buildingai/typescript-config':
         specifier: workspace:*
         version: link:../../packages/@buildingai/typescript-config
-      '@buildingai/web-types':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/types
       '@types/react':
         specifier: catalog:web
         version: 19.2.14
@@ -685,18 +685,30 @@ importers:
       babel-plugin-react-compiler:
         specifier: ^1.0.0
         version: 1.0.0
+      eslint:
+        specifier: catalog:dev
+        version: 9.39.4(jiti@2.6.1)
       eslint-plugin-react-refresh:
         specifier: ^0.4.26
         version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
+      globals:
+        specifier: ^16.5.0
+        version: 16.5.0
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@swc/core@1.15.13(@swc/helpers@0.5.19))(@types/node@24.12.0)(typescript@5.9.3)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.15.13(@swc/helpers@0.5.19))(jiti@2.6.1)(postcss@8.5.8)(typescript@5.9.3)
 
   extensions/echoflow-astrology-fortune:
     dependencies:
-      '@buildingai/ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/ai-sdk
       '@buildingai/base':
         specifier: workspace:*
         version: link:../../packages/@buildingai/base
+      '@buildingai/cache':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/cache
       '@buildingai/constants':
         specifier: workspace:*
         version: link:../../packages/@buildingai/constants
@@ -727,15 +739,15 @@ importers:
       '@buildingai/ui':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/ui
-      '@buildingai/utils':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/utils
       '@buildingai/web-core':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/core
       '@nestjs/bullmq':
         specifier: catalog:api
         version: 11.0.4(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.17)(bullmq@5.71.0)
+      '@nestjs/common':
+        specifier: ^11.1.17
+        version: 11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.4)
@@ -760,9 +772,9 @@ importers:
       react-router-dom:
         specifier: catalog:web
         version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      vite-tsconfig-paths:
-        specifier: catalog:web
-        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+      sonner:
+        specifier: ^2.0.7
+        version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -773,30 +785,30 @@ importers:
       '@buildingai/typescript-config':
         specifier: workspace:*
         version: link:../../packages/@buildingai/typescript-config
-      '@buildingai/web-types':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/types
       '@types/react':
         specifier: catalog:web
         version: 19.2.14
       '@types/react-dom':
         specifier: catalog:web
         version: 19.2.3(@types/react@19.2.14)
-      babel-plugin-react-compiler:
-        specifier: 1.0.0
-        version: 1.0.0
+      eslint:
+        specifier: catalog:dev
+        version: 9.39.4(jiti@2.6.1)
       eslint-plugin-react-refresh:
         specifier: ^0.4.26
         version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
+      globals:
+        specifier: ^16.5.0
+        version: 16.5.0
 
   extensions/echoflow-contract-generation:
     dependencies:
-      '@buildingai/ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/ai-sdk
       '@buildingai/base':
         specifier: workspace:*
         version: link:../../packages/@buildingai/base
+      '@buildingai/cache':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/cache
       '@buildingai/constants':
         specifier: workspace:*
         version: link:../../packages/@buildingai/constants
@@ -824,18 +836,21 @@ importers:
       '@buildingai/services':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/services
+      '@buildingai/stores':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/stores
       '@buildingai/ui':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/ui
-      '@buildingai/utils':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/utils
       '@buildingai/web-core':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/core
       '@nestjs/bullmq':
         specifier: catalog:api
         version: 11.0.4(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.17)(bullmq@5.71.0)
+      '@nestjs/common':
+        specifier: ^11.1.17
+        version: 11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.4)
@@ -851,6 +866,9 @@ importers:
       docx:
         specifier: ^9.5.1
         version: 9.7.1
+      express:
+        specifier: catalog:api
+        version: 5.2.1
       platejs:
         specifier: ^52.0.17
         version: 52.3.2(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.4))
@@ -863,9 +881,6 @@ importers:
       react-router-dom:
         specifier: catalog:web
         version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      vite-tsconfig-paths:
-        specifier: catalog:web
-        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -876,133 +891,24 @@ importers:
       '@buildingai/typescript-config':
         specifier: workspace:*
         version: link:../../packages/@buildingai/typescript-config
-      '@buildingai/web-types':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/types
       '@types/react':
         specifier: catalog:web
         version: 19.2.14
       '@types/react-dom':
         specifier: catalog:web
         version: 19.2.3(@types/react@19.2.14)
+      eslint:
+        specifier: catalog:dev
+        version: 9.39.4(jiti@2.6.1)
       eslint-plugin-react-refresh:
         specifier: ^0.4.26
         version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
+      globals:
+        specifier: ^16.5.0
+        version: 16.5.0
 
   extensions/echoflow-image:
     dependencies:
-      '@buildingai/ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/ai-sdk
-      '@buildingai/base':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/base
-      '@buildingai/constants':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/constants
-      '@buildingai/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@buildingai/db':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/db
-      '@buildingai/decorators':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/decorators
-      '@buildingai/dto':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/dto
-      '@buildingai/errors':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/errors
-      '@buildingai/extension-sdk':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/extension-sdk
-      '@buildingai/hooks':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/hooks
-      '@buildingai/http':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/http
-      '@buildingai/i18n':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/i18n
-      '@buildingai/pipe':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/pipe
-      '@buildingai/services':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/services
-      '@buildingai/stores':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/stores
-      '@buildingai/ui':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/ui
-      '@buildingai/utils':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/utils
-      '@buildingai/web-core':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/core
-      '@nestjs/bullmq':
-        specifier: catalog:api
-        version: 11.0.4(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.17)(bullmq@5.71.0)
-      '@tanstack/react-query':
-        specifier: ^5.90.21
-        version: 5.90.21(react@19.2.4)
-      babel-plugin-react-compiler:
-        specifier: ^1.0.0
-        version: 1.0.0
-      bullmq:
-        specifier: catalog:api
-        version: 5.71.0
-      lucide-react:
-        specifier: catalog:web
-        version: 0.561.0(react@19.2.4)
-      react:
-        specifier: catalog:web
-        version: 19.2.4
-      react-dom:
-        specifier: catalog:web
-        version: 19.2.4(react@19.2.4)
-      react-router-dom:
-        specifier: catalog:web
-        version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      sonner:
-        specifier: ^2.0.7
-        version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      tldraw:
-        specifier: ^5.1.1
-        version: 5.1.1(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      vite-tsconfig-paths:
-        specifier: catalog:web
-        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
-    devDependencies:
-      '@buildingai/eslint-config':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/eslint-config
-      '@buildingai/typescript-config':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/typescript-config
-      '@buildingai/web-types':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/web/types
-      '@types/react':
-        specifier: catalog:web
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: catalog:web
-        version: 19.2.3(@types/react@19.2.14)
-      eslint-plugin-react-refresh:
-        specifier: ^0.4.26
-        version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
-
-  extensions/echoflow-video:
-    dependencies:
-      '@buildingai/ai-sdk':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/ai-sdk
       '@buildingai/base':
         specifier: workspace:*
         version: link:../../packages/@buildingai/base
@@ -1051,21 +957,27 @@ importers:
       '@buildingai/ui':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/ui
-      '@buildingai/utils':
-        specifier: workspace:*
-        version: link:../../packages/@buildingai/utils
       '@buildingai/web-core':
         specifier: workspace:*
         version: link:../../packages/@buildingai/web/core
       '@nestjs/bullmq':
         specifier: catalog:api
         version: 11.0.4(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.17)(bullmq@5.71.0)
+      '@nestjs/common':
+        specifier: ^11.1.17
+        version: 11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.4)
       bullmq:
         specifier: catalog:api
         version: 5.71.0
+      class-transformer:
+        specifier: catalog:api
+        version: 0.5.1
+      class-validator:
+        specifier: catalog:api
+        version: 0.14.4
       lucide-react:
         specifier: catalog:web
         version: 0.561.0(react@19.2.4)
@@ -1081,9 +993,12 @@ importers:
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      vite-tsconfig-paths:
-        specifier: catalog:web
-        version: 5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+      tldraw:
+        specifier: ^5.1.1
+        version: 5.1.1(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      vite:
+        specifier: 8.0.0
+        version: 8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0)
     devDependencies:
       '@buildingai/eslint-config':
         specifier: workspace:*
@@ -1100,9 +1015,142 @@ importers:
       '@types/react-dom':
         specifier: catalog:web
         version: 19.2.3(@types/react@19.2.14)
+      eslint:
+        specifier: catalog:dev
+        version: 9.39.4(jiti@2.6.1)
       eslint-plugin-react-refresh:
         specifier: ^0.4.26
         version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
+      globals:
+        specifier: ^16.5.0
+        version: 16.5.0
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.15.13(@swc/helpers@0.5.19))(jiti@2.6.1)(postcss@8.5.8)(typescript@5.9.3)
+
+  extensions/echoflow-video:
+    dependencies:
+      '@buildingai/base':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/base
+      '@buildingai/cache':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/cache
+      '@buildingai/constants':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/constants
+      '@buildingai/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@buildingai/db':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/db
+      '@buildingai/decorators':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/decorators
+      '@buildingai/dto':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/dto
+      '@buildingai/errors':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/errors
+      '@buildingai/extension-sdk':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/extension-sdk
+      '@buildingai/hooks':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/hooks
+      '@buildingai/http':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/http
+      '@buildingai/i18n':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/i18n
+      '@buildingai/pipe':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/pipe
+      '@buildingai/services':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/services
+      '@buildingai/stores':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/stores
+      '@buildingai/ui':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/ui
+      '@buildingai/web-core':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/core
+      '@nestjs/bullmq':
+        specifier: catalog:api
+        version: 11.0.4(@nestjs/common@11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.17)(bullmq@5.71.0)
+      '@nestjs/common':
+        specifier: ^11.1.17
+        version: 11.1.17(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@tanstack/react-query':
+        specifier: ^5.90.21
+        version: 5.90.21(react@19.2.4)
+      bullmq:
+        specifier: catalog:api
+        version: 5.71.0
+      class-transformer:
+        specifier: catalog:api
+        version: 0.5.1
+      class-validator:
+        specifier: catalog:api
+        version: 0.14.4
+      lucide-react:
+        specifier: catalog:web
+        version: 0.561.0(react@19.2.4)
+      react:
+        specifier: catalog:web
+        version: 19.2.4
+      react-dom:
+        specifier: catalog:web
+        version: 19.2.4(react@19.2.4)
+      react-router-dom:
+        specifier: catalog:web
+        version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      sonner:
+        specifier: ^2.0.7
+        version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+    devDependencies:
+      '@buildingai/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/eslint-config
+      '@buildingai/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/typescript-config
+      '@buildingai/web-types':
+        specifier: workspace:*
+        version: link:../../packages/@buildingai/web/types
+      '@playwright/test':
+        specifier: catalog:dev
+        version: 1.61.0
+      '@tailwindcss/vite':
+        specifier: catalog:web
+        version: 4.2.1(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+      '@types/react':
+        specifier: catalog:web
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: catalog:web
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(@rolldown/plugin-babel@0.2.1(@babel/core@7.29.0)(@babel/runtime@7.28.6)(rolldown@1.0.0-rc.9)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0)))(babel-plugin-react-compiler@1.0.0)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+      eslint:
+        specifier: catalog:dev
+        version: 9.39.4(jiti@2.6.1)
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.26
+        version: 0.4.26(eslint@9.39.4(jiti@2.6.1))
+      globals:
+        specifier: ^16.5.0
+        version: 16.5.0
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.15.13(@swc/helpers@0.5.19))(jiti@2.6.1)(postcss@8.5.8)(typescript@5.9.3)
 
   extensions/simple-blog:
     dependencies:
@@ -5034,6 +5082,11 @@ packages:
     peerDependencies:
       react: '>=18.0.0'
       react-dom: '>=18.0.0'
+
+  '@playwright/test@1.61.0':
+    resolution: {integrity: sha512-cKA5B6lpFEMyMGjxF54QihfYpB4FkEGH+qZhtArDEG+wezQAJY8Pq6C7T1SjWz+FFzt3TbyoXBQYk/0292TdJA==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@pm2/agent@2.1.1':
     resolution: {integrity: sha512-0V9ckHWd/HSC8BgAbZSoq8KXUG81X97nSkAxmhKDhmF8vanyaoc1YXwc2KVkbWz82Rg4gjd2n9qiT3i7bdvGrQ==}
@@ -9911,6 +9964,11 @@ packages:
   fs-monkey@1.1.0:
     resolution: {integrity: sha512-QMUezzXWII9EV5aTFXW1UBVUO77wYPpjqIF8/AviUCThNeSYZykpoTixUeaNNBwmCev0AMDWMAni+f8Hxb1IFw==}
 
+  fsevents@2.3.2:
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+    os: [darwin]
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -12346,6 +12404,16 @@ packages:
   player.style@0.3.1:
     resolution: {integrity: sha512-z/T8hJGaTkHT9vdXgWdOgF37eB1FV7/j52VXQZ2lgEhpru9oT8TaUWIxp6GoxTnhPBM4X6nSbpkAHrT7UTjUKg==}
 
+  playwright-core@1.61.0:
+    resolution: {integrity: sha512-caX7TrY3Ml6egyDX0WUcTHDxodl/b51y5wJOdCEA36QviK/s2g081hvmGs8eaE3DWb6NYZQ6BjO/QkNRPenoPA==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.61.0:
+    resolution: {integrity: sha512-Z+7BeeqQPRRzklHsVFP4KTGIyMxKUmfeRA4WisM6G3/XW6nwGeX6fX9qYaDa+CiUqpOkb2f6X3nar05R3kSuJQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
@@ -13728,10 +13796,6 @@ packages:
 
   tinyexec@0.3.2:
     resolution: {integrity: sha512-KQQR9yN7R5+OSwaK0XQoj22pwHoTlgYqmUscPYoknOoWCWfj/5/ABTMRi69FrKU5ffPVh5QcFikpWJI/P1ocHA==}
-
-  tinyexec@1.0.2:
-    resolution: {integrity: sha512-W/KYk+NFhkmsYpuHq5JykngiOCnxeVL8v8dFnqxSD8qEEdRfXk1SDM6JzNqcERbcGYj9tMrDQBYV9cjgnunFIg==}
-    engines: {node: '>=18'}
 
   tinyexec@1.0.4:
     resolution: {integrity: sha512-u9r3uZC0bdpGOXtlxUIdwf9pkmvhqJdrVCH9fapQtgy/OeTTMZ1nqH7agtvEfmGui6e1XxjcdrlxvxJvc3sMqw==}
@@ -15214,14 +15278,14 @@ snapshots:
   '@antfu/install-pkg@1.1.0':
     dependencies:
       package-manager-detector: 1.6.0
-      tinyexec: 1.0.2
+      tinyexec: 1.0.4
 
   '@antfu/ni@25.0.0':
     dependencies:
       ansis: 4.2.0
       fzf: 0.5.2
       package-manager-detector: 1.6.0
-      tinyexec: 1.0.2
+      tinyexec: 1.0.4
 
   '@ariakit/core@0.4.18': {}
 
@@ -17372,7 +17436,7 @@ snapshots:
       lodash: 4.17.23
       mammoth: 1.11.0
       mime-types: 2.1.35
-      nanoid: 5.1.6
+      nanoid: 5.1.7
       platejs: 52.3.2(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(scheduler@0.27.0)(use-sync-external-store@1.6.0(react@19.2.4))
       react: 19.2.4
       react-compiler-runtime: 1.0.0(react@19.2.4)
@@ -17561,6 +17625,10 @@ snapshots:
       - react-native
       - scheduler
       - use-sync-external-store
+
+  '@playwright/test@1.61.0':
+    dependencies:
+      playwright: 1.61.0
 
   '@pm2/agent@2.1.1':
     dependencies:
@@ -18847,6 +18915,13 @@ snapshots:
       '@tailwindcss/oxide': 4.2.1
       tailwindcss: 4.2.1
       vite: 8.0.0(@types/node@24.12.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0)
+
+  '@tailwindcss/vite@4.2.1(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))':
+    dependencies:
+      '@tailwindcss/node': 4.2.1
+      '@tailwindcss/oxide': 4.2.1
+      tailwindcss: 4.2.1
+      vite: 8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0)
 
   '@tanstack/query-core@5.90.20': {}
 
@@ -20206,6 +20281,14 @@ snapshots:
       vite: 8.0.0(@types/node@24.12.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0)
     optionalDependencies:
       '@rolldown/plugin-babel': 0.2.1(@babel/core@7.29.0)(@babel/runtime@7.28.6)(rolldown@1.0.0-rc.9)(vite@8.0.0(@types/node@24.12.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
+      babel-plugin-react-compiler: 1.0.0
+
+  '@vitejs/plugin-react@6.0.1(@rolldown/plugin-babel@0.2.1(@babel/core@7.29.0)(@babel/runtime@7.28.6)(rolldown@1.0.0-rc.9)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0)))(babel-plugin-react-compiler@1.0.0)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))':
+    dependencies:
+      '@rolldown/pluginutils': 1.0.0-rc.7
+      vite: 8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0)
+    optionalDependencies:
+      '@rolldown/plugin-babel': 0.2.1(@babel/core@7.29.0)(@babel/runtime@7.28.6)(rolldown@1.0.0-rc.9)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0))
       babel-plugin-react-compiler: 1.0.0
 
   '@volar/language-core@2.4.15':
@@ -22940,6 +23023,9 @@ snapshots:
       universalify: 2.0.1
 
   fs-monkey@1.1.0: {}
+
+  fsevents@2.3.2:
+    optional: true
 
   fsevents@2.3.3:
     optional: true
@@ -25933,6 +26019,14 @@ snapshots:
     transitivePeerDependencies:
       - react
 
+  playwright-core@1.61.0: {}
+
+  playwright@1.61.0:
+    dependencies:
+      playwright-core: 1.61.0
+    optionalDependencies:
+      fsevents: 2.3.2
+
   pluralize@8.0.0: {}
 
   pm2-axon-rpc@0.7.1:
@@ -27637,10 +27731,7 @@ snapshots:
 
   tinyexec@0.3.2: {}
 
-  tinyexec@1.0.2: {}
-
-  tinyexec@1.0.4:
-    optional: true
+  tinyexec@1.0.4: {}
 
   tinyglobby@0.2.15:
     dependencies:
@@ -28432,6 +28523,17 @@ snapshots:
       - supports-color
       - typescript
 
+  vite-tsconfig-paths@5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@24.12.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0)):
+    dependencies:
+      debug: 4.4.3(supports-color@5.5.0)
+      globrex: 0.1.2
+      tsconfck: 3.1.6(typescript@5.9.3)
+    optionalDependencies:
+      vite: 8.0.0(@types/node@24.12.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0)
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
+
   vite-tsconfig-paths@5.1.4(typescript@5.9.3)(vite@8.0.0(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(sass@1.78.0)(terser@5.46.0)):
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
@@ -28491,7 +28593,6 @@ snapshots:
       jiti: 2.6.1
       sass: 1.78.0
       terser: 5.46.0
-    optional: true
 
   viz.js@2.1.2: {}
 

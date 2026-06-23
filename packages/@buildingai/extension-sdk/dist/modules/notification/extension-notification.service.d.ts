@@ -11,6 +11,8 @@ export declare class ExtensionNotificationService {
     private normalizeScene;
     private normalizeNotification;
     private assertNamespacedScene;
+    private requireResolvedExtensionId;
     private resolveExtensionId;
+    private tryResolveExtensionId;
 }
 //# sourceMappingURL=extension-notification.service.d.ts.map

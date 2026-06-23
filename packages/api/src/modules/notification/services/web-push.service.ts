@@ -44,7 +44,6 @@ type LegacyVapidKeys = {
 
 const DICT_GROUP = "notification";
 const VAPID_KEYS_KEY = "webPushVapidKeys";
-const VAPID_SUBJECT = "mailto:support@echoflow.com";
 const MAX_PUSH_USER_AGENT_LENGTH = 512;
 
 function generateVapidKeys(): VapidKeys {
@@ -78,6 +77,20 @@ function normalizePushErrorMessage(error: unknown, endpoint: string) {
     if (!message) return "Web Push 发送失败";
     if (message.length > 300) return `${message.slice(0, 300)}...`;
     return message;
+}
+
+function normalizeVapidSubject(value?: string | null) {
+    const trimmed = value?.trim();
+    if (!trimmed) return null;
+
+    try {
+        const url = new URL(trimmed);
+        if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+        if (url.username || url.password) return null;
+        return url.origin;
+    } catch {
+        return null;
+    }
 }
 
 @Injectable()
@@ -152,7 +165,7 @@ export class WebPushService {
     }
 
     async sendWakeup(userId: string) {
-        const siteName = await this.dictService.get<string>("name", "BuildingAI", "webinfo");
+        const siteName = await this.dictService.get<string>("name", "EchoFlowAI", "webinfo");
         return this.sendNotification(userId, {
             title: siteName,
             body: "任务状态已更新",
@@ -217,7 +230,11 @@ export class WebPushService {
         try {
             await assertSafePushEndpoint(subscription.endpoint);
             const keys = await this.getVapidKeys();
-            webPush.setVapidDetails(VAPID_SUBJECT, keys.publicKey, keys.privateKey);
+            const vapidSubject = await this.getVapidSubject();
+            if (!vapidSubject) {
+                throw new Error("Web Push VAPID subject requires site URL");
+            }
+            webPush.setVapidDetails(vapidSubject, keys.publicKey, keys.privateKey);
 
             await webPush.sendNotification(
                 toWebPushSubscription(subscription),
@@ -262,5 +279,10 @@ export class WebPushService {
                 message,
             };
         }
+    }
+
+    private async getVapidSubject() {
+        const siteUrl = await this.dictService.get<string>("url", "", "webinfo");
+        return normalizeVapidSubject(siteUrl) || normalizeVapidSubject(process.env.APP_DOMAIN);
     }
 }

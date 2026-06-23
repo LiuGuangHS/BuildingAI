@@ -25,11 +25,12 @@ let ExtensionNotificationService = ExtensionNotificationService_1 = class Extens
         this.notificationPort = notificationPort;
     }
     async registerScenes(extensionIdOrScenes, maybeScenes) {
-        const resolvedExtensionId = this.resolveExtensionId();
-        const extensionId = typeof extensionIdOrScenes === "string"
-            ? this.assertExplicitExtensionId(resolvedExtensionId, extensionIdOrScenes)
-            : resolvedExtensionId;
-        const scenes = typeof extensionIdOrScenes === "string" ? maybeScenes : extensionIdOrScenes;
+        const resolvedExtensionId = this.tryResolveExtensionId();
+        const hasExplicitExtensionId = typeof extensionIdOrScenes === "string";
+        const extensionId = hasExplicitExtensionId
+            ? this.assertExplicitExtensionId(extensionIdOrScenes, resolvedExtensionId)
+            : this.requireResolvedExtensionId(resolvedExtensionId);
+        const scenes = hasExplicitExtensionId ? maybeScenes : extensionIdOrScenes;
         if (!scenes?.length)
             return;
         if (!this.notificationPort) {
@@ -55,8 +56,8 @@ let ExtensionNotificationService = ExtensionNotificationService_1 = class Extens
             return { skipped: true, reason: message };
         }
     }
-    assertExplicitExtensionId(resolvedExtensionId, explicitExtensionId) {
-        if (explicitExtensionId !== resolvedExtensionId) {
+    assertExplicitExtensionId(explicitExtensionId, resolvedExtensionId) {
+        if (resolvedExtensionId && explicitExtensionId !== resolvedExtensionId) {
             throw new Error(`Notification extensionId "${explicitExtensionId}" does not match caller extension "${resolvedExtensionId}"`);
         }
         return explicitExtensionId;
@@ -90,11 +91,17 @@ let ExtensionNotificationService = ExtensionNotificationService_1 = class Extens
             throw new Error(`Notification sceneCode "${sceneCode}" must start with "${extensionId}."`);
         }
     }
-    resolveExtensionId() {
-        const extensionId = (0, modules_2.getExtensionIdentifierFromStack)(["/build/modules/", "/src/api/modules/"]);
+    requireResolvedExtensionId(extensionId) {
         if (!extensionId) {
             throw new Error("Extension notification requires an explicit extensionId");
         }
+        return extensionId;
+    }
+    resolveExtensionId() {
+        return this.requireResolvedExtensionId(this.tryResolveExtensionId());
+    }
+    tryResolveExtensionId() {
+        const extensionId = (0, modules_2.getExtensionIdentifierFromStack)(["/build/modules/", "/src/api/modules/"]);
         return extensionId;
     }
 };
