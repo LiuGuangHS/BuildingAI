@@ -1,8 +1,6 @@
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AiModel } from "@buildingai/db/entities";
 import { MoreThanOrEqual, Repository } from "@buildingai/db/typeorm";
-import { PublicAiModelService, normalizeProviderConfig } from "@buildingai/extension-sdk";
-import { generateText } from "@buildingai/ai-sdk";
+import { PublicAiModelService, safeJsonParse } from "@buildingai/extension-sdk";
 import { Injectable, Logger } from "@nestjs/common";
 
 import { TownAiCallLog, TownAiConfig, TownCharacter, TownEvent, TownSave } from "../../../db/entities";
@@ -36,6 +34,17 @@ type AiTownEventDraft = {
     characterRole?: string;
 };
 
+export type TownAiBillingContext = {
+    amount: number;
+    label: string;
+    fallbackUsed: boolean;
+};
+
+type TownAiTextResult = {
+    text: string;
+    billing: TownAiBillingContext;
+};
+
 export type AiTownStrategyDraft = {
     summary: string;
     action: string;
@@ -51,7 +60,6 @@ export class TownAiService {
     private readonly logger = new Logger(TownAiService.name);
     private readonly configRepo: Repository<TownAiConfig>;
     private readonly callLogRepo: Repository<TownAiCallLog>;
-    private readonly aiModelRepo: Repository<AiModel>;
     private readonly aiModelService: PublicAiModelService;
 
     constructor(
@@ -59,13 +67,10 @@ export class TownAiService {
         configRepo: Repository<TownAiConfig>,
         @InjectRepository(TownAiCallLog)
         callLogRepo: Repository<TownAiCallLog>,
-        @InjectRepository(AiModel)
-        aiModelRepo: Repository<AiModel>,
         aiModelService: PublicAiModelService,
     ) {
         this.configRepo = configRepo;
         this.callLogRepo = callLogRepo;
-        this.aiModelRepo = aiModelRepo;
         this.aiModelService = aiModelService;
     }
 
@@ -95,11 +100,7 @@ export class TownAiService {
     }
 
     async listAvailableModels() {
-        const models = await this.aiModelRepo.find({
-            where: { isActive: true, modelType: "llm" },
-            relations: { provider: true },
-            order: { sortOrder: "DESC", createdAt: "DESC" },
-        });
+        const models = await this.aiModelService.listActiveLlmModels();
         return models
             .filter((model) => model.provider?.isActive)
             .map((model) => ({
@@ -154,18 +155,19 @@ export class TownAiService {
         );
     }
 
-    async generateStrategy(context: GenerateContext, fallback: string): Promise<{ strategy: AiTownStrategyDraft; fallbackUsed: boolean }> {
+    async generateStrategy(context: GenerateContext, fallback: string): Promise<{ strategy: AiTownStrategyDraft; fallbackUsed: boolean; billing: TownAiBillingContext }> {
         const fallbackDraft = this.createFallbackStrategyDraft(context, fallback);
-        const text = await this.generateTextWithFallback(
+        const result = await this.generateTextWithFallback(
             "advice",
             context,
             this.buildStrategyPrompt(context, fallbackDraft),
             JSON.stringify(fallbackDraft),
         );
-        const parsed = this.parseStrategyDraft(text);
+        const parsed = this.parseStrategyDraft(result.text);
         return {
             strategy: this.normalizeStrategyDraft(parsed ?? fallbackDraft, fallbackDraft),
             fallbackUsed: !parsed,
+            billing: { ...result.billing, fallbackUsed: result.billing.fallbackUsed || !parsed },
         };
     }
 
@@ -178,25 +180,26 @@ export class TownAiService {
         );
     }
 
-    async generateStructuredEvent(context: GenerateContext, fallback: string): Promise<{ title: string; content: string; choices: Array<{ id: string; label: string; hint: string }>; fallbackUsed: boolean }> {
+    async generateStructuredEvent(context: GenerateContext, fallback: string): Promise<{ title: string; content: string; choices: Array<{ id: string; label: string; hint: string }>; fallbackUsed: boolean; billing: TownAiBillingContext }> {
         const fallbackDraft = this.createFallbackEventDraft(fallback);
-        const text = await this.generateTextWithFallback(
+        const result = await this.generateTextWithFallback(
             "structured_event",
             context,
             this.buildStructuredEventPrompt(context, fallback),
             JSON.stringify(fallbackDraft),
         );
-        const parsed = this.parseEventDraft(text);
+        const parsed = this.parseEventDraft(result.text);
         const draft = this.normalizeEventDraft(parsed ?? fallbackDraft, fallbackDraft);
         return {
             title: draft.title,
             content: draft.content,
             choices: draft.choices.map((choice) => ({ id: choice.intent, label: choice.label, hint: choice.hint })),
             fallbackUsed: !parsed,
+            billing: { ...result.billing, fallbackUsed: result.billing.fallbackUsed || !parsed },
         };
     }
 
-    async generateNpcReply(context: GenerateContext & { character: TownCharacter; message: string }, fallback: string) {
+    async generateNpcReply(context: GenerateContext & { character: TownCharacter; message: string }, fallback: string): Promise<TownAiTextResult> {
         return this.generateTextWithFallback(
             "chat",
             context,
@@ -209,7 +212,7 @@ export class TownAiService {
         return this.generateTextWithFallback("test", {}, prompt || "请用一句话介绍乐园小镇的今日计划。", "模型配置可用，小镇故事即将开始。", false);
     }
 
-    private async generateTextWithFallback(type: TownAiCallLog["type"], context: GenerateContext, prompt: string, fallback: string, allowFallback = true) {
+    private async generateTextWithFallback(type: TownAiCallLog["type"], context: GenerateContext, prompt: string, fallback: string, allowFallback = true): Promise<TownAiTextResult> {
         const startedAt = Date.now();
         const config = await this.getConfig();
 
@@ -224,7 +227,7 @@ export class TownAiService {
                 errorMessage: "AI 未启用或未配置模型",
                 usage: null,
             });
-            if (allowFallback) return fallback;
+            if (allowFallback) return { text: fallback, billing: this.createBillingContext(type, config, true) };
             throw new Error("AI 未启用或未配置模型");
         }
 
@@ -234,11 +237,7 @@ export class TownAiService {
 
         try {
             const modelInfo = await this.loadLlmModel(config.defaultModelId);
-            const providerConfig = normalizeProviderConfig(await this.aiModelService.getProviderConfig(modelInfo.id));
-            const provider = await this.aiModelService.getProviderAdapter(modelInfo.id, providerConfig);
-
-            const result = await generateText({
-                model: provider(modelInfo.model).model,
+            const result = await this.aiModelService.generateText(modelInfo.id, {
                 prompt,
                 temperature: config.temperature,
                 maxOutputTokens: config.maxTokens,
@@ -255,7 +254,7 @@ export class TownAiService {
                 latencyMs: Date.now() - startedAt,
                 usage: result.usage ? { ...result.usage } : null,
             });
-            return text;
+            return { text, billing: this.createBillingContext(type, config, false) };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             this.logger.warn(`AI town ${type} generation failed: ${message}`);
@@ -270,9 +269,21 @@ export class TownAiService {
                 usage: null,
             });
 
-            if (allowFallback && config.fallbackToRules) return fallback;
+            if (allowFallback && config.fallbackToRules) return { text: fallback, billing: this.createBillingContext(type, config, true) };
             throw error;
         }
+    }
+
+    private createBillingContext(type: TownAiCallLog["type"], config: TownAiConfig, fallbackUsed: boolean): TownAiBillingContext {
+        const amount = type === "chat"
+            ? Number(config.chatCostPower ?? 0)
+            : type === "structured_event" || type === "event"
+                ? Number(config.eventCostPower ?? 0)
+                : type === "advice"
+                    ? Number(config.adviceCostPower ?? 0)
+                    : 0;
+        const label = type === "chat" ? "居民聊天" : type === "structured_event" || type === "event" ? "探索导演" : type === "advice" ? "今日计划" : "测试生成";
+        return { amount: Number.isFinite(amount) && amount > 0 ? Math.ceil(amount) : 0, label, fallbackUsed };
     }
 
     private createDefaultConfig(): TownAiConfig {
@@ -500,21 +511,20 @@ export class TownAiService {
     }
 
     private parseStrategyDraft(text: string): AiTownStrategyDraft | null {
-        try {
-            const match = text.match(/\{[\s\S]*\}/);
-            const parsed = JSON.parse(match?.[0] ?? text) as Partial<AiTownStrategyDraft>;
-            return {
-                summary: typeof parsed.summary === "string" ? parsed.summary : "",
-                action: typeof parsed.action === "string" ? parsed.action : "",
-                target: typeof parsed.target === "string" ? parsed.target : "",
-                reason: typeof parsed.reason === "string" ? parsed.reason : "",
-                risk: typeof parsed.risk === "string" ? parsed.risk : "",
-                expected: typeof parsed.expected === "string" ? parsed.expected : "",
-                nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "",
-            };
-        } catch {
+        const match = text.match(/\{[\s\S]*\}/);
+        const parsed = safeJsonParse<Partial<AiTownStrategyDraft>>(match?.[0] ?? text);
+        if (!parsed || typeof parsed !== "object") {
             return null;
         }
+        return {
+            summary: typeof parsed.summary === "string" ? parsed.summary : "",
+            action: typeof parsed.action === "string" ? parsed.action : "",
+            target: typeof parsed.target === "string" ? parsed.target : "",
+            reason: typeof parsed.reason === "string" ? parsed.reason : "",
+            risk: typeof parsed.risk === "string" ? parsed.risk : "",
+            expected: typeof parsed.expected === "string" ? parsed.expected : "",
+            nextStep: typeof parsed.nextStep === "string" ? parsed.nextStep : "",
+        };
     }
 
     private formatStrategyAction(action: string) {
@@ -532,25 +542,24 @@ export class TownAiService {
     }
 
     private parseEventDraft(text: string): AiTownEventDraft | null {
-        try {
-            const match = text.match(/\{[\s\S]*\}/);
-            const parsed = JSON.parse(match?.[0] ?? text) as Partial<AiTownEventDraft>;
-            return {
-                title: typeof parsed.title === "string" ? parsed.title : "",
-                content: typeof parsed.content === "string" ? parsed.content : "",
-                choices: Array.isArray(parsed.choices)
-                    ? parsed.choices
-                        .filter((choice) => choice && typeof choice.label === "string" && typeof choice.hint === "string" && this.isSupportedIntent(choice.intent))
-                        .slice(0, 3)
-                        .map((choice) => ({ label: String(choice.label), hint: String(choice.hint), intent: choice.intent as AiTownEventDraft["choices"][number]["intent"] }))
-                    : [],
-                tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5).map(String) : undefined,
-                buildingId: typeof parsed.buildingId === "string" ? parsed.buildingId : undefined,
-                characterRole: typeof parsed.characterRole === "string" ? parsed.characterRole : undefined,
-            };
-        } catch {
+        const match = text.match(/\{[\s\S]*\}/);
+        const parsed = safeJsonParse<Partial<AiTownEventDraft>>(match?.[0] ?? text);
+        if (!parsed || typeof parsed !== "object") {
             return null;
         }
+        return {
+            title: typeof parsed.title === "string" ? parsed.title : "",
+            content: typeof parsed.content === "string" ? parsed.content : "",
+            choices: Array.isArray(parsed.choices)
+                ? parsed.choices
+                    .filter((choice) => choice && typeof choice.label === "string" && typeof choice.hint === "string" && this.isSupportedIntent(choice.intent))
+                    .slice(0, 3)
+                    .map((choice) => ({ label: String(choice.label), hint: String(choice.hint), intent: choice.intent as AiTownEventDraft["choices"][number]["intent"] }))
+                : [],
+            tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5).map(String) : undefined,
+            buildingId: typeof parsed.buildingId === "string" ? parsed.buildingId : undefined,
+            characterRole: typeof parsed.characterRole === "string" ? parsed.characterRole : undefined,
+        };
     }
 
     private pickSaveState(save?: TownSave) {

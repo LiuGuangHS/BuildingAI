@@ -31,6 +31,11 @@ export class TownConsoleController {
         return this.townService.getStatistics();
     }
 
+    @Get("content-pack")
+    getContentPack() {
+        return this.townService.getContentPackOverview();
+    }
+
     @Delete("saves/:id")
     async deleteSave(@Param("id", UUIDValidationPipe) id: string) {
         await this.townService.deleteSaveByAdmin(id);
@@ -66,7 +71,7 @@ export class TownConsoleController {
 
     @Post("ai-config/test")
     async testAi(@Body("prompt") prompt?: string) {
-        const text = await this.townAiService.testGenerate(prompt ?? "");
-        return { text };
+        const result = await this.townAiService.testGenerate(prompt ?? "");
+        return { text: result.text };
     }
 }

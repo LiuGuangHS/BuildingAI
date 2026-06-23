@@ -75,6 +75,13 @@ export type TownEventResult = {
         expected: string;
         nextStep: string;
     };
+    billingStatus?: "deducted" | "refunded";
+    billingAmount?: number;
+    billingLabel?: string;
+    billedAt?: string;
+    refundedAt?: string;
+    refundRemark?: string;
+    refundError?: string;
     fallbackUsed?: boolean;
 };
 

@@ -1,10 +1,10 @@
 {
     "identifier": "echoflow-ai-town",
-    "name": "AI乐园小镇｜开放世界",
+    "name": "乐园小镇",
     "type": "application",
     "version": "0.0.1",
     "icon": "/echoflow-ai-town/static/icon.png",
-    "description": "治愈系小镇经营与 AI 趣味玩法应用。经营、探索、NPC 对话和随机事件动态串联，帮助用户打造个性乐园。",
+    "description": "治愈系小镇经营叙事游戏。经营、探索、居民对话和随机事件动态串联，帮助玩家打造有记忆的个性乐园。",
     "author": {
         "avatar": "/echoflow-ai-town/static/icon.png",
         "name": "EchoflowAI Teams",

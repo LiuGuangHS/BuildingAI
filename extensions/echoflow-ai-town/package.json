@@ -1,7 +1,7 @@
 {
     "name": "echoflow-ai-town",
     "version": "0.0.1",
-    "description": "AI open world town life simulation extension",
+    "description": "Town life management narrative game extension",
     "author": "EchoflowAI Teams",
     "private": true,
     "main": "./manifest.json",
@@ -24,11 +24,11 @@
     "scripts": {
         "build:clean": "rimraf build .nuxt .output .temp",
         "dev:web": "vite --config vite.config.mjs",
-        "dev:api": "cross-env NODE_ENV=development tsup --watch src/api",
+        "dev:api": "tsup --watch src/api",
         "dev": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
-        "build:api": "cross-env NODE_ENV=production tsup",
+        "build:api": "tsup",
         "build:web": "vite build --config vite.config.mjs",
-        "build:publish": "pnpm build:clean && pnpm run build:web && pnpm run build:api",
+        "build:publish": "rimraf build .nuxt .output .temp && vite build --config vite.config.mjs && tsup",
         "format": "prettier --write src",
         "lint": "eslint src --quiet --no-error-on-unmatched-pattern",
         "lint:fix": "eslint src --fix --no-error-on-unmatched-pattern",
@@ -36,16 +36,16 @@
         "check-types": "tsc -p tsconfig.api.json --noEmit"
     },
     "dependencies": {
-        "@buildingai/ai-sdk": "workspace:*",
+        "@buildingai/cache": "workspace:*",
+        "@buildingai/constants": "workspace:*",
         "@buildingai/core": "workspace:*",
         "@buildingai/db": "workspace:*",
         "@buildingai/decorators": "workspace:*",
-        "@buildingai/errors": "workspace:*",
         "@buildingai/extension-sdk": "workspace:*",
         "@buildingai/pipe": "workspace:*",
         "@buildingai/services": "workspace:*",
+        "@buildingai/stores": "workspace:*",
         "@buildingai/ui": "workspace:*",
-        "@buildingai/utils": "workspace:*",
         "@buildingai/web-core": "workspace:*",
         "@nestjs/common": "catalog:api",
         "@tanstack/react-query": "^5.90.21",
@@ -60,11 +60,14 @@
     "devDependencies": {
         "@buildingai/eslint-config": "workspace:*",
         "@buildingai/typescript-config": "workspace:*",
-        "@buildingai/web-types": "workspace:*",
         "@types/react": "catalog:web",
         "@types/react-dom": "catalog:web",
         "babel-plugin-react-compiler": "^1.0.0",
-        "eslint-plugin-react-refresh": "^0.4.26"
+        "eslint": "catalog:dev",
+        "eslint-plugin-react-refresh": "^0.4.26",
+        "globals": "^16.5.0",
+        "tsup": "^8.5.1",
+        "ts-node": "^10.9.2"
     },
     "engine": {
         "buildingai": ">=25.1.0"

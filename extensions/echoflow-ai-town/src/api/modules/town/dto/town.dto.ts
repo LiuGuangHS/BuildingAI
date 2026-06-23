@@ -88,4 +88,25 @@ export class UpdateTownAiConfigDto {
     @IsOptional()
     @Type(() => Number)
     dailyLimitPerUser?: number;
+
+    @IsInt()
+    @Min(0)
+    @Max(100000)
+    @IsOptional()
+    @Type(() => Number)
+    adviceCostPower?: number;
+
+    @IsInt()
+    @Min(0)
+    @Max(100000)
+    @IsOptional()
+    @Type(() => Number)
+    chatCostPower?: number;
+
+    @IsInt()
+    @Min(0)
+    @Max(100000)
+    @IsOptional()
+    @Type(() => Number)
+    eventCostPower?: number;
 }

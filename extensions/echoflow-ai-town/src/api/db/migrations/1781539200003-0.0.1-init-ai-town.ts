@@ -66,6 +66,9 @@ export class InitAiTown1781539200003 {
                 "max_tokens" int NOT NULL DEFAULT 1200,
                 "fallback_to_rules" boolean NOT NULL DEFAULT true,
                 "daily_limit_per_user" int NOT NULL DEFAULT 100,
+                "advice_cost_power" int NOT NULL DEFAULT 0,
+                "chat_cost_power" int NOT NULL DEFAULT 0,
+                "event_cost_power" int NOT NULL DEFAULT 0,
                 "created_at" timestamptz NOT NULL DEFAULT now(),
                 "updated_at" timestamptz NOT NULL DEFAULT now(),
                 CONSTRAINT "uq_town_ai_configs_key" UNIQUE ("key")

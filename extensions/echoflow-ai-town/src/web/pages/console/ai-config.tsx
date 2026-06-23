@@ -14,6 +14,7 @@ import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@buildingai/ui/components/ui/table";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { Input } from "@buildingai/ui/components/ui/input";
+import { Label } from "@buildingai/ui/components/ui/label";
 
 import { getTownAiConfig, getTownAiLogs, listTownAiModels, testTownAi, updateTownAiConfig } from "../../services/console/town";
 import type { TownAiConfig } from "../../services/types";
@@ -25,6 +26,9 @@ const defaultConfig: TownAiConfig = {
     maxTokens: 1200,
     fallbackToRules: true,
     dailyLimitPerUser: 100,
+    adviceCostPower: 0,
+    chatCostPower: 0,
+    eventCostPower: 0,
 };
 
 export default function TownAiConfigPage() {
@@ -81,7 +85,7 @@ export default function TownAiConfigPage() {
             <div className="console-section-header">
                 <div>
                     <h1>AI 配置</h1>
-                    <p className="console-muted">管理员统一指定模型。用户侧不暴露模型选择，只提示 AI 生成可能消耗额度；实际计费由平台和模型配置决定。</p>
+                    <p className="console-muted">管理员统一指定模型。用户侧不暴露模型选择，只提示参谋安排和居民回应可能消耗额度；实际计费由平台和模型配置决定。</p>
                 </div>
                 <Button
                     variant="outline"
@@ -109,8 +113,8 @@ export default function TownAiConfigPage() {
                             </div>
                             <Switch checked={form.enabled} onCheckedChange={(checked) => setForm({ ...form, enabled: checked })} />
                         </div>
-                        <label className="grid gap-2">
-                            <span className="text-sm font-medium">默认模型</span>
+                        <div className="grid gap-2">
+                            <Label>默认模型</Label>
                             <Select value={modelSelectValue} onValueChange={(value) => setForm({ ...form, defaultModelId: value === "__none__" ? null : value })}>
                                 <SelectTrigger className="w-full">
                                     <SelectValue placeholder="未选择模型" />
@@ -124,10 +128,10 @@ export default function TownAiConfigPage() {
                                     ))}
                                 </SelectContent>
                             </Select>
-                        </label>
+                        </div>
                         <div className="grid gap-4 md:grid-cols-2">
-                            <label className="grid gap-2">
-                                <span className="text-sm font-medium">温度</span>
+                            <div className="grid gap-2">
+                                <Label>温度</Label>
                                 <Input
                                     max={2}
                                     min={0}
@@ -136,9 +140,9 @@ export default function TownAiConfigPage() {
                                     value={form.temperature}
                                     onChange={(event) => setForm({ ...form, temperature: Number(event.target.value) })}
                                 />
-                            </label>
-                            <label className="grid gap-2">
-                                <span className="text-sm font-medium">最大输出 tokens</span>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>最大输出 tokens</Label>
                                 <Input
                                     max={4000}
                                     min={200}
@@ -147,7 +151,7 @@ export default function TownAiConfigPage() {
                                     value={form.maxTokens}
                                     onChange={(event) => setForm({ ...form, maxTokens: Number(event.target.value) })}
                                 />
-                            </label>
+                            </div>
                         </div>
                         <div className="flex items-center justify-between gap-4 rounded-md border p-3">
                             <div className="space-y-1">
@@ -156,8 +160,8 @@ export default function TownAiConfigPage() {
                             </div>
                             <Switch checked={form.fallbackToRules} onCheckedChange={(checked) => setForm({ ...form, fallbackToRules: checked })} />
                         </div>
-                        <label className="grid gap-2">
-                            <span className="text-sm font-medium">每用户每日调用上限</span>
+                        <div className="grid gap-2">
+                            <Label>每用户每日调用上限</Label>
                             <Input
                                 min={0}
                                 step={10}
@@ -165,7 +169,45 @@ export default function TownAiConfigPage() {
                                 value={form.dailyLimitPerUser}
                                 onChange={(event) => setForm({ ...form, dailyLimitPerUser: Number(event.target.value) })}
                             />
-                        </label>
+                        </div>
+                        <div className="grid gap-3 rounded-md border p-3">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium">小镇 AI 价格</p>
+                                <p className="text-muted-foreground text-sm">价格为 0 时不扣费；这里只配置镇务参谋、居民聊天和探索导演的算力消耗，不会在用户端展示购买入口。</p>
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-3">
+                                <div className="grid gap-2">
+                                    <Label>今日计划</Label>
+                                    <Input
+                                        min={0}
+                                        step={1}
+                                        type="number"
+                                        value={form.adviceCostPower}
+                                        onChange={(event) => setForm({ ...form, adviceCostPower: Number(event.target.value) })}
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>居民聊天</Label>
+                                    <Input
+                                        min={0}
+                                        step={1}
+                                        type="number"
+                                        value={form.chatCostPower}
+                                        onChange={(event) => setForm({ ...form, chatCostPower: Number(event.target.value) })}
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>探索导演</Label>
+                                    <Input
+                                        min={0}
+                                        step={1}
+                                        type="number"
+                                        value={form.eventCostPower}
+                                        onChange={(event) => setForm({ ...form, eventCostPower: Number(event.target.value) })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
                         <div className="flex flex-wrap items-center gap-3">
                             <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
                                 保存配置

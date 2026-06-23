@@ -1,5 +1,12 @@
 import type { TownBuilding, TownCharacter, TownEvent, TownFestivalState, TownSave } from "../services/types";
 
+export type TownGoalActionTarget = {
+    action: "operate" | "visit" | "decorate" | "explore" | "upgrade" | "rest";
+    buildingId?: string;
+    targetLabel: string;
+    reason: string;
+};
+
 export const townActions = [
     { id: "operate", title: "经营", desc: "餐馆开张", hint: "-体力 / +金币", icon: "店" },
     { id: "visit", title: "拜访", desc: "居民关系", hint: "-体力 / +关系", icon: "友" },
@@ -22,7 +29,7 @@ export function formatRequirement(type: string) {
 export function resolveEventScene(eventType?: string): "town" | "kitchen" | "npc" | "night" {
     if (eventType === "operate" || eventType === "upgrade") return "kitchen";
     if (eventType === "visit" || eventType === "chat" || eventType === "relationship" || eventType === "npc_story" || eventType === "memory_promise") return "npc";
-    if (eventType === "explore" || eventType === "unlock" || eventType === "festival") return "night";
+    if (eventType === "explore" || eventType === "unlock" || eventType === "festival" || eventType === "rest") return "night";
     return "town";
 }
 
@@ -111,6 +118,62 @@ export function formatFestivalAction(action: TownFestivalState["action"]) {
 export function formatFestivalStatus(status: TownFestivalState["status"]) {
     const labels: Record<TownFestivalState["status"], string> = { announced: "预告中", preparing: "筹备中", ready: "待收尾", completed: "已完成" };
     return labels[status];
+}
+
+export function getGoalActionTarget(save: TownSave, goalType: "quest" | "weekly" | "festival"): TownGoalActionTarget | null {
+    if (goalType === "festival") {
+        const festival = save.worldState.activeFestival;
+        if (!festival || festival.completed || festival.status === "completed") return null;
+        return {
+            action: festival.action,
+            buildingId: festival.action === "upgrade" ? getUpgradeableBuildingId(save) : undefined,
+            targetLabel: festival.title,
+            reason: `${formatFestivalAction(festival.action)}可推进「${festival.title}」活动进度。`,
+        };
+    }
+
+    if (goalType === "weekly") {
+        const goal = save.worldState.weeklyGoal;
+        if (!goal || goal.completed) return null;
+        if (goal.type === "completeTasks") {
+            const task = save.worldState.dailyTasks?.find((item) => !item.completed);
+            const action = task ? getActionForTaskType(task.type) : "operate";
+            return {
+                action,
+                buildingId: action === "upgrade" ? getUpgradeableBuildingId(save) : undefined,
+                targetLabel: goal.title,
+                reason: "先清今日任务，周目标会随任务完成稳定推进。",
+            };
+        }
+        if (goal.type === "upgrade") return { action: "upgrade", buildingId: getUpgradeableBuildingId(save), targetLabel: goal.title, reason: "升级可用建筑会推进本周建设目标。" };
+        if (goal.type === "gainReputation") return { action: "decorate", targetLabel: goal.title, reason: "布置小镇能稳定提升声望。" };
+        if (goal.type === "explore") return { action: "explore", targetLabel: goal.title, reason: "探索街区能推进本周线索目标。" };
+    }
+
+    const quest = save.worldState.mainQuest;
+    if (!quest || quest.completed) return null;
+    const requirement = quest.requirements.find((item) => item.current < item.target) ?? quest.requirements[0];
+    if (!requirement) return null;
+    if (requirement.type === "building:restaurant") return { action: "upgrade", buildingId: "restaurant", targetLabel: "暖光餐馆", reason: "升级餐馆会推进当前主线章节。" };
+    if (requirement.type === "building:florist") return { action: "upgrade", buildingId: "florist", targetLabel: "风铃花店", reason: "升级花店会推进当前主线章节。" };
+    if (requirement.type === "building:square") return { action: "upgrade", buildingId: "square", targetLabel: "中央广场", reason: "升级广场会推进当前主线章节。" };
+    if (requirement.type === "reputation") return { action: "decorate", targetLabel: "小镇声望", reason: "布置小镇能提升声望并推进主线。" };
+    if (requirement.type === "coins") return { action: "operate", targetLabel: "金币储备", reason: "经营餐馆能增加金币储备。" };
+    if (requirement.type === "area") return { action: "explore", targetLabel: "新区线索", reason: "探索街区更容易发现新区域线索。" };
+    if (requirement.type === "level") return { action: "operate", targetLabel: "小镇等级", reason: "经营和完成任务会带动等级成长。" };
+    return null;
+}
+
+export function getGoalActionLabel(action: string, targetLabel?: string) {
+    const labels: Record<string, string> = {
+        operate: "经营餐馆",
+        visit: "拜访居民",
+        decorate: "布置小镇",
+        explore: "探索街区",
+        upgrade: targetLabel ? `升级${targetLabel}` : "升级建筑",
+        rest: "休息到明天",
+    };
+    return labels[action] ?? (targetLabel ? `照看${targetLabel}` : "照看小镇");
 }
 
 export function getUpgradeCost(level: number) {
@@ -334,6 +397,19 @@ function getOpenTaskTarget(save: TownSave) {
     if (task.type === "explore") return "square";
     if (task.type === "upgrade") return save.worldState.buildings.find((building) => isBuildingUpgradeable(save, building))?.id ?? "restaurant";
     return null;
+}
+
+export function getActionForTaskType(type: string): TownGoalActionTarget["action"] {
+    if (type === "operate" || type === "earnCoins") return "operate";
+    if (type === "visit" || type === "chat") return "visit";
+    if (type === "decorate" || type === "gainReputation") return "decorate";
+    if (type === "explore") return "explore";
+    if (type === "upgrade") return "upgrade";
+    return "operate";
+}
+
+function getUpgradeableBuildingId(save: TownSave) {
+    return save.worldState.buildings.find((building) => isBuildingUpgradeable(save, building))?.id ?? save.worldState.buildings.find((building) => building.level < (building.maxLevel ?? 5))?.id;
 }
 
 export function getRetentionHookTarget(save: TownSave | null) {

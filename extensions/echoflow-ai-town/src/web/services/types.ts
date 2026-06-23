@@ -8,6 +8,7 @@ export type TownBuilding = {
 };
 
 export type TownWorldState = {
+    contentPack?: TownContentPackState;
     reputation: number;
     weather: string;
     focus: string;
@@ -31,6 +32,66 @@ export type TownWorldState = {
     retention?: TownRetentionState;
 };
 
+export type TownContentPackState = {
+    packId: "launch-core";
+    version: string;
+    seasonId: "season-0";
+    seededAt: string;
+    seedStrategy: {
+        mode: "first-install";
+        shouldRun: "create-save" | "upgrade-normalize";
+        idempotencyKey: string;
+    };
+};
+
+export type TownContentPackManifest = {
+    id: "launch-core";
+    version: string;
+    season: {
+        id: "season-0";
+        title: string;
+        startsAt: string;
+        endsAt?: string;
+    };
+    seedStrategy: TownContentPackState["seedStrategy"];
+    includes: {
+        buildings: string[];
+        areas: string[];
+        characters: string[];
+        actions: string[];
+        choices: string[];
+        dailyTaskRotations: number;
+        weeklyGoals: number;
+        mainQuestChapters: number[];
+        achievements: string[];
+        festivals: string[];
+    };
+};
+
+export type TownContentPackOverview = {
+    manifest: TownContentPackManifest;
+    coverage: {
+        currentPackKey: string;
+        saveCount: number;
+        currentPackSaveCount: number;
+        legacySaveCount: number;
+        activeFestivalCount: number;
+        completedFestivalCount: number;
+        chapterDistribution: Record<string, number>;
+        saveDistribution: Record<string, number>;
+    };
+    catalogCounts: {
+        buildings: number;
+        characters: number;
+        actions: number;
+        dailyTaskRotations: number;
+        weeklyGoals: number;
+        mainQuestChapters: number;
+        festivals: number;
+    };
+    warnings: string[];
+};
+
 export type TownRetentionState = {
     streak: number;
     lastQualifiedDay: number;
@@ -43,6 +104,12 @@ export type TownRetentionState = {
         target?: string;
         targetLabel: string;
         reason: string;
+        reward?: {
+            label: string;
+            coins?: number;
+            stamina?: number;
+            reputation?: number;
+        };
     };
 };
 
@@ -171,6 +238,13 @@ export type TownEvent = {
             notes: string[];
         };
         strategy?: TownStrategyAdvice;
+        billingStatus?: "deducted" | "refunded";
+        billingAmount?: number;
+        billingLabel?: string;
+        billedAt?: string;
+        refundedAt?: string;
+        refundRemark?: string;
+        refundError?: string;
         fallbackUsed?: boolean;
     } | null;
     createdAt: string;
@@ -216,6 +290,9 @@ export type TownAiConfig = {
     maxTokens: number;
     fallbackToRules: boolean;
     dailyLimitPerUser: number;
+    adviceCostPower: number;
+    chatCostPower: number;
+    eventCostPower: number;
 };
 
 export type TownAiModel = {

@@ -14,6 +14,17 @@ import { TownCharacter } from "./town-character.entity";
 import { TownEvent } from "./town-event.entity";
 
 export type TownWorldState = {
+    contentPack?: {
+        packId: "launch-core";
+        version: string;
+        seasonId: "season-0";
+        seededAt: string;
+        seedStrategy: {
+            mode: "first-install";
+            shouldRun: "create-save" | "upgrade-normalize";
+            idempotencyKey: string;
+        };
+    };
     reputation: number;
     weather: string;
     focus: string;
@@ -88,6 +99,12 @@ export type TownWorldState = {
             target?: string;
             targetLabel: string;
             reason: string;
+            reward?: {
+                label: string;
+                coins?: number;
+                stamina?: number;
+                reputation?: number;
+            };
         };
     };
 };

@@ -1,5 +1,5 @@
 import { consoleHttpClient } from "../base";
-import type { TownAiConfig, TownAiLogsResult, TownAiModel, TownSave, TownSaveListResult, TownStatistics } from "../types";
+import type { TownAiConfig, TownAiLogsResult, TownAiModel, TownContentPackOverview, TownSave, TownSaveListResult, TownStatistics } from "../types";
 
 export function listConsoleTownSaves(params?: { keyword?: string; page?: number; pageSize?: number }) {
     return consoleHttpClient.get<TownSaveListResult>("/ai-town/saves", { params });
@@ -15,6 +15,10 @@ export function getConsoleTownSave(saveId: string) {
 
 export function getTownStatistics() {
     return consoleHttpClient.get<TownStatistics>("/ai-town/statistics");
+}
+
+export function getTownContentPack() {
+    return consoleHttpClient.get<TownContentPackOverview>("/ai-town/content-pack");
 }
 
 export function getTownAiConfig() {

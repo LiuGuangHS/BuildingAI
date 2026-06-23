@@ -1,6 +1,8 @@
 import type { DataSource } from "@buildingai/db/typeorm";
 import { Logger } from "@nestjs/common";
 
+import { TOWN_CONTENT_PACK_MANIFEST } from "../../modules/town/catalog";
+
 export class Upgrade {
     private readonly logger = new Logger(Upgrade.name);
 
@@ -9,7 +11,7 @@ export class Upgrade {
     async execute(): Promise<void> {
         await this.ensureAiConfigSchema();
         await this.ensureExtensionRecord();
-        this.logger.log("Echoflow AI Town initial upgrade completed");
+        this.logger.log(`Echoflow AI Town initial upgrade completed with content pack ${TOWN_CONTENT_PACK_MANIFEST.id}@${TOWN_CONTENT_PACK_MANIFEST.version}`);
     }
 
     private async ensureAiConfigSchema(): Promise<void> {
@@ -17,6 +19,12 @@ export class Upgrade {
         await this.dataSource.query(`
             ALTER TABLE "echoflow_ai_town"."town_ai_configs"
             ADD COLUMN IF NOT EXISTS "key" varchar(50)
+        `);
+        await this.dataSource.query(`
+            ALTER TABLE "echoflow_ai_town"."town_ai_configs"
+            ADD COLUMN IF NOT EXISTS "advice_cost_power" int NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS "chat_cost_power" int NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS "event_cost_power" int NOT NULL DEFAULT 0
         `);
         await this.dataSource.query(`
             WITH ranked_configs AS (
@@ -48,9 +56,12 @@ export class Upgrade {
                 "temperature",
                 "max_tokens",
                 "fallback_to_rules",
-                "daily_limit_per_user"
+                "daily_limit_per_user",
+                "advice_cost_power",
+                "chat_cost_power",
+                "event_cost_power"
             )
-            SELECT 'default', false, 0.8, 1200, true, 100
+            SELECT 'default', false, 0.8, 1200, true, 100, 0, 0, 0
             WHERE NOT EXISTS (
                 SELECT 1
                 FROM "echoflow_ai_town"."town_ai_configs"
@@ -71,10 +82,10 @@ export class Upgrade {
     private async ensureExtensionRecord(): Promise<void> {
         const extensionData = {
             icon: "/echoflow-ai-town/static/icon.png",
-            name: "AI乐园小镇｜开放世界",
+            name: "乐园小镇",
             identifier: "echoflow-ai-town",
             version: "0.0.1",
-            description: "治愈系小镇经营与 AI 趣味玩法应用。经营、探索、NPC 对话和随机事件动态串联，帮助用户打造个性乐园。",
+            description: "治愈系小镇经营叙事游戏。经营、探索、居民对话和随机事件动态串联，帮助玩家打造有记忆的个性乐园。",
             type: 1,
             isLocal: true,
             status: "1",

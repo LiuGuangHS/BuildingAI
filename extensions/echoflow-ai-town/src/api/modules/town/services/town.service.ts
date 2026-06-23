@@ -1,11 +1,28 @@
+import { ACTION } from "@buildingai/constants";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Brackets, EntityManager, Repository } from "@buildingai/db/typeorm";
+import { ExtensionBillingService } from "@buildingai/extension-sdk";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 
 import { TownCharacter, TownEvent, TownSave, type TownCharacterMemory, type TownEventChoice, type TownEventResult, type TownWorldState } from "../../../db/entities";
-import { TOWN_ACTION_CATALOG, TOWN_CHARACTER_CATALOG, TOWN_CHOICE_ACTION_OVERRIDES, TOWN_INITIAL_AREAS, createDefaultTownBuildings, createTownChoiceCatalog, resolveTownActionCatalogValue } from "../catalog";
+import {
+    TOWN_ACTION_CATALOG,
+    TOWN_CHARACTER_CATALOG,
+    TOWN_CHOICE_ACTION_OVERRIDES,
+    TOWN_CONTENT_PACK_MANIFEST,
+    TOWN_DAILY_TASK_ROTATION,
+    TOWN_FESTIVAL_CATALOG,
+    TOWN_MAIN_QUEST_CATALOG,
+    TOWN_WEEKLY_GOAL_ROTATION,
+    TOWN_INITIAL_AREAS,
+    createDefaultTownBuildings,
+    createTownChoiceCatalog,
+    createTownContentPackState,
+    normalizeTownContentPackState,
+    resolveTownActionCatalogValue,
+} from "../catalog";
 import { type CreateTownSaveDto, type QueryTownSaveDto, type TownActionDto, type TownChatDto } from "../dto";
-import { TownAiService } from "./town-ai.service";
+import { TownAiService, type TownAiBillingContext } from "./town-ai.service";
 import { TownProgressRulesService, type ProgressContext, type ProgressResult, type TownGoal, type TownQuestState, type TownTask } from "./town-progress-rules.service";
 import { TownRelationshipRulesService, type RelationshipBonus, type RelationshipUpdate } from "./town-relationship-rules.service";
 import { TownWorldRulesService, type TownFestivalState } from "./town-world-rules.service";
@@ -46,6 +63,7 @@ type PreparedActionAi = {
     eventChoices?: TownEventChoice[];
     strategy?: TownEventResult["strategy"];
     fallbackUsed?: boolean;
+    billing?: TownAiBillingContext;
 };
 type TownActionAuditContext = {
     action: TownActionDto["action"];
@@ -59,6 +77,7 @@ type TownActionAuditContext = {
     budgetConsumed?: boolean;
     settlement?: TownSettlement | null;
     bonuses?: string[];
+    retentionReward?: NonNullable<TownRetentionHook["reward"]> | null;
     modelAssisted?: boolean;
     fallbackUsed?: boolean;
 };
@@ -72,6 +91,7 @@ export class TownService {
     private readonly townWorldRulesService: TownWorldRulesService;
     private readonly townRelationshipRulesService: TownRelationshipRulesService;
     private readonly townProgressRulesService: TownProgressRulesService;
+    private readonly billingService: ExtensionBillingService;
 
     constructor(
         @InjectRepository(TownSave)
@@ -84,6 +104,7 @@ export class TownService {
         townWorldRulesService: TownWorldRulesService,
         townRelationshipRulesService: TownRelationshipRulesService,
         townProgressRulesService: TownProgressRulesService,
+        billingService: ExtensionBillingService,
     ) {
         this.saveRepo = saveRepo;
         this.characterRepo = characterRepo;
@@ -92,6 +113,7 @@ export class TownService {
         this.townWorldRulesService = townWorldRulesService;
         this.townRelationshipRulesService = townRelationshipRulesService;
         this.townProgressRulesService = townProgressRulesService;
+        this.billingService = billingService;
     }
 
     async createSave(userId: string, dto: CreateTownSaveDto) {
@@ -188,19 +210,22 @@ export class TownService {
 
     async runAction(userId: string, saveId: string, dto: TownActionDto) {
         const preparedAi = await this.prepareActionAi(userId, saveId, dto);
+        let billedEventId: string | null = null;
 
-        await this.saveRepo.manager.transaction(async (manager) => {
-            const save = await this.ensureSaveOwnerForUpdate(userId, saveId, manager);
-            const characters = await manager.find(TownCharacter, { where: { userId, saveId }, order: { relationship: "DESC" } });
-            const bonuses = this.getRelationshipBonuses(characters, dto.action);
-            const choice = this.resolveChoice(dto);
-            const auditDay = save.day;
-            const auditBudgetBefore = this.getActionBudgetState(save);
-            const auditBuilding = this.getAuditBuilding(save, dto.buildingId);
-            const config = this.applyRelationshipBonuses(this.createActionConfig(dto.action, save, characters, choice, dto.buildingId), bonuses);
-            this.ensureActionAffordable(save, dto.action, config);
-            const settlement = dto.action === "rest" ? this.createDailySettlement(save) : null;
-            const auditContext: TownActionAuditContext = {
+        try {
+            await this.saveRepo.manager.transaction(async (manager) => {
+                const save = await this.ensureSaveOwnerForUpdate(userId, saveId, manager);
+                const characters = await manager.find(TownCharacter, { where: { userId, saveId }, order: { relationship: "DESC" } });
+                const bonuses = this.getRelationshipBonuses(characters, dto.action);
+                const choice = this.resolveChoice(dto);
+                const auditDay = save.day;
+                const auditBudgetBefore = this.getActionBudgetState(save);
+                const auditBuilding = this.getAuditBuilding(save, dto.buildingId);
+                const config = this.applyRelationshipBonuses(this.createActionConfig(dto.action, save, characters, choice, dto.buildingId), bonuses);
+                this.ensureActionAffordable(save, dto.action, config);
+                const retentionReward = this.consumeRetentionReward(save, dto.action);
+                const settlement = dto.action === "rest" ? this.createDailySettlement(save) : null;
+                const auditContext: TownActionAuditContext = {
                 action: dto.action,
                 source: settlement ? "settlement" : preparedAi ? "model-assisted" : "rules",
                 day: auditDay,
@@ -209,22 +234,26 @@ export class TownService {
                 budgetBefore: auditBudgetBefore,
                 settlement,
                 bonuses: bonuses.map((bonus) => bonus.label),
+                retentionReward,
                 modelAssisted: Boolean(preparedAi),
                 fallbackUsed: Boolean(preparedAi?.fallbackUsed),
-            };
-            const result = this.applyResult(save, {
-                coins: config.coins,
-                stamina: config.stamina,
-                reputation: config.reputation + (settlement?.reputation ?? 0),
-            }, auditContext);
-            if (bonuses.length) {
-                result.bonuses = bonuses.map((bonus) => bonus.label);
-            }
-            if (settlement) {
-                result.coins = (result.coins ?? 0) + settlement.income - settlement.maintenance;
-                save.coins = Math.max(0, save.coins + settlement.income - settlement.maintenance);
-                this.refreshResultAudit(save, result, auditContext);
-            }
+                };
+                const result = this.applyResult(save, {
+                coins: config.coins + (retentionReward?.coins ?? 0),
+                stamina: config.stamina + (retentionReward?.stamina ?? 0),
+                reputation: config.reputation + (settlement?.reputation ?? 0) + (retentionReward?.reputation ?? 0),
+                }, auditContext);
+                if (bonuses.length) {
+                    result.bonuses = bonuses.map((bonus) => bonus.label);
+                }
+                if (retentionReward) {
+                    result.bonuses = [...(result.bonuses ?? []), retentionReward.label];
+                }
+                if (settlement) {
+                    result.coins = (result.coins ?? 0) + settlement.income - settlement.maintenance;
+                    save.coins = Math.max(0, save.coins + settlement.income - settlement.maintenance);
+                    this.refreshResultAudit(save, result, auditContext);
+                }
 
             save.day += dto.action === "rest" ? 1 : 0;
             save.mood = config.mood;
@@ -279,9 +308,9 @@ export class TownService {
             this.refreshResultAudit(save, result, auditContext);
 
             await manager.save(TownSave, save);
-            await manager.save(
-                TownEvent,
-                this.eventRepo.create({
+                const savedEvent = await manager.save(
+                    TownEvent,
+                    this.eventRepo.create({
                     userId,
                     saveId,
                     type: dto.action,
@@ -290,7 +319,11 @@ export class TownService {
                     choices: eventChoices,
                     result,
                 }),
-            );
+                );
+                await this.reserveTownAiBillingOnce(savedEvent, preparedAi?.billing, manager);
+                if (preparedAi?.billing && preparedAi.billing.amount > 0 && !preparedAi.billing.fallbackUsed) {
+                    billedEventId = savedEvent.id;
+                }
             if (relationshipEvents.length) {
                 await manager.save(TownEvent, relationshipEvents);
             }
@@ -317,7 +350,11 @@ export class TownService {
             if (activityEvents.length) {
                 await manager.save(TownEvent, activityEvents);
             }
-        });
+            });
+        } catch (error) {
+            if (billedEventId) await this.refundTownAiBillingIfNeeded(billedEventId, "小镇行动失败自动退款");
+            throw error;
+        }
 
         return this.getSaveDetail(userId, saveId);
     }
@@ -342,6 +379,7 @@ export class TownService {
                 content: advice.strategy.summary,
                 strategy: advice.strategy,
                 fallbackUsed: advice.fallbackUsed,
+                billing: advice.billing,
             };
         }
 
@@ -351,11 +389,13 @@ export class TownService {
             eventTitle: event.title || config.title,
             eventChoices: event.choices ?? this.createNextChoices(dto.action),
             fallbackUsed: event.fallbackUsed,
+            billing: event.billing,
         };
     }
 
     async chat(userId: string, saveId: string, dto: TownChatDto) {
         let characterResult: TownCharacter | null = null;
+        let billedEventId: string | null = null;
         const saveSnapshot = await this.ensureSaveOwner(userId, saveId);
         const selectedCharacter = await this.characterRepo.findOne({ where: { id: dto.characterId, userId, saveId } });
         if (!selectedCharacter) {
@@ -371,50 +411,116 @@ export class TownService {
             fallbackReply,
         );
 
-        await this.saveRepo.manager.transaction(async (manager) => {
-            const save = await this.ensureSaveOwnerForUpdate(userId, saveId, manager);
-            const character = await manager.findOne(TownCharacter, {
-                where: { id: dto.characterId, userId, saveId },
-                lock: { mode: "pessimistic_write" },
-            });
-            if (!character) {
-                throw new NotFoundException("小镇居民不存在");
-            }
+        try {
+            await this.saveRepo.manager.transaction(async (manager) => {
+                const save = await this.ensureSaveOwnerForUpdate(userId, saveId, manager);
+                const character = await manager.findOne(TownCharacter, {
+                    where: { id: dto.characterId, userId, saveId },
+                    lock: { mode: "pessimistic_write" },
+                });
+                if (!character) {
+                    throw new NotFoundException("小镇居民不存在");
+                }
 
-            const oldLevel = this.getRelationshipLevel(character.relationship);
-            character.relationship = Math.min(100, character.relationship + 3);
-            const newLevel = this.getRelationshipLevel(character.relationship);
-            character.status = "刚聊过天";
-            character.memory = this.updateCharacterMemory(character, dto.message, replyResult, save.day);
+                const oldLevel = this.getRelationshipLevel(character.relationship);
+                character.relationship = Math.min(100, character.relationship + 3);
+                const newLevel = this.getRelationshipLevel(character.relationship);
+                character.status = "刚聊过天";
+                character.memory = this.updateCharacterMemory(character, dto.message, replyResult.text, save.day);
 
-            const progress = this.applyProgress(save, { action: "chat" });
-            this.markRetentionQualified(save, "chat", progress, [character]);
-            await manager.save(TownCharacter, character);
-            await manager.save(TownSave, save);
-            const chatResult = this.createChatResult(save, character);
-            await manager.save(
-                TownEvent,
-                this.eventRepo.create({
+                const progress = this.applyProgress(save, { action: "chat" });
+                this.markRetentionQualified(save, "chat", progress, [character]);
+                await manager.save(TownCharacter, character);
+                await manager.save(TownSave, save);
+                const chatResult = this.createChatResult(save, character);
+                const savedEvent = await manager.save(
+                    TownEvent,
+                    this.eventRepo.create({
                     userId,
                     saveId,
                     type: "chat",
                     title: `和${character.name}聊天`,
-                    content: replyResult,
+                    content: replyResult.text,
                     choices: null,
                     result: chatResult,
                 }),
-            );
-            const progressEvents = this.createProgressEvents(userId, saveId, progress, "visit");
-            if (progressEvents.length) {
-                await manager.save(TownEvent, progressEvents);
-            }
-            if (oldLevel !== newLevel) {
-                await manager.save(TownEvent, this.createRelationshipLevelEvent(userId, saveId, character, oldLevel, newLevel, 3));
-            }
-            characterResult = character;
-        });
+                );
+                await this.reserveTownAiBillingOnce(savedEvent, replyResult.billing, manager);
+                if (replyResult.billing.amount > 0 && !replyResult.billing.fallbackUsed) {
+                    billedEventId = savedEvent.id;
+                }
+                const progressEvents = this.createProgressEvents(userId, saveId, progress, "visit");
+                if (progressEvents.length) {
+                    await manager.save(TownEvent, progressEvents);
+                }
+                if (oldLevel !== newLevel) {
+                    await manager.save(TownEvent, this.createRelationshipLevelEvent(userId, saveId, character, oldLevel, newLevel, 3));
+                }
+                characterResult = character;
+            });
+        } catch (error) {
+            if (billedEventId) await this.refundTownAiBillingIfNeeded(billedEventId, "小镇居民聊天失败自动退款");
+            throw error;
+        }
 
-        return { character: characterResult, reply: replyResult, save: await this.getSaveDetail(userId, saveId) };
+        return { character: characterResult, reply: replyResult.text, save: await this.getSaveDetail(userId, saveId) };
+    }
+
+    private async reserveTownAiBillingOnce(event: TownEvent, billing: TownAiBillingContext | undefined, manager: EntityManager) {
+        if (!billing || billing.fallbackUsed || billing.amount <= 0) return;
+        const existingLog = await this.billingService.hasBillingLog({ associationNo: event.id, action: ACTION.DEC }, manager);
+        const result = event.result ?? {};
+        const metadata = {
+            ...(result.audit ? { audit: result.audit } : {}),
+            billingStatus: "deducted",
+            billingAmount: billing.amount,
+            billingLabel: billing.label,
+            billedAt: new Date().toISOString(),
+        };
+        if (!existingLog) {
+            await this.billingService.deductUserPower({ userId: event.userId, amount: billing.amount, remark: `乐园小镇${billing.label}`, associationNo: event.id, associationUserId: event.userId }, manager);
+        }
+        await manager.update(TownEvent, event.id, {
+            result: {
+                ...result,
+                billingStatus: "deducted",
+                billingAmount: billing.amount,
+                billingLabel: billing.label,
+                billedAt: metadata.billedAt,
+            } as TownEventResult,
+        });
+    }
+
+    private async refundTownAiBillingIfNeeded(eventId: string, remark: string) {
+        try {
+            await this.eventRepo.manager.transaction(async (manager) => {
+                const event = await manager.findOne(TownEvent, { where: { id: eventId }, lock: { mode: "pessimistic_write" }, withDeleted: true });
+                if (!event) return;
+                const metadata = (event.result ?? {}) as TownEventResult & { billingStatus?: string; billingAmount?: number; refundedAt?: string; refundError?: string };
+                const wasDeducted = metadata.billingStatus === "deducted" || await this.billingService.hasBillingLog({ associationNo: event.id, action: ACTION.DEC }, manager);
+                const alreadyRefunded = Boolean(metadata.refundedAt) || await this.billingService.hasBillingLog({ associationNo: event.id, action: ACTION.INC }, manager);
+                if (!wasDeducted || alreadyRefunded || Number(metadata.billingAmount ?? 0) <= 0) return;
+                await this.billingService.addUserPower({ userId: event.userId, amount: Number(metadata.billingAmount), remark, associationNo: event.id, associationUserId: event.userId }, manager);
+                await manager.update(TownEvent, event.id, {
+                    result: {
+                        ...metadata,
+                        billingStatus: "refunded",
+                        refundedAt: new Date().toISOString(),
+                        refundRemark: remark,
+                    } as TownEventResult,
+                });
+            });
+        } catch (error) {
+            const refundMessage = error instanceof Error ? error.message : String(error);
+            const event = await this.eventRepo.findOne({ where: { id: eventId }, withDeleted: true });
+            if (!event) return;
+            await this.eventRepo.update(eventId, {
+                result: {
+                    ...((event.result ?? {}) as TownEventResult),
+                    refundError: refundMessage,
+                } as TownEventResult,
+            });
+        }
     }
 
     private updateCharacterMemory(character: TownCharacter, message: string, reply: string, day: number): TownCharacterMemory {
@@ -605,6 +711,62 @@ export class TownService {
         return { saveCount, characterCount, eventCount, chatCount, aiEventCount, activeSaveCount, averageDay, averageLevel, stuckSaveCount, todaySaveCount, recentActionCount, averageEventCount, aiSuccessRate, aiFallbackRate, topActionType: topAction?.type ?? null };
     }
 
+    async getContentPackOverview() {
+        const saves = await this.saveRepo.find({ take: 500, order: { updatedAt: "DESC" } });
+        const normalizedSaves = saves.map((save) => ({ save, worldState: this.normalizeWorldState(save.worldState, save.day) }));
+        const currentPackKey = `${TOWN_CONTENT_PACK_MANIFEST.id}@${TOWN_CONTENT_PACK_MANIFEST.version}`;
+        const saveDistribution = saves.reduce<Record<string, number>>((acc, save) => {
+            const contentPack = save.worldState?.contentPack;
+            const key = contentPack ? `${contentPack.packId}@${contentPack.version}` : "missing";
+            acc[key] = (acc[key] ?? 0) + 1;
+            return acc;
+        }, {});
+        const chapterDistribution = normalizedSaves.reduce<Record<string, number>>((acc, save) => {
+            const chapter = save.worldState.mainQuest?.chapter ?? 1;
+            const key = `chapter-${chapter}`;
+            acc[key] = (acc[key] ?? 0) + 1;
+            return acc;
+        }, {});
+        const activeFestivalCount = normalizedSaves.filter((save) => save.worldState.activeFestival).length;
+        const completedFestivalCount = normalizedSaves.reduce((total, save) => {
+            const completed = save.worldState.flags?.completedFestivals;
+            return total + (Array.isArray(completed) ? completed.length : 0);
+        }, 0);
+        const legacySaveCount = saves.filter((save) => {
+            const contentPack = save.worldState?.contentPack;
+            return !contentPack || contentPack.packId !== TOWN_CONTENT_PACK_MANIFEST.id || contentPack.version !== TOWN_CONTENT_PACK_MANIFEST.version;
+        }).length;
+        const warnings = [
+            legacySaveCount ? `${legacySaveCount} 个存档不是当前内容包快照` : null,
+            !saves.length ? "暂无存档，内容包尚未被真实创建流程验证" : null,
+            activeFestivalCount === 0 && saves.length ? "当前没有进行中的季节活动" : null,
+        ].filter((item): item is string => Boolean(item));
+
+        return {
+            manifest: TOWN_CONTENT_PACK_MANIFEST,
+            coverage: {
+                currentPackKey,
+                saveCount: saves.length,
+                currentPackSaveCount: saveDistribution[currentPackKey] ?? 0,
+                legacySaveCount,
+                activeFestivalCount,
+                completedFestivalCount,
+                chapterDistribution,
+                saveDistribution,
+            },
+            catalogCounts: {
+                buildings: TOWN_CONTENT_PACK_MANIFEST.includes.buildings.length,
+                characters: TOWN_CONTENT_PACK_MANIFEST.includes.characters.length,
+                actions: Object.keys(TOWN_ACTION_CATALOG).length,
+                dailyTaskRotations: TOWN_DAILY_TASK_ROTATION.length,
+                weeklyGoals: TOWN_WEEKLY_GOAL_ROTATION.length,
+                mainQuestChapters: Object.keys(TOWN_MAIN_QUEST_CATALOG).length,
+                festivals: TOWN_FESTIVAL_CATALOG.length,
+            },
+            warnings,
+        };
+    }
+
     private async softDeleteSaveGraph(save: TownSave) {
         await this.saveRepo.manager.transaction(async (manager) => {
             await manager.softDelete(TownEvent, { saveId: save.id });
@@ -661,6 +823,7 @@ export class TownService {
 
     private createDefaultWorldState(): TownWorldState {
         return {
+            contentPack: createTownContentPackState(),
             reputation: 12,
             weather: "晴朗",
             focus: "开业准备",
@@ -700,6 +863,7 @@ export class TownService {
         nextWorldState.mainQuest = worldState?.mainQuest ?? defaults.mainQuest;
         nextWorldState.achievements = worldState?.achievements ?? defaults.achievements;
         nextWorldState.activeFestival = worldState?.activeFestival ?? null;
+        nextWorldState.contentPack = normalizeTownContentPackState(worldState?.contentPack);
         nextWorldState.retention = this.normalizeRetentionState(worldState?.retention, nextWorldState, day);
         return nextWorldState;
     }
@@ -717,6 +881,7 @@ export class TownService {
                 target: "restaurant",
                 targetLabel: "暖光餐馆",
                 reason: "初始小镇需要稳定现金流和居民关系。",
+                reward: this.createRetentionReward(0),
             },
         };
     }
@@ -742,6 +907,7 @@ export class TownService {
             target: typeof hook.target === "string" ? hook.target : fallback.target,
             targetLabel: typeof hook.targetLabel === "string" && hook.targetLabel.trim() ? hook.targetLabel : fallback.targetLabel,
             reason: typeof hook.reason === "string" && hook.reason.trim() ? hook.reason : fallback.reason,
+            reward: this.normalizeRetentionReward(hook.reward, fallback.reward),
         };
     }
 
@@ -785,6 +951,24 @@ export class TownService {
         return ["operate", "visit", "decorate", "explore", "upgrade", "chat"].includes(action);
     }
 
+    private consumeRetentionReward(save: TownSave, action: TownActionDto["action"]): NonNullable<TownRetentionHook["reward"]> | null {
+        if (!this.isQualifiedRetentionAction(action)) return null;
+        const worldState = this.normalizeWorldState(save.worldState, save.day);
+        const retention = this.normalizeRetentionState(worldState.retention, worldState, save.day);
+        const reward = retention.nextHook.day === save.day ? retention.nextHook.reward : null;
+        if (!reward) return null;
+        if (retention.nextHook.action !== action) return null;
+        worldState.retention = {
+            ...retention,
+            nextHook: {
+                ...retention.nextHook,
+                reward: undefined,
+            },
+        };
+        save.worldState = worldState;
+        return reward;
+    }
+
     private createNextHook(worldState: TownWorldState, day: number, completedProgressCount = 0, characters: TownCharacter[] = []): TownRetentionHook {
         const memoryHook = this.createMemoryRetentionHook(day, characters);
         if (memoryHook) return memoryHook;
@@ -798,6 +982,7 @@ export class TownService {
                 target: this.getRetentionTargetForAction(festival.action),
                 targetLabel: this.formatActionTargetLabel(festival.action),
                 reason: "限时活动会把今天的行动延续成明天的目标。",
+                reward: this.createRetentionReward(completedProgressCount),
             };
         }
         const openTask = (worldState.dailyTasks ?? []).find((task) => !task.completed);
@@ -811,6 +996,7 @@ export class TownService {
                 target: this.getRetentionTargetForAction(action),
                 targetLabel: this.formatActionTargetLabel(action),
                 reason: "未完成任务会保留成下一次进入小镇的优先目标。",
+                reward: this.createRetentionReward(completedProgressCount),
             };
         }
         if (completedProgressCount >= 2) {
@@ -822,6 +1008,7 @@ export class TownService {
                 target: "square",
                 targetLabel: "中央广场",
                 reason: "连续完成目标后，探索能把成长反馈转成新事件。",
+                reward: this.createRetentionReward(completedProgressCount),
             };
         }
         if (worldState.weather === "小雨") {
@@ -833,6 +1020,7 @@ export class TownService {
                 target: "florist",
                 targetLabel: "街角花店",
                 reason: "天气变化让明日社交行动更有明确理由。",
+                reward: this.createRetentionReward(completedProgressCount),
             };
         }
         return {
@@ -843,6 +1031,7 @@ export class TownService {
             target: worldState.reputation < 30 ? "florist" : "restaurant",
             targetLabel: worldState.reputation < 30 ? "街角花店" : "暖光餐馆",
             reason: "稳定的经营和关系会逐步解锁新区、章节与活动。",
+            reward: this.createRetentionReward(completedProgressCount),
         };
     }
 
@@ -858,6 +1047,28 @@ export class TownService {
             target: character.id,
             targetLabel: character.name,
             reason: "居民记忆把聊天内容延续到下一次行动，而不是只停留在文本里。",
+            reward: this.createRetentionReward(1),
+        };
+    }
+
+    private createRetentionReward(completedProgressCount: number): NonNullable<TownRetentionHook["reward"]> {
+        const tier = Math.min(3, Math.max(0, completedProgressCount));
+        return {
+            label: tier >= 2 ? "连续开张奖励" : "明日回访奖励",
+            coins: 8 + tier * 4,
+            stamina: tier >= 2 ? 6 : 4,
+            reputation: tier >= 1 ? 2 : 1,
+        };
+    }
+
+    private normalizeRetentionReward(reward: unknown, fallback?: TownRetentionHook["reward"]): TownRetentionHook["reward"] {
+        const source = reward && typeof reward === "object" ? reward as NonNullable<TownRetentionHook["reward"]> : fallback;
+        if (!source) return undefined;
+        return {
+            label: typeof source.label === "string" && source.label.trim() ? source.label : "明日回访奖励",
+            coins: typeof source.coins === "number" ? source.coins : undefined,
+            stamina: typeof source.stamina === "number" ? source.stamina : undefined,
+            reputation: typeof source.reputation === "number" ? source.reputation : undefined,
         };
     }
 
@@ -1162,6 +1373,7 @@ export class TownService {
     private createResultRuleRefs(context: TownActionAuditContext) {
         const refs = [`action:${context.action}`, "rule:resource-delta"];
         if (context.settlement) refs.push("rule:daily-settlement", "rule:building-income", "rule:building-maintenance");
+        if (context.retentionReward) refs.push("rule:retention-reward");
         if (context.action === "upgrade") refs.push("rule:building-upgrade");
         if (context.action === "advice") refs.push("rule:strategy-advice");
         if (context.choice) refs.push(`choice:${context.choice.id}`);
@@ -1178,12 +1390,13 @@ export class TownService {
         if (typeof result.stamina === "number" && result.stamina !== 0) notes.push(`体力 ${result.stamina > 0 ? "+" : ""}${result.stamina}`);
         if (typeof result.reputation === "number" && result.reputation !== 0) notes.push(`声望 ${result.reputation > 0 ? "+" : ""}${result.reputation}`);
         if (context.settlement) notes.push(`日结收入 +${context.settlement.income}，维护 -${context.settlement.maintenance}`);
+        if (context.retentionReward) notes.push(`${context.retentionReward.label}：${this.formatRetentionReward(context.retentionReward)}`);
         if (context.bonuses?.length) notes.push(`关系收益：${context.bonuses.join("、")}`);
         if (context.choice) notes.push(`选择：${context.choice.label}`);
         if (context.building) notes.push(`建筑：${context.building.name}`);
         if (context.relationshipTarget) notes.push(`关系目标：${context.relationshipTarget.name}`);
         if (context.budgetConsumed && context.budgetAfter) notes.push(`今日行动剩余 ${Math.max(0, context.budgetAfter.maxPerDay - context.budgetAfter.usedActions.length)}`);
-        if (context.modelAssisted) notes.push(context.fallbackUsed ? "参谋使用本地规则补位" : "参谋生成了事件内容");
+        if (context.modelAssisted) notes.push(context.fallbackUsed ? "参谋按规则补位" : "参谋参与本次镇务");
         if (!notes.length) notes.push(context.action === "advice" ? "今日计划已更新" : "小镇状态已记录");
         return notes;
     }
@@ -1215,10 +1428,27 @@ export class TownService {
         if (context.settlement?.breakdown?.length) {
             breakdown.push(...context.settlement.breakdown.map((item) => ({ label: item.label, value: item.value, detail: item.detail })));
         }
+        if (context.retentionReward) {
+            const reward = context.retentionReward;
+            const values = [
+                reward.coins ? { label: reward.label, value: reward.coins, detail: "回访金币" } : null,
+                reward.stamina ? { label: reward.label, value: reward.stamina, detail: "回访体力" } : null,
+                reward.reputation ? { label: reward.label, value: reward.reputation, detail: "回访声望" } : null,
+            ].filter((item): item is { label: string; value: number; detail: string } => Boolean(item));
+            breakdown.push(...values);
+        }
         if (context.bonuses?.length) {
             breakdown.push(...context.bonuses.map((bonus) => ({ label: "关系收益", value: 0, detail: bonus })));
         }
         return breakdown;
+    }
+
+    private formatRetentionReward(reward: NonNullable<TownRetentionHook["reward"]>) {
+        return [
+            reward.coins ? `金币 +${reward.coins}` : null,
+            reward.stamina ? `体力 +${reward.stamina}` : null,
+            reward.reputation ? `声望 +${reward.reputation}` : null,
+        ].filter(Boolean).join("，") || "小镇状态提升";
     }
 
     private getAuditBuilding(save: TownSave, buildingId?: string) {

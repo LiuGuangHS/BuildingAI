@@ -11,6 +11,7 @@ import {
 } from "../src/api/modules/town/services/town-ai-rules.mjs";
 
 const aiServiceSource = readFileSync(new URL("../src/api/modules/town/services/town-ai.service.ts", import.meta.url), "utf8");
+const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
 
 test("AI config defaults stay centralized for console and service semantics", () => {
     assert.equal(TOWN_AI_CONFIG_KEY, "default");
@@ -21,6 +22,9 @@ test("AI config defaults stay centralized for console and service semantics", ()
         maxTokens: 1200,
         fallbackToRules: true,
         dailyLimitPerUser: 100,
+        adviceCostPower: 0,
+        chatCostPower: 0,
+        eventCostPower: 0,
     });
     assert.ok(aiServiceSource.includes("...(TOWN_AI_DEFAULT_CONFIG as Partial<TownAiConfig>)"));
     assert.equal(aiServiceSource.includes("dailyLimitPerUser: 100"), false);
@@ -52,5 +56,28 @@ test("fallback path does not consume or block on daily AI limit before model ava
 
     assert.ok(disabledBranchIndex > 0);
     assert.ok(limitCheckIndex > disabledBranchIndex);
-    assert.ok(aiServiceSource.includes("if (allowFallback) return fallback;"));
+    assert.ok(aiServiceSource.includes("if (allowFallback) return { text: fallback, billing: this.createBillingContext(type, config, true) };"));
+});
+
+test("town AI uses the extension SDK text generation entrypoint", () => {
+    assert.doesNotMatch(aiServiceSource, /from "@buildingai\/ai-sdk"/);
+    assert.doesNotMatch(packageSource, /@buildingai\/ai-sdk/);
+    assert.match(aiServiceSource, /PublicAiModelService/);
+    assert.match(aiServiceSource, /this\.aiModelService\.generateText\(/);
+    assert.doesNotMatch(aiServiceSource, /normalizeProviderConfig\(await this\.aiModelService\.getProviderConfig/);
+    assert.doesNotMatch(aiServiceSource, /this\.aiModelService\.getProviderAdapter\(/);
+});
+
+test("town AI parses model JSON through the extension SDK helper", () => {
+    assert.match(aiServiceSource, /safeJsonParse/);
+    assert.doesNotMatch(aiServiceSource, /JSON\.parse\(match\?\.\[0\] \?\? text\)/);
+});
+
+test("town console model list uses the extension SDK instead of a direct AiModel repository", () => {
+    const moduleSource = readFileSync(new URL("../src/api/modules/town/town.module.ts", import.meta.url), "utf8");
+
+    assert.match(aiServiceSource, /this\.aiModelService\.listActiveLlmModels\(\)/);
+    assert.equal(aiServiceSource.includes("@InjectRepository(AiModel)"), false);
+    assert.equal(aiServiceSource.includes("aiModelRepo"), false);
+    assert.equal(moduleSource.includes("AiModel"), false);
 });

@@ -7,6 +7,9 @@ export const TOWN_AI_DEFAULT_CONFIG = {
     maxTokens: 1200,
     fallbackToRules: true,
     dailyLimitPerUser: 100,
+    adviceCostPower: 0,
+    chatCostPower: 0,
+    eventCostPower: 0,
 };
 
 export function getTownAiDayStart(now = new Date()) {

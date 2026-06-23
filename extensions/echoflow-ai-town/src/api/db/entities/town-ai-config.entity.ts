@@ -27,6 +27,15 @@ export class TownAiConfig {
     @Column({ type: "int", default: 100, comment: "Daily AI call limit per user" })
     dailyLimitPerUser!: number;
 
+    @Column({ type: "int", default: 0, comment: "Power cost for town advice calls" })
+    adviceCostPower!: number;
+
+    @Column({ type: "int", default: 0, comment: "Power cost for town resident chat calls" })
+    chatCostPower!: number;
+
+    @Column({ type: "int", default: 0, comment: "Power cost for town AI event calls" })
+    eventCostPower!: number;
+
     @CreateDateColumn({ type: "timestamptz" })
     createdAt!: Date;
 

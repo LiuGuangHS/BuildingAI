@@ -13,6 +13,8 @@ export const ASSETS = {
     backgrounds: {
         town: asset("/assets/screenshot-town.png"),
         kitchen: asset("/assets/game-bg-kitchen.png"),
+        npc: asset("/assets/screenshot-npc.png"),
+        night: asset("/assets/screenshot-night-event.png"),
         dashboard: asset("/assets/ui-dashboard-bg.png"),
     },
     npcs: {

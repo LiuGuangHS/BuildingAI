@@ -1,34 +1,51 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
 
 import { defineExtensionViteConfig } from "@buildingai/web-core/vite/extension";
 
 import packageJson from "./package.json" with { type: "json" };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-
-function resolveDependency(specifier, fallbackPath) {
-    try {
-        return require.resolve(specifier);
-    } catch {
-        return resolve(__dirname, fallbackPath);
-    }
-}
 
 function townManualChunks(id) {
-    if (id.includes("lucide-react")) return "icons";
-    if (id.includes("/src/web/pages/console/") || id.includes("\\src\\web\\pages\\console\\")) return "console-pages";
-    if (id.includes("@radix-ui") || id.includes("radix-ui")) return "ui-radix";
-    if (id.includes("@buildingai/web/ui/src/components/ui/")) return "ui-components";
-    if (id.includes("framer-motion")) return "motion";
+    const normalizedId = id.replaceAll("\\", "/");
+
+    if (
+        normalizedId.includes("/node_modules/.pnpm/react@") ||
+        normalizedId.includes("/node_modules/.pnpm/react-dom@") ||
+        normalizedId.includes("/node_modules/.pnpm/scheduler@") ||
+        normalizedId.includes("/node_modules/react/") ||
+        normalizedId.includes("/node_modules/react-dom/") ||
+        normalizedId.includes("/node_modules/scheduler/")
+    ) {
+        return "react-vendor";
+    }
+
     return undefined;
 }
 
 export default defineExtensionViteConfig(packageJson, {
     build: {
+        outDir: ".output/public",
+        sourcemap: false,
         rollupOptions: {
+            onwarn(warning, warn) {
+                if (warning.code === "MODULE_LEVEL_DIRECTIVE") return;
+                if (warning.code === "COMMONJS_VARIABLE_IN_ESM") return;
+                if (
+                    warning.message &&
+                    warning.message.includes(
+                        "dynamic import will not move module into another chunk",
+                    )
+                )
+                    return;
+                if (
+                    warning.message &&
+                    warning.message.includes("externalized for browser compatibility")
+                )
+                    return;
+                warn(warning);
+            },
             output: {
                 manualChunks: townManualChunks,
             },
@@ -36,13 +53,6 @@ export default defineExtensionViteConfig(packageJson, {
     },
     resolve: {
         alias: [
-            {
-                find: /^lucide-react$/,
-                replacement: resolveDependency(
-                    "lucide-react/dist/esm/lucide-react.js",
-                    "../../node_modules/.pnpm/node_modules/lucide-react/dist/esm/lucide-react.js",
-                ),
-            },
             {
                 find: /^react-router-dom$/,
                 replacement: resolve(

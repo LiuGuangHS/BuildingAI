@@ -1,6 +1,6 @@
+import { RedisModule, RedisService } from "@buildingai/cache";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
-import { AiModel } from "@buildingai/db/entities";
-import { AiPublicModule } from "@buildingai/extension-sdk";
+import { AiPublicModule, ExtensionBillingModule, ExtensionRateLimitService } from "@buildingai/extension-sdk";
 import { Module } from "@nestjs/common";
 
 import { TownAiCallLog, TownAiConfig, TownCharacter, TownEvent, TownSave } from "../../db/entities";
@@ -13,9 +13,20 @@ import { TownService } from "./services/town.service";
 import { TownWorldRulesService } from "./services/town-world-rules.service";
 
 @Module({
-    imports: [TypeOrmModule.forFeature([TownSave, TownCharacter, TownEvent, TownAiConfig, TownAiCallLog, AiModel]), AiPublicModule],
+    imports: [TypeOrmModule.forFeature([TownSave, TownCharacter, TownEvent, TownAiConfig, TownAiCallLog]), AiPublicModule, ExtensionBillingModule, RedisModule],
     controllers: [TownWebController, TownConsoleController],
-    providers: [TownService, TownAiService, TownWorldRulesService, TownRelationshipRulesService, TownProgressRulesService],
+    providers: [
+        TownService,
+        TownAiService,
+        TownWorldRulesService,
+        TownRelationshipRulesService,
+        TownProgressRulesService,
+        {
+            provide: ExtensionRateLimitService,
+            useFactory: (redisService: RedisService) => new ExtensionRateLimitService(redisService),
+            inject: [RedisService],
+        },
+    ],
     exports: [TownService],
 })
 export class TownModule {}
