@@ -1,5 +1,32 @@
 # EchoFlow BuildingAI 插件开发规范
 
+## 目录
+
+- [核心边界](#核心边界)
+- [文档治理](#文档治理)
+- [主系统二开决策](#主系统二开决策)
+- [官方依据](#官方依据)
+- [工作区配置](#工作区配置)
+- [插件结构](#插件结构)
+- [后端规范](#后端规范)
+- [前端规范](#前端规范)
+- [Web 与 Console 双入口](#web-与-console-双入口)
+- [AI、Secret 与计费](#aisecret-与计费)
+- [通知与多渠道](#通知与多渠道)
+- [数据、Upgrade 与存储](#数据upgrade-与存储)
+- [上传与 URL 安全](#上传与-url-安全)
+- [游戏化与记忆](#游戏化与记忆)
+  - [首屏与降级](#首屏与降级)
+  - [行动与反馈](#行动与反馈)
+  - [对话与记忆](#对话与记忆)
+  - [内容与 Catalog](#内容与-catalog)
+- [构建、发布与验证](#构建发布与验证)
+- [Git 与上游](#git-与上游)
+- [环境基线](#环境基线)
+- [品牌静态资源](#品牌静态资源)
+- [当前阶段看板](#当前阶段看板)
+- [交付检查](#交付检查)
+
 本仓库是基于 BuildingAI 的 EchoFlow 二开与插件工作区。所有 Agent 和人工改动以本文件为准：主系统是需要持续吸收官方上游更新的二开基座，EchoFlow 业务优先落在插件内；确属平台公共能力的通知、多渠道、登录、计费、Secret、上传、队列和 Console 基础能力，可以按主系统模块边界实现，但必须记录与上游可能冲突的点。
 
 长期规范只维护在 `AGENTS.md` 和各 `extensions/echoflow-*/README.md`。`docs/`、`.agents/`、`.codex/` 和计划文件只作为阶段性分析、执行计划或交接材料；其中形成的最佳实践、边界或任务结论要及时合并回 `AGENTS.md` 或对应插件 README，避免长期维护第二套文档。新发现的更好规范、组件约束、验证方式或边界结论，默认先落到这两个长期入口，再清理临时材料。
@@ -41,8 +68,11 @@
 | 主系统服务复用 | 主系统公共模块复用复杂服务时，优先导入提供完整依赖并导出该服务的模块；不要在消费模块里重新裸声明 `AuthService`、计费、通知、Secret、上传、队列等带仓储、权限或外部依赖的服务，避免编译通过但 Nest 启动时 DI 缺依赖。 |
 | SDK 能力 | 主系统新增或修复插件 SDK 能力时，同步源码导出、公开 exports、`dist` 类型产物和调用方验证；插件不得引用只存在于源码但未进入公开 exports 的符号。 |
 | 品牌兜底 | 用户可见的主系统通知、PWA、设置页和站点名 fallback 使用 `EchoFlowAI`。内部协议名、兼容事件名和历史 channel 字符串可保留 `buildingai:*`，除非另有迁移方案。 |
+| 二开版本 | EchoFlow 主系统二开版本使用合法 semver 预发布号，例如 `26.1.2-rc.2`；不要使用 `26.1.2rc` 或 `+echoflow.N` 这类升级器不稳定或过长的版本。 |
 
 上游同步前按以下清单复核：确认 `upstream` 只读和 `remote.upstream.pushurl=DISABLED_DO_NOT_PUSH_TO_UPSTREAM`；对主系统 diff 分类为官方恢复、EchoFlow 公共能力、插件私有业务、构建/品牌资产；插件业务如果出现在 `packages/` 或主系统 seed，必须记录平台公共性原因，没有公共性就迁回插件；合并后运行通知边界测试、SDK build、客户端 build 和相关插件 check-types/build。
+
+主系统二开版本与迁移保持单线递增：根 `package.json.version`、主系统 migration 文件名和升级验收记录使用同一合法 semver，例如 `26.1.2-rc.2`；升级器必须能从 `timestamp-version-description.js` 文件名完整解析预发布版本。每个 rc 版本只保留一个主系统迁移入口，未发布前发现同一能力拆出多个连续迁移时合并到当前 rc 迁移，不再追加空转版本。已在本地 Docker 跑过旧文件名但未推送服务器时，优先改源码版本和文件名，再用一次性 SQL 修正本地 `migrations_history` 记录；不要为了本地历史制造永久兼容迁移。
 
 ## 官方依据
 
@@ -57,17 +87,102 @@
 
 开发插件前优先对照官方文档、`templates/extension-starter/`、`extensions/simple-blog/` 和相关 SDK 参考。
 
+## 工作区配置
+
+`pnpm-workspace.yaml`、根 `package.json`、`pnpm-lock.yaml`、`turbo.json` 属于谨慎修改文件；变更前必须理解其影响范围并在提交说明里写清原因。
+
+| 主题 | 规则 |
+|---|---|
+| catalog 版本 | 公共依赖版本通过 `catalogs`（`api`、`dev`、`web`）统一管理。插件 `package.json` 必须用 `catalog:api`/`catalog:dev`/`catalog:web` 引用，禁止硬编码版本号或在插件里维护独立版本。 |
+| catalog 新增 | 新增 catalog 条目前先检查是否已有同名条目；多个插件需要同一新依赖时，先加 catalog 再让插件引用；单插件私有依赖（如 echoflow-image 的 `tldraw`、echoflow-contract-generation 的 `docx`、`platejs`）可直接硬编码版本，不进 catalog。 |
+| catalog 分组 | `catalog:api` 放 NestJS/BullMQ/后端运行时依赖；`catalog:web` 放 React/Vue/前端 UI/构建依赖；`catalog:dev` 放类型检查、测试、格式化、CLI 工具等跨前后端的开发依赖。`vite` 同时出现在 `catalog:dev` 和 `catalog:web` 时版本保持一致。 |
+| pnpm 配置位置 | pnpm 10+ 不再读取根 `package.json` 的 `pnpm.overrides`、`pnpm.peerDependencyRules`、`pnpm.onlyBuiltDependencies` 字段，这些必须全部在 `pnpm-workspace.yaml` 中维护；新增或调整时写清原因和预期移除时机。根 `package.json` 顶层 npm 标准 `overrides` 字段 pnpm 仍读取，但新条目优先写入 `pnpm-workspace.yaml` 统一管理。 |
+| overrides 强制版本 | `pnpm-workspace.yaml` 的 `overrides` 会全局强制版本（例如 `vite: 8.0.0`、`zod: ^4.3.6`），添加时必须注释说明原因（主系统要求、安全修复、peer dep 冲突等），并在主系统版本升级后复核是否仍有必要。overrides 版本与对应 catalog 版本不一致时，overrides 生效，会覆盖 catalog 版本——此时需同步更新 catalog 或注释说明差异原因。 |
+| lockfile | `pnpm-lock.yaml` 必须与 workspace 所有 `package.json` 一致；新增/升级依赖后必须运行 `pnpm install --no-frozen-lockfile` 更新锁文件，不提交过时的 lockfile。 |
+
+常见故障：
+- `ERR_PNPM_CATALOG_NOT_FOUND`：插件用了 `catalog:xxx` 但 pnpm-workspace.yaml 里没有对应条目，补 catalog 即可。
+- `ERR_PNPM_OUTDATED_LOCKFILE`：lockfile 与 package.json 不同步，跑 `pnpm install` 重新生成。
+- `The "pnpm" field in package.json is no longer read by pnpm`：说明根 package.json 还残留 `pnpm.*` 字段，必须迁移到 pnpm-workspace.yaml。
+
 ## 插件结构
 
 | 项目 | 要求 |
 |---|---|
-| 创建 | 优先用 `pnpm extension:create` 或 `pnpm buildingai extension:create`。 |
+| 创建 | 优先用 `pnpm extension:create` 或 `pnpm buildingai extension:create`，会基于 `templates/extension-starter/` 生成骨架。 |
 | 命名 | 目录、`manifest.json.identifier`、`package.json.name`、`defineRouteOption({ base, identifier })`、`defineExtensionViteConfig(packageJson)` 必须同名。 |
-| 登记 | 本地插件必须写入 `extensions/extensions.json`，手工复制或恢复插件后同步检查登记；登记的 identifier、name、version 和 manifest 保持一致，避免本地插件列表展示旧名称。 |
-| 版本 | `manifest.json` 与 `package.json` 版本一致；未上线插件首版修复合并回 `0.0.1` migration/upgrade，不制造无意义版本号。 |
+| 登记 | 本地插件必须写入 `extensions/extensions.json`，手工复制或恢复插件后同步检查登记；登记的 identifier、name、version、icon、author 必须与 `manifest.json` 一致，避免本地插件列表展示旧名称或旧图标。 |
+| 版本 | `manifest.json` 与 `package.json` 版本一致；未上线插件首版修复合并回 `0.0.1` migration/upgrade，不制造无意义版本号；上线后按 semver 约定升 patch/minor/major。 |
 | 依赖 | 插件 `package.json` 必须声明源码、`scripts/*.mjs`、`tests/**/*`、`vite.config.*`、`tsup.config.*`、`eslint.config.*` 等运行、构建、测试路径直接 import/require 的包，不依赖根项目或传递依赖侥幸解析；清理模板遗留但源码不再使用的 `@buildingai/*` 和第三方依赖。 |
 | 示例 | `simple-blog`、`extension-starter` 是官方示例/模板，不作为 EchoFlow 业务插件命名或改造对象。 |
 | 预留 | reserved/experimental 能力可保留，但不能进入默认运行路径，不能呈现为已上线能力。 |
+| engine 字段 | 使用单数 `"engine": { "buildingai": ">=x.y.z" }`（这是 BuildingAI 扩展自定义字段，不是 npm 标准 `engines`）。主系统由 `@buildingai/utils` 的 `checkVersionCompatibility()` 读取，用于安装时平台版本兼容检查；`manifest.json` 和 `package.json` 的 `engine.buildingai` 必须一致。 |
+
+三处元信息一致性要求：
+
+| 字段 | manifest.json | package.json | extensions.json | 一致性要求 |
+|---|---|---|---|---|
+| identifier | ✅ | ✅(name) | ✅ | 必须完全相同且等于目录名 |
+| version | ✅ | ✅ | ✅ | 必须完全相同 |
+| engine.buildingai | ✅ | ✅ | — | manifest 与 package 必须相同 |
+| name | ✅ | — | ✅ | 必须相同（用户可见展示名） |
+| icon / author.avatar / author.name | ✅ | — | ✅ | 必须相同 |
+| description | ✅ | 可偏技术视角 | 可偏市场/用户视角 | 方向一致即可，允许按场景差异化措辞 |
+| installedAt | — | — | ✅ | 由安装流程写入真实 ISO 时间戳，禁止手工写占位值 |
+
+脚本命令约定与约束：
+
+| 脚本名 | 用途 | 约束 |
+|---|---|---|
+| `dev` | 并行启动 web + api 开发服务 | 可嵌套 `pnpm dev:web`/`pnpm dev:api`（concurrently） |
+| `dev:web` / `dev:api` | 单独启动前端/后端开发服务 | 直接调用 vite/tsup |
+| `build:clean` | 清理 build/.nuxt/.output/.temp | 直接调用 rimraf |
+| `build:web` / `build:api` | 单独构建前端/后端 | 直接调用 vite/tsup |
+| `build:publish` | 发布前完整构建（清理 + web + api） | **必须直接串联工具命令**，禁止嵌套 `pnpm run ...`，避免 Windows/Corepack 命中不同 pnpm shim 导致本地验证失败 |
+| `check-types` | 类型检查 | 直接调用 `vue-tsc --noEmit` 或 `tsc -p tsconfig.api.json --noEmit`，根据插件技术栈选择 |
+| `test` | 单元/集成测试收口脚本（含类型检查） | 直接调用测试运行器，禁止嵌套 `pnpm`；允许 `vue-tsc --noEmit && jest ...` 这种串行形式 |
+| `lint` / `lint:fix` | 代码检查/自动修复 | 直接调用 eslint |
+| `format` | 格式化 | 直接调用 prettier |
+
+❌ 反模式（禁止）：
+```json
+"build:publish": "pnpm build:clean && pnpm build:web && pnpm build:api",
+"check-types": "node ../../node_modules/vue-tsc/bin/vue-tsc.js --noEmit",
+"test": "node ../../packages/api/node_modules/jest/bin/jest.js --runInBand"
+```
+✅ 正确写法：
+```json
+"build:publish": "rimraf build .nuxt .output .temp && vite build && cross-env NODE_ENV=production tsup",
+"check-types": "vue-tsc --noEmit",
+"test": "jest --runInBand --passWithNoTests"
+```
+
+脚本中的 CLI 工具（vite、tsup、vue-tsc、tsc、eslint、prettier、jest、concurrently、cross-env、rimraf 等）必须在插件本地 `devDependencies` 声明，并通过 `catalog:dev`/`catalog:web`/`catalog:api` 引用版本；禁止通过 `node ../../node_modules/<pkg>/bin/<cli>.js`、`node ../../packages/<pkg>/node_modules/<cli>` 等相对路径越界调用根 node_modules 或其他 workspace 包的 CLI，也禁止依赖传递依赖侥幸解析。
+
+EchoFlow 业务插件 devDependencies 最小基线（`catalog:*` 版本由 pnpm-workspace.yaml 统一管理）：
+
+```json
+{
+  "@buildingai/eslint-config": "workspace:*",
+  "@buildingai/typescript-config": "workspace:*",
+  "@buildingai/web-types": "workspace:*",
+  "@types/react": "catalog:web",
+  "@types/react-dom": "catalog:web",
+  "concurrently": "catalog:dev",
+  "cross-env": "catalog:dev",
+  "eslint": "catalog:dev",
+  "eslint-plugin-react-refresh": "^0.4.26",
+  "globals": "^16.5.0",
+  "prettier": "catalog:dev",
+  "rimraf": "catalog:dev",
+  "tsup": "catalog:dev",
+  "typescript": "catalog:dev",
+  "vite": "catalog:web"
+}
+```
+使用 Vue 技术栈（vue-tsc）时加 `"vue-tsc": "catalog:dev"`；使用 jest 时加 `"jest": "^29.7.0"`、`"ts-jest": "^29.3.1"`、`"@types/jest": "^29.5.14"`、`"ts-node": "^10.9.2"`；使用 Node 内置 `node --test` 的插件可以不加 jest/ts-jest。
+
+**模板合规强制规则**：`templates/extension-starter/` 和 `extensions/simple-blog/` 作为脚手架和官方示例，必须始终符合本节所有规则；规范变更（脚本约定、依赖基线、字段要求）必须同步更新模板和示例，禁止出现"规范写了但模板没改"导致新插件从脚手架就违规的情况。
 
 跨插件重复的测试辅助可放在 `extensions/test-utils/`，该目录是可跟踪的测试目录，`.gitignore` 必须显式放行；仅承载 Node 测试、静态边界测试和测试 helper，不能放业务运行时代码；插件 runtime 不能反向依赖该目录。
 
@@ -175,14 +290,7 @@ AI 修复重试、格式修复结果、失败归因、退款异常、Provider �
 生成类插件若在用户端展示分数、置信度、指数、评分卡或其他量化判断，这些值必须由模型结构化结果或可审计规则明确提供，并进入结果契约与测试；不得在 normalize、serializer 或前端空态里补一个看似真实的默认分，避免把缺失 AI 结论伪装成可消费判断。
 生成类插件若把判断依据、追问建议、行动项或风险提醒作为核心亮点，模型结果 schema 必须强制这些关键字段的最小可用数量和非空内容；不要只在 prompt 里要求或在前端做空态兜底，否则空壳报告会绕过失败退款与质量审查。
 生成类插件若在用户端展示问题质量、上下文完整度、可复盘程度等 AI 输入质量提示，后端也必须构造同源质量上下文并进入 request payload 或 prompt；不要只做前端装饰性评分。
-用户端 AI 相关文案必须落到业务语境、玩法语境和可验证规则，例如镇务参谋、今日计划、居民回复、分析对象、扣费时机、失败退款或规则补位；用户端额度提示、付费确认和生成确认也必须使用业务语境和玩家动作，不暴露管理员配置、Provider、模型生成、上游任务或 Secret 细节，也不要把主按钮写成“继续”“确认使用”“开始生成”等泛确认文案。额度或付费说明也不要只写“确认后可能消耗额度”，应写明玩家动作和业务对象，例如安排计划前、和居民聊前或探索街区前会提示镇务额度；居民聊天额度确认必须延续当前居民名，例如“和小满聊前会提示镇务额度”“和小满聊”，不要从角色对话跳回“和居民聊”。避免“智能建议”“AI 黑科技”“一键生成奇迹”等泛 AI 风营销表达。Console 可保留模型、Provider、AI、fallback 等运维术语。用户端事件审计、行动日志或结果说明不得使用“生成内容”“模型输出”“fallback”“本地规则”等工具或运维措辞，应写成参谋参与、规则补位、镇务判断等玩法语境。镇务参谋或 AI 助手入口不能只是打开生成面板；应在主场景直接暴露下一步玩家动作、收益预览、记忆/上下文来源或不可行动原因，让 AI 能力体现为玩法判断。
-
-旧存档、历史记录或继续入口也应使用回到小镇、回到存档、打开作品或继续创作等业务语境；不要只写“继续”“载入中”“打开”这类脱离玩法或业务对象的泛按钮。加载态文案同样要说明正在读取的对象，例如读取街区、恢复作品或打开记录。插件 lazy route、Suspense 和错误兜底属于首屏路径，加载、刷新、返回和未开放路径文案也要使用业务或玩法对象，例如读取街区、重读小镇、返回小镇或回到作品。经营游戏的删除、取消、确认等破坏性操作也应转换为业务对象和玩家动作，例如移入旧档箱、留在小镇、归档作品，并说明会影响的存档、角色、事件或作品范围。
-
-商业化尚未接入正式计费时，用户端可以展示玩法价值预览，例如故事深度、记忆容量、角色章节、季节活动、外观表达、失败退款策略或未来权益边界，但必须明确当前不是购买入口，不得伪装成已开通订阅、已扣费权益或已完成失败退款闭环。经营游戏优先把商业价值做成成长册、内容包预告、章节路线或外观目标，不做数值碾压式售卖。
-成长册、内容包预告或章节路线若展示未来商业价值，必须优先给出玩法行动入口并复用行动状态、行动预算和不可行动原因；正式计费接入前不得把 CTA 做成购买、开通会员或充值按钮。
-
-经营游戏或即时互动类 AI 插件接入计费时，默认价格可以为 0 并保留免费玩法；真实模型成功且未 fallback 时才扣费，账务 `associationNo` 应使用本次行动、聊天、事件或任务的业务记录 ID，不使用存档 ID 这类会被多次复用的容器 ID。用户端展示扣费/退款事实应落在行动结果、居民回复或事件结算里，使用镇务额度、居民聊天额度、探索导演额度等业务语境兜底，不能暴露模型、Provider、Secret、管理员价格明细或“小镇 AI”等泛 AI 标签；成长册、章节路线和内容包预告即使已有 AI 行动计费，也不能自动变成购买、会员或充值入口。
+用户端 AI 相关文案必须落到业务语境、玩法语境和可验证规则，例如镇务参谋、今日计划、居民回复、分析对象、扣费时机、失败退款或规则补位；用户端额度提示、付费确认和生成确认也必须使用业务语境和玩家动作，不暴露管理员配置、Provider、模型生成、上游任务或 Secret 细节，也不要把主按钮写成“继续”“确认使用”“开始生成”等泛确认文案。额度或付费说明也不要只写“确认后可能消耗额度”，应写明玩家动作和业务对象；避免“智能建议”“AI 黑科技”“一键生成奇迹”等泛 AI 风营销表达。Console 可保留模型、Provider、AI、fallback 等运维术语。用户端事件审计、行动日志或结果说明不得使用“生成内容”“模型输出”“fallback”“本地规则”等工具或运维措辞，应写成参谋参与、规则补位、镇务判断等玩法语境。镇务参谋或 AI 助手入口不能只是打开生成面板；应在主场景直接暴露下一步玩家动作、收益预览、记忆/上下文来源或不可行动原因，让 AI 能力体现为玩法判断。
 
 ## 通知与多渠道
 
@@ -231,19 +339,26 @@ AI 修复重试、格式修复结果、失败归因、退款异常、Provider �
 
 ## 游戏化与记忆
 
+> 本节规则仅适用于经营/游戏化/叙事互动类插件（如 echoflow-ai-town），普通生成类、工具类插件不要求遵守。
+
+### 首屏与降级
+
 - 游戏化或经营类插件的资源变化必须可审计：事件 result 或业务记录保留 before/after、delta、规则来源或明细，用户端展示玩家可读解释，Console 可排查异常收益。
 - 用户端存在日常行动循环时，服务端加每日行动预算、同日重复动作拦截和休息重置；前端展示剩余次数和拦截原因。
 - 回访、连续登录或留存钩子若承诺奖励，奖励必须由服务端按钩子条件结算，进入 result/audit/resourceBreakdown；前端只展示预览、玩家可读结算说明和匹配钩子条件的可执行入口。回访奖励 CTA 也必须显示实际玩家动作，例如经营餐馆、拜访居民、探索街区或休息结算，不要用“领取奖励”“领取回访奖励”等福利式泛称替代实际行动。
 - 经营游戏首屏在 Web API 或旧存档列表暂不可用时仍应展示可玩的场景预览、HUD、核心入口和玩家可读服务状态；服务异常说明也应使用开张、回到旧档、恢复小镇等玩家语境，不要写成创建、读取、加载、刷新等普通应用流程；不要因为后端未 ready 就白屏、长时间 loading 或只显示故障式错误。
 - 经营游戏降级状态下，不可用的创建、生成或行动入口应转为等待态、重试命令或明确不可行动原因；不要保留看似可成功但必然触发网络失败的主按钮。
 - 经营游戏首屏创建、恢复存档和重连服务的加载态也必须写成玩法对象，例如小镇开张中、正在翻看旧存档、重连镇务中；不要只写“创建中”“读取中”“连接中”这类普通应用状态。
-- 经营游戏降级首屏的命令预览不能只是静态词条；应展示行动用途、收益预览、解锁或日结提示，并通过可访问名称保留完整说明。
+- 经营游戏首屏的命令预览不能只是静态词条；应展示行动用途、收益预览、解锁或日结提示，并通过可访问名称保留完整说明。
 - 经营游戏新手首屏必须给出一屏内可理解的第一分钟目标，例如三步开张路线、可得奖励或记忆影响；不要只展示品牌标题、氛围文案和开始按钮。经营游戏新存档主 CTA 应写成开张、启程、经营等玩家动作，例如“开张小镇”，不要写成“创建小镇”“新建存档”这类数据操作。
 - 游戏化 UI 的奖励、推荐、热点、任务、抽屉和弹层动效必须支持 prefers-reduced-motion；减少动态效果时保留信息层级和视觉状态，但停止循环动画、弹跳、横向滑入或大幅位移。
 - 自定义游戏抽屉或弹层必须具备 dialog 语义、标题关联、打开后自动聚焦、关闭后恢复触发点焦点、Tab 焦点循环、背景滚动锁定、Escape 关闭、可聚焦面板入口、带业务对象或面板标题的关闭按钮、遮罩点击关闭和内部点击防冒泡；不要只做视觉遮罩导致键盘或鼠标用户被困住，也不要把关闭按钮的可访问名称只写成“关闭”。
 - 经营游戏首屏应优先用低遮挡回合状态条集中展示日期、行动预算、推荐动作和下一目标，再用游戏命令牌承接具体行动；中等宽度开始就应转为流式 HUD，避免与左右目标板、场景提示或命令牌争抢舞台。不要让玩家在多个边角面板里找当前回合重点。经营游戏首屏行动入口应呈现为游戏命令牌或等价 HUD，而不是普通按钮组；至少展示推荐、任务关联、收益预览、预算提示和不可行动原因，并避免遮挡主要场景。经营游戏首屏行动、推荐和预览的兜底文案也必须是玩家动作或玩法对象，例如打开委托册、可以出发、照看小镇或照看目标，不要退回“继续行动”“可执行”“查看任务”这类系统态。命令牌按钮的可访问名称必须合并动作名、推荐状态、任务关联、收益预览、预算提示和不可行动原因，避免移动端压缩或视觉标签隐藏后丢失玩法信息。
 - 经营游戏首屏目标板中的活动、赛季或限时事件入口不能只写等待线索；无活动时也应给出探索街区、打开委托册或回到场景的玩家动作，有活动时展示状态、剩余时间和奖励摘要，并用可访问名称保留移动端压缩隐藏的活动目标。
 - 移动端把 HUD、目标、命令或提示转为流式布局时，舞台容器必须允许纵向滚动并隐藏横向溢出，避免在主系统 iframe 或嵌入式 RootLayout 内裁切可操作内容。
+
+### 行动与反馈
+
 - 行动、生成或居民交流等待态必须显示具体玩家动作和业务对象，例如经营餐馆中、拜访居民中、镇务排班中或和某位居民交流中；不要只写“加载中”“处理中”或用无语境 spinner。
 - 经营游戏用户端错误反馈必须使用玩法语境和可感知 alert 语义，例如说明小镇行动未完成、镇务服务暂未连接或某个玩家动作不可执行；不要回退到“操作失败”“请求失败”“请稍后再试”这类普通应用错误壳。
 - 行动完成后的即时反馈必须像游戏奖励结算，展示事件标题、玩家可读总结和资源变化；不要只用普通 toast、裸数字条或表格行替代。
@@ -253,11 +368,21 @@ AI 修复重试、格式修复结果、失败归因、退款异常、Provider �
 - 奖励、结算、升级或任务完成反馈必须具备可感知状态语义，例如 `role="status"`、`aria-live="polite"` 和 `aria-atomic="true"`；不要只给视觉动画。
 - 经营游戏地图或场景热点必须展示可行动性、推荐/升级/关系/记忆状态，并用可访问名称保留移动端压缩隐藏的关键说明；不得只做透明点击层、静态文字标签或无反馈装饰。
 - 日常任务、主线章节、周目标、活动或赛季目标不能只展示进度条；用户端必须提供由规则层推导的下一步行动入口，并复用统一行动状态、资源、预算和建筑目标校验。行动按钮文案必须是玩家动作，例如经营餐馆、拜访居民、探索街区、升级建筑或休息结算，不要用“执行任务”“处理目标”“推进主线”“推进周目标”或“筹备活动”等后台式或目标式泛称。镇务参谋、今日计划或推荐行动入口也必须显示规则映射后的实际玩家动作，不要用“执行推荐行动”之类的系统命令文案。镇务参谋等待态应使用镇务排班中、整理今日计划等业务动作，不要写成思考中、生成中或分析中这类泛 AI 等待态。
+- 旧存档、历史记录或继续入口也应使用回到小镇、回到存档、打开作品或继续创作等业务语境；不要只写“继续”“载入中”“打开”这类脱离玩法或业务对象的泛按钮。加载态文案同样要说明正在读取的对象，例如读取街区、恢复作品或打开记录。插件 lazy route、Suspense 和错误兜底属于首屏路径，加载、刷新、返回和未开放路径文案也要使用业务或玩法对象，例如读取街区、重读小镇、返回小镇或回到作品。经营游戏的删除、取消、确认等破坏性操作也应转换为业务对象和玩家动作，例如移入旧档箱、留在小镇、归档作品，并说明会影响的存档、角色、事件或作品范围。
+- 商业化尚未接入正式计费时，用户端可以展示玩法价值预览，例如故事深度、记忆容量、角色章节、季节活动、外观表达、失败退款策略或未来权益边界，但必须明确当前不是购买入口，不得伪装成已开通订阅、已扣费权益或已完成失败退款闭环。经营游戏优先把商业价值做成成长册、内容包预告、章节路线或外观目标，不做数值碾压式售卖。
+- 成长册、内容包预告或章节路线若展示未来商业价值，必须优先给出玩法行动入口并复用行动状态、行动预算和不可行动原因；正式计费接入前不得把 CTA 做成购买、开通会员或充值按钮。
+- 经营游戏或即时互动类 AI 插件接入计费时，默认价格可以为 0 并保留免费玩法；真实模型成功且未 fallback 时才扣费，账务 `associationNo` 应使用本次行动、聊天、事件或任务的业务记录 ID，不使用存档 ID 这类会被多次复用的容器 ID。用户端展示扣费/退款事实应落在行动结果、居民回复或事件结算里，使用镇务额度、居民聊天额度、探索导演额度等业务语境兜底，不能暴露模型、Provider、Secret、管理员价格明细或“小镇 AI”等泛 AI 标签；成长册、章节路线和内容包预告即使已有 AI 行动计费，也不能自动变成购买、会员或充值入口。
+
+### 对话与记忆
+
 - 居民或 NPC 对话不能退化成普通表单；当存在记忆、偏好、约定或关键时刻时，用户端应提供可点选话题、角色回复气泡和清晰的额度/生成提示，让记忆成为可操作玩法。对话输入区必须说明正在给谁写话题，并提供居民化 placeholder、输入 aria-label 和聊天按钮可访问名称；对话提交按钮的可见文本也必须带当前对象或等待对象，例如“和小满聊天”“等小满回应”，不要只写“和居民聊天”“交流中”。
 - 居民、角色、伙伴、参谋或关键 NPC 图片加载失败时，fallback 必须继续使用业务角色样式、尺寸和语境，覆盖列表、地图热点、HUD、确认卡和策略面板等首屏路径；不要退回通用应用头像、裸首字母圆点、裸文字或脱离题材的占位壳。
 - 切换居民或 NPC 时必须清空上一位角色的输入和回复；生成或聊天成功后要用返回数据同步当前角色对象，避免旧气泡、旧关系或旧记忆显示到另一位角色上。
 - 角色/NPC 记忆分层保存长期摘要、偏好、约定、关键时刻和有限最近消息；传给 LLM 时使用白名单摘要和短窗口。
 - 当“记忆”是玩法卖点时，必须有确定性闭环影响后续行动、事件、关系收益、推荐目标、行动预览或 Console 判断。
+
+### 内容与 Catalog
+
 - 初始建筑、角色、行动、事件选项、日常任务、周目标、主线章节、成就、活动候选和留存钩子内容优先放在插件 catalog/seed/config 层；service 负责事务、校验和编排，规则服务负责计算。
 - 内容包型、赛季型或经营叙事插件应提供 catalog manifest，记录内容包 ID、版本、赛季、包含的建筑/角色/任务/章节/活动范围、seed 策略和幂等键；存档或业务记录应保存内容包快照，旧数据读取或 Upgrade 时只做归一化，不把运营内容散落到 service 流程。
 - 内容包型或经营游戏插件的测试要守住 catalog 边界：新增运营内容时断言 service/rule service 没有重新内联大段任务、章节、活动候选数组。
@@ -280,7 +405,7 @@ pnpm --filter <identifier> build:publish
 pnpm --filter <identifier> test
 ```
 
-插件 `package.json` 的 `test`、`build:publish` 等收口脚本尽量直接串联实际工具命令，避免在脚本内部再次嵌套 `pnpm run ...`。Windows/Corepack 环境下嵌套 pnpm 可能命中不同 pnpm shim 或项目 packageManager 版本检查，导致本地验证失败但业务代码无关。
+插件 `package.json` 的 `test`、`build:publish` 等收口脚本必须直接串联实际工具命令，禁止嵌套 `pnpm run ...`，具体反例与正例参见"插件结构"章节的脚本命令约定。Windows/Corepack 环境下嵌套 pnpm 可能命中不同 pnpm shim 或项目 packageManager 版本检查，导致本地验证失败但业务代码无关。
 
 涉及发布或安装时至少验证：版本识别、migration 执行、Upgrade 执行、旧数据保留、服务重启后页面可打开。本地浏览器验证优先用 `http://127.0.0.1:4090`。发布包本身不得携带 `node_modules`、`storage/uploads`、运行时生成结果或测试目录；升级安装验证的是主系统安装目录中的保留策略，例如当前主系统升级流程保留 `data` 与 `storage` 整目录，因此 `storage/node_modules`、上传缓存和插件运行时文件应在升级后仍存在。新装场景不能用“保留 storage/node_modules”作为验收项，应验证依赖安装、静态资产和页面路由是否可用。
 
@@ -295,6 +420,8 @@ Windows PowerShell 下若 `pnpm --filter <identifier> build:*` 因 `sh is not re
 若 `build:web` 失败在 Vite/Rolldown 配置加载或 HTML entry 解析阶段，先用最小 `index.html + main.js` smoke 复现，区分工具链/环境问题与插件业务代码问题。
 
 插件单测若 mock `@buildingai/extension-sdk`、`@buildingai/core/modules` 或主系统 service，新增 SDK 导出后同步测试替身；测试替身不能缺少 `normalizeProviderConfig`、`resolveProviderSecretValue`、provider HTTP client、URL 校验和存储 helper 这类运行期会调用的公共函数。
+
+插件单元/集成测试中，允许通过 jest `moduleNameMapper`、vitest alias 或等价测试配置把主系统 `@buildingai/*` 包映射到 monorepo 内源码路径（`<rootDir>/../../packages/<pkg>/src`），这仅限 `tests/**/*` 目录内的测试配置；运行时代码（`src/**/*`）禁止使用相对路径跨出插件目录引用主系统源码，必须通过 workspace 包名导入。jest、ts-jest 等测试运行器及其类型声明必须声明在插件本地 devDependencies，禁止通过 `node ../../packages/api/node_modules/jest/bin/jest.js` 这类路径依赖其他 workspace 包装的 CLI。
 
 ## Git 与上游
 
@@ -321,6 +448,14 @@ Windows PowerShell 下若 `pnpm --filter <identifier> build:*` 因 `sh is not re
 - 手动路径：准备 PostgreSQL、Redis、主系统 `.env`，再运行 `pnpm install` 与 `pnpm start`。
 - 插件业务配置不放 `.env`，走管理员后台配置或主站 Secret。
 
+Windows 与沙箱常见故障排查：
+- **sh is not recognized**：脚本里用了 Unix shell 语法（`&&` 没问题，但 `;`、`export`、`&&:` 等会失败）或嵌套调用了 pnpm 自身的 shell shim；收口脚本（build:publish、test）必须直接串联工具命令而非嵌套 `pnpm run`，参见"插件结构"章节的脚本约定。
+- **pnpm install 报 `EACCES`/`disk I/O error`/`unable to open database file` 写 `D:\_tmp_<pid>_<rand>`**：这是 TRAE/Codex 沙箱把 `%TEMP%` 重定向到工作盘根目录但又未在白名单放行该路径所致，不是 pnpm 本身的问题。在 **Settings → Conversation → Custom Sandbox Configuration** 放行 `D:\_tmp_*` 即可；临时设置 `$env:TMP` 到工作区内不会绕过沙箱底层 API Hook。
+- **pnpm install 报 `EEXIST: file already exists, junction` 或大量 `.ignored_*` 目录**：之前包管理器切换（npm/yarn → pnpm）或跨容器挂载遗留了失效 junction，执行 `pnpm store prune` 并手动删除 workspace 内 `.ignored_*` 前缀的空 junction 后重试。
+- **pnpm 告警 `The "pnpm" field in package.json is no longer read by pnpm`**：根 package.json 还残留 `pnpm.*` 字段，按"工作区配置"章节要求迁移到 `pnpm-workspace.yaml`。
+- **ERR_PNPM_CATALOG_NOT_FOUND**：插件引用了未在 pnpm-workspace.yaml catalogs 里定义的条目，在对应 catalog 分组补条目即可；不要绕过 catalog 写硬编码版本。
+- **Corepack 版本冲突**：若全局 node 是 v24 而项目要求 v22，必须先 `nvm use 22.23.0`；否则 corepack 可能拉错 pnpm shim，出现 `Unsupported engine` 或脚本找不到命令。
+
 ## 品牌静态资源
 
 - `logo.png` 是方形品牌图，用于 favicon、头像、折叠菜单和 `size-8` 等方形展示位。
@@ -331,20 +466,22 @@ Windows PowerShell 下若 `pnpm --filter <identifier> build:*` 因 `sh is not re
 
 ## 当前阶段看板
 
-| 优先级 | 事项 | 完成条件 |
-|---|---|---|
-| P1 | 真实端到端 smoke | 配好主站 Secret、测试用户、余额和存储，覆盖图像、视频、合同、星盘、小镇的成功、失败、退款或 fallback。 |
-| P1 | 队列与恢复 smoke | 验证图像、合同、星盘和视频的 Redis/Worker 拓扑、抢占、重复执行保护、超时回收、重启恢复、软删除保护和失败补偿。 |
-| P2 | 主系统能力复用审查 | 继续清理直接 provider 注入、内存队列、进程内限流、手写密钥脱敏、手写文件 URL、手写通知/签名协议和可替换裸 UI 控件。 |
-| P2 | 上传与 URL 安全审查 | 所有接收文件、URL、Webhook 回调和远程资源下载入口只接受平台上传或受信任 provider 返回值。 |
-| P2 | 异步终态一致性审查 | 图像、合同、星盘等异步链路具备二次读取、锁定、终态短路和软删除保护。 |
-| P2 | 测试补强 | 为失败退款、计费幂等、队列入队失败、恢复扫描、文件归属、世界规则和 AI fallback 补 focused tests。 |
-| P3 | 发布前整理 | 清理或确认未跟踪文件、锁文件必要性、构建产物和提交分组。 |
+| 优先级 | 事项 | 完成条件 | 验证方式 |
+|---|---|---|---|
+| P1 | 真实端到端 smoke | 配好主站 Secret、测试用户、余额和存储，覆盖图像、视频、合同、星盘、小镇的成功、失败、退款或 fallback。 | `pnpm --filter <id> smoke:web`（需 token/开关）+ 浏览器 E2E 录屏 |
+| P1 | 队列与恢复 smoke | 验证图像、合同、星盘和视频的 Redis/Worker 拓扑、抢占、重复执行保护、超时回收、重启恢复、软删除保护和失败补偿。 | 本地 docker compose 重启 Worker + 队列状态 API + focused tests |
+| P2 | 主系统能力复用审查 | 清理直接 provider 注入、内存队列、进程内限流、手写密钥脱敏、手写文件 URL、手写通知/签名协议和可替换裸 UI 控件。 | 静态 diff + 边界测试（public types、manifest、SDK boundary） |
+| P2 | 上传与 URL 安全审查 | 所有接收文件、URL、Webhook 回调和远程资源下载入口只接受平台上传或受信任 provider 返回值。 | SSRF/URL 边界测试 + `assertPublicHttpUrl` 覆盖率检查 |
+| P2 | 异步终态一致性审查 | 图像、合同、星盘等异步链路具备二次读取、锁定、终态短路和软删除保护。 | 终态重复触发测试 + 删除保护测试 |
+| P2 | 测试补强 | 为失败退款、计费幂等、队列入队失败、恢复扫描、文件归属、世界规则和 AI fallback 补 focused tests。 | `pnpm --filter <id> test` 全绿 + 新增测试覆盖新分支 |
+| P3 | 发布前整理 | 清理或确认未跟踪文件、锁文件必要性、构建产物和提交分组。 | `git status` 审查 + `pnpm build && pnpm typecheck` 全绿 |
 
 ## 交付检查
 
-1. 明确业务目标、插件 identifier、可改文件、谨慎文件、数据/升级/存储方案和验证命令。
-2. 实现只落在插件或约定二开目录；主系统缺口必须能说明原因、影响、上游风险和验证方式。
-3. 验证至少覆盖插件构建、类型检查、后端 API 或前端页面 smoke；涉及发布时跑 `extension:release`，并检查 zip 内容与安装路径中的 `.output`、`build`、`manifest.json`、`README.md`、`storage/static` 和运行时目录保留策略。
-4. 交付时说明改动范围、验证结果和剩余阻塞；不得把“未配置 upstream”或“服务未 ready”包装成已完成。
-5. 若本轮产生或参考了 `docs/`、`.agents/`、`.codex/`、临时计划或审查草稿，交付前把仍有效的规范、验证结论和剩余风险合并到 `AGENTS.md` 或对应插件 `README.md`；临时文档不得作为长期事实源继续维护。
+- [ ] 明确业务目标、插件 identifier、可改文件、谨慎文件、数据/升级/存储方案和验证命令。
+- [ ] 实现只落在插件或约定二开目录；主系统缺口必须能说明原因、影响、上游风险和验证方式。
+- [ ] 验证至少覆盖插件构建、类型检查、后端 API 或前端页面 smoke；涉及发布时跑 `pnpm extension:release`，并检查 zip 内容与安装路径中的 `.output`、`build`、`manifest.json`、`README.md`、`storage/static` 和运行时目录保留策略。
+- [ ] 交付时说明改动范围、验证结果和剩余阻塞；不得把"未配置 upstream"或"服务未 ready"包装成已完成。
+- [ ] 若本轮产生或参考了 `docs/`、`.agents/`、`.codex/`、临时计划或审查草稿，交付前把仍有效的规范、验证结论和剩余风险合并到 `AGENTS.md` 或对应插件 `README.md`；临时文档不得作为长期事实源继续维护。
+- [ ] `pnpm-workspace.yaml`、根 `package.json`、`pnpm-lock.yaml`、`turbo.json` 等谨慎文件的变更已在提交说明里写明原因。
+- [ ] `templates/extension-starter/` 和 `extensions/simple-blog/` 仍符合本规范全部规则（如本轮修改了规范相关内容，同步检查模板和示例）。
