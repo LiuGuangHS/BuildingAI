@@ -99,4 +99,6 @@ extensions/*/data/versions/**
 extensions/*/data/.installed
 extensions/*/.od-skills/
 extensions/*/.od-skills/**
+extensions/*/.turbo/
+extensions/*/.turbo/**
 releases
