@@ -1,5 +1,6 @@
 import { BaseController } from "@buildingai/base";
 import { ExtensionConsoleController } from "@buildingai/core/decorators";
+import { HttpErrorFactory } from "@buildingai/errors";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
@@ -77,27 +78,20 @@ export class CategoryController extends BaseController {
      */
     @Delete(":id")
     async remove(@Param("id", UUIDValidationPipe) id: string) {
-        // Ensure not used
         const category = await this.categoryService.findOneById(id);
 
         if (!category) {
-            return {
-                success: false,
-                message: "Category does not exist",
-            };
+            throw HttpErrorFactory.notFound("分类不存在");
         }
 
         if (category.articleCount > 0) {
-            return {
-                success: false,
-                message: "This category is in use and cannot be deleted",
-            };
+            throw HttpErrorFactory.badRequest("该分类下存在文章，无法删除");
         }
 
         await this.categoryService.delete(id);
         return {
             success: true,
-            message: "Deleted successfully",
+            message: "删除成功",
         };
     }
 
@@ -109,17 +103,10 @@ export class CategoryController extends BaseController {
      */
     @Post("batch-delete")
     async batchRemove(@Body("ids") ids: string[]) {
-        try {
-            await this.categoryService.batchDelete(ids);
-            return {
-                success: true,
-                message: "Batch deletion succeeded",
-            };
-        } catch (error) {
-            return {
-                success: false,
-                message: error.message,
-            };
-        }
+        await this.categoryService.batchDelete(ids);
+        return {
+            success: true,
+            message: "批量删除成功",
+        };
     }
 }

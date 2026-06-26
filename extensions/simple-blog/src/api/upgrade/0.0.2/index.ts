@@ -41,11 +41,11 @@ export class Upgrade {
             LIMIT 10
         `);
 
-        console.log(`Found ${users.length} users`);
+        this.logger.log(`Found ${users.length} users`);
         users.forEach((user) => {
-            console.log(`User: ${user.username} (${user.nickname})`);
+            this.logger.log(`User: ${user.username} (${user.nickname})`);
         });
 
-        console.log("User data query completed");
+        this.logger.log("User data query completed");
     }
 }

@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Length, Min } from "class-validator";
+import { IsEnum, IsInt, IsOptional, IsString, IsUUID, IsUrl, Length, MaxLength, Min } from "class-validator";
 
 import { ArticleStatus } from "../../../db/entities/article.entity";
 
@@ -26,12 +26,13 @@ export class UpdateArticleDto {
      */
     @IsString({ message: "Article content must be a string" })
     @IsOptional()
+    @MaxLength(100000, { message: "Article content must not exceed 100000 characters" })
     content?: string;
 
     /**
      * Cover image URL
      */
-    @IsString({ message: "Cover image URL must be a string" })
+    @IsUrl({ protocols: ["http", "https"], require_protocol: true }, { message: "Cover image URL must be a valid HTTP/HTTPS URL" })
     @IsOptional()
     @Length(0, 500, { message: "Cover image URL length must not exceed 500 characters" })
     cover?: string;

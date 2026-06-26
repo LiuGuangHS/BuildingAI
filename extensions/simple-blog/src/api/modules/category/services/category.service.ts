@@ -1,7 +1,7 @@
 import { BaseService } from "@buildingai/base";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
-import { In, Like, Repository } from "@buildingai/db/typeorm";
+import { In, LessThan, Like, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { Injectable } from "@nestjs/common";
 
@@ -113,16 +113,10 @@ export class CategoryService extends BaseService<Category> {
      * @param count Increment value, default 1
      */
     async incrementArticleCount(id: string, count: number = 1): Promise<void> {
-        const category = await this.categoryRepository.findOne({
-            where: { id },
-        });
-
-        if (!category) {
+        const result = await this.categoryRepository.increment({ id }, "articleCount", count);
+        if (!result.affected) {
             throw HttpErrorFactory.notFound(`Category ${id} does not exist`);
         }
-
-        category.incrementArticleCount(count);
-        await this.categoryRepository.save(category);
     }
 
     /**
@@ -132,16 +126,14 @@ export class CategoryService extends BaseService<Category> {
      * @param count Decrement value, default 1
      */
     async decrementArticleCount(id: string, count: number = 1): Promise<void> {
-        const category = await this.categoryRepository.findOne({
-            where: { id },
-        });
-
-        if (!category) {
+        const result = await this.categoryRepository.createQueryBuilder()
+            .update(Category)
+            .set({ articleCount: () => "GREATEST(articleCount - :count, 0)" })
+            .where("id = :id", { id, count })
+            .execute();
+        if (!result.affected) {
             throw HttpErrorFactory.notFound(`Category ${id} does not exist`);
         }
-
-        category.decrementArticleCount(count);
-        await this.categoryRepository.save(category);
     }
 
     /**

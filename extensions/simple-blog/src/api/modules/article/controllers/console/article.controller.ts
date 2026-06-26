@@ -106,18 +106,11 @@ export class ArticleController extends BaseController {
      */
     @Post("batch-delete")
     async batchRemove(@Body("ids") ids: string[]) {
-        try {
-            await this.articleService.batchDelete(ids);
-            return {
-                success: true,
-                message: "Batch deletion succeeded",
-            };
-        } catch (error) {
-            return {
-                success: false,
-                message: error.message,
-            };
-        }
+        await this.articleService.batchDelete(ids);
+        return {
+            success: true,
+            message: "批量删除成功",
+        };
     }
 
     /**
@@ -128,18 +121,11 @@ export class ArticleController extends BaseController {
      */
     @Post(":id/publish")
     async publish(@Param("id", UUIDValidationPipe) id: string) {
-        try {
-            await this.articleService.publish(id);
-            return {
-                success: true,
-                message: "Published successfully",
-            };
-        } catch (error) {
-            return {
-                success: false,
-                message: error.message,
-            };
-        }
+        await this.articleService.publish(id);
+        return {
+            success: true,
+            message: "发布成功",
+        };
     }
 
     /**
@@ -150,17 +136,10 @@ export class ArticleController extends BaseController {
      */
     @Post(":id/unpublish")
     async unpublish(@Param("id", UUIDValidationPipe) id: string) {
-        try {
-            await this.articleService.unpublish(id);
-            return {
-                success: true,
-                message: "Unpublished successfully",
-            };
-        } catch (error) {
-            return {
-                success: false,
-                message: error.message,
-            };
-        }
+        await this.articleService.unpublish(id);
+        return {
+            success: true,
+            message: "已取消发布",
+        };
     }
 }
