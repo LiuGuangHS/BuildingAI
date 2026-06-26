@@ -70,7 +70,7 @@ export function checkVersionCompatibility(
     }
 
     // Check if platform version satisfies the range
-    const satisfies = semver.satisfies(platformVersion, normalizedRange);
+    const satisfies = semver.satisfies(platformVersion, normalizedRange, { includePrerelease: true });
 
     if (satisfies) {
         return { compatible: true };
