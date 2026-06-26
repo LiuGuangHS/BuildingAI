@@ -194,7 +194,6 @@ export class PromptOptimizationService {
                         id: model.id,
                         name: model.name,
                         model: model.model,
-                        provider: model.provider?.provider,
                         isDefault: model.id === config.promptOptimizerModelId,
                         billingRule: model.billingRule,
                     };
@@ -213,7 +212,7 @@ export class PromptOptimizationService {
             enabled: config.promptOptimizerEnabled !== false,
             defaultModelId,
             billingEnabled: usableModels.some((model) => this.resolveBillingRule(model.billingRule)),
-            models: usableModels,
+            models: usableModels.map(({ billingRule: _billingRule, ...model }) => model),
         };
     }
 

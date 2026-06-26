@@ -80,10 +80,6 @@ export class PolicyService extends BaseService<VideoPolicyConfig> {
                 );
             }
         }
-        if (!policy.allowPublicMediaUrl && dto.media?.some((item) => !item.fileId && /^https?:\/\//i.test(item.url))) {
-            throw HttpErrorFactory.badRequest("当前策略不允许使用外部媒体 URL");
-        }
-
         const activeCount = await this.generationRepository.count({
             where: {
                 userId,
@@ -143,7 +139,6 @@ export class PolicyService extends BaseService<VideoPolicyConfig> {
             maxImageSizeMb: 20,
             maxConcurrentJobsPerUser: 3,
             dailyJobsPerUser: 100,
-            allowPublicMediaUrl: false,
             enabled: true,
         };
     }

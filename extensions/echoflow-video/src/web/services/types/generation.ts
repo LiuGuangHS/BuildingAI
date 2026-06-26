@@ -48,7 +48,6 @@ export interface VideoGeneration {
     id: string;
     model: string;
     modelConfigId?: string;
-    provider?: string;
     modelName?: string;
     status: VideoGenerationStatus;
     billingStatus: VideoGenerationBillingStatus;
@@ -57,17 +56,14 @@ export interface VideoGeneration {
     originalPrompt?: string;
     promptOptimizationSource?: "ai" | "local";
     promptOptimizationStyle?: string;
-    promptOptimizerModelId?: string;
     media: VideoMediaItem[];
     parameters: VideoParameters;
     videoUrl?: string;
     errorMessage?: string;
-    failureCategory?: string;
     statusEvents?: Array<{
         status: VideoGenerationStatus;
         at: string;
         message?: string;
-        source?: "web" | "console" | "provider" | "webhook" | "system";
     }>;
     progress: number;
     billingAmount: number;
@@ -79,7 +75,10 @@ export interface VideoGeneration {
 
 export interface ConsoleVideoGeneration extends VideoGeneration {
     userId: string;
+    provider?: string;
     taskId?: string;
+    promptOptimizerModelId?: string;
+    failureCategory?: string;
     adminRemark?: string;
     rawRequest?: Record<string, unknown>;
     rawResponse?: Record<string, unknown>;
@@ -136,7 +135,6 @@ export interface VideoModelOption {
     modelConfigId?: string;
     name: string;
     model: string;
-    provider?: string;
     modelType: string;
     description: string;
     mediaTypes: string[];
@@ -234,12 +232,7 @@ export interface PromptOptimizerModelOption {
     id: string;
     name: string;
     model: string;
-    provider?: string;
     isDefault?: boolean;
-    billingRule?: {
-        power?: number;
-        tokens?: number;
-    };
 }
 
 export interface PromptOptimizerOptions {
@@ -330,7 +323,6 @@ export interface VideoPolicyConfig {
     maxImageSizeMb: number;
     maxConcurrentJobsPerUser: number;
     dailyJobsPerUser: number;
-    allowPublicMediaUrl: boolean;
     enabled: boolean;
     modelConfig?: VideoModelConfig;
     createdAt: string;
@@ -347,6 +339,5 @@ export interface SaveVideoPolicyParams {
     maxImageSizeMb?: number;
     maxConcurrentJobsPerUser?: number;
     dailyJobsPerUser?: number;
-    allowPublicMediaUrl?: boolean;
     enabled?: boolean;
 }

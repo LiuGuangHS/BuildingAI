@@ -11,6 +11,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { ConsolePage } from "../../components/console-page";
+import { getBillingLabel, getStatusLabel } from "../../lib/video-labels";
 import {
     useCancelVideoMutation,
     useMarkVideoStatusMutation,
@@ -18,35 +19,14 @@ import {
     useRetryVideoMutation,
     useUpdateVideoRemarkMutation,
     useVideoDetailQuery,
-} from "../../services";
+} from "../../services/console";
 import type { ConsoleVideoGeneration } from "../../services/types/generation";
-
-const statusLabel: Record<string, string> = {
-    pending: "排队中",
-    processing: "生成中",
-    succeeded: "已完成",
-    failed: "失败",
-};
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
     pending: "secondary",
     processing: "secondary",
     succeeded: "default",
     failed: "destructive",
-};
-
-const modelLabel: Record<string, string> = {
-    "happyhorse-1.0-i2v": "图生视频 (i2v)",
-    "happyhorse-1.0-r2v": "参考图生视频 (r2v)",
-    "happyhorse-1.0-t2v": "文生视频 (t2v)",
-    "happyhorse-1.0-video-edit": "视频编辑 (video-edit)",
-};
-
-const billingLabel: Record<string, string> = {
-    pending: "待扣费",
-    deducted: "已扣费",
-    refunded: "已退款",
-    failed: "扣费失败",
 };
 
 function formatDuration(startedAt?: string, completedAt?: string): string | null {
@@ -275,17 +255,17 @@ export default function DetailPage() {
                             <div>
                                 <span className="text-xs text-muted-foreground">状态</span>
                                 <Badge variant={statusVariant[status] ?? "secondary"} className="ml-2">
-                                    {statusLabel[status] ?? status}
+                                    {getStatusLabel(status)}
                                 </Badge>
                             </div>
                             <div>
                                 <span className="text-xs text-muted-foreground">模型</span>
-                                <p className="text-sm">{modelLabel[model] ?? model}</p>
+                                <p className="text-sm">{generation.modelName || model}</p>
                             </div>
                             <div>
                                 <span className="text-xs text-muted-foreground">扣费</span>
                                 <p className="text-sm">
-                                    {billingLabel[generation.billingStatus] ?? generation.billingStatus} · {generation.billingAmount} 算力
+                                    {getBillingLabel(generation.billingStatus)} · {generation.billingAmount} 算力
                                 </p>
                             </div>
                             <div>
@@ -392,7 +372,7 @@ export default function DetailPage() {
                                     <div key={`${event.at}-${index}`} className="flex gap-3 text-sm">
                                         <Clock className="mt-0.5 size-4 text-muted-foreground" />
                                         <div>
-                                            <p className="font-medium">{statusLabel[event.status] ?? event.status}</p>
+                                            <p className="font-medium">{getStatusLabel(event.status)}</p>
                                             <p className="text-muted-foreground text-xs">{new Date(event.at).toLocaleString("zh-CN")} · {event.source ?? "system"}</p>
                                             {event.message && <p className="text-muted-foreground mt-1 text-xs">{event.message}</p>}
                                         </div>

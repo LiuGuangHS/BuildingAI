@@ -6,7 +6,7 @@ import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Save } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ConsolePage } from "../../components/console-page";
@@ -15,7 +15,7 @@ import {
     useConsoleVideoPoliciesQuery,
     useUpsertGlobalVideoPolicyMutation,
     useUpsertModelVideoPolicyMutation,
-} from "../../services";
+} from "../../services/console";
 import type { SaveVideoPolicyParams, VideoPolicyConfig } from "../../services/types/generation";
 import { VideoPolicyScope } from "../../services/types/generation";
 
@@ -94,7 +94,6 @@ function PolicyEditor({ value, onSave }: { value?: VideoPolicyConfig; onSave: (d
     const [maxImageSizeMb, setMaxImageSizeMb] = useState(String(value?.maxImageSizeMb ?? 20));
     const [maxConcurrentJobsPerUser, setMaxConcurrentJobsPerUser] = useState(String(value?.maxConcurrentJobsPerUser ?? 3));
     const [dailyJobsPerUser, setDailyJobsPerUser] = useState(String(value?.dailyJobsPerUser ?? 100));
-    const [allowPublicMediaUrl, setAllowPublicMediaUrl] = useState(value?.allowPublicMediaUrl === true);
     const [enabled, setEnabled] = useState(value?.enabled ?? true);
 
     return (
@@ -115,12 +114,6 @@ function PolicyEditor({ value, onSave }: { value?: VideoPolicyConfig; onSave: (d
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
                     <SwitchField
-                        checked={allowPublicMediaUrl}
-                        description="默认只接受平台上传文件；开启后仍会拒绝本机、内网和带凭据地址。"
-                        label="允许外部媒体 URL"
-                        onCheckedChange={setAllowPublicMediaUrl}
-                    />
-                    <SwitchField
                         checked={enabled}
                         description="关闭后该策略不参与提交校验，模型策略会回退到全局策略或后端默认值。"
                         label="启用策略"
@@ -136,7 +129,6 @@ function PolicyEditor({ value, onSave }: { value?: VideoPolicyConfig; onSave: (d
                         maxImageSizeMb: Number(maxImageSizeMb || 20),
                         maxConcurrentJobsPerUser: Number(maxConcurrentJobsPerUser || 3),
                         dailyJobsPerUser: Number(dailyJobsPerUser || 100),
-                        allowPublicMediaUrl,
                         enabled,
                     })}>
                         <Save className="size-4" />
@@ -149,22 +141,24 @@ function PolicyEditor({ value, onSave }: { value?: VideoPolicyConfig; onSave: (d
 }
 
 function SwitchField(props: { label: string; description: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+    const id = useId();
     return (
         <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
             <div className="min-w-0">
-                <Label className="text-sm">{props.label}</Label>
+                <Label htmlFor={id} className="text-sm">{props.label}</Label>
                 <p className="text-muted-foreground mt-1 text-xs leading-5">{props.description}</p>
             </div>
-            <Switch checked={props.checked} onCheckedChange={props.onCheckedChange} />
+            <Switch id={id} checked={props.checked} onCheckedChange={props.onCheckedChange} />
         </div>
     );
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+    const id = useId();
     return (
         <div className="space-y-2">
-            <Label>{label}</Label>
-            <Input type="number" min={0} value={value} onChange={(event) => onChange(event.target.value)} />
+            <Label htmlFor={id}>{label}</Label>
+            <Input id={id} type="number" min={0} value={value} onChange={(event) => onChange(event.target.value)} />
         </div>
     );
 }

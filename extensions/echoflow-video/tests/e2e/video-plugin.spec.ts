@@ -8,7 +8,7 @@ import { test, expect } from "@playwright/test";
  * 2. Logged-in user session (provide ADMIN_AUTH_TOKEN env var)
  * 3. Fixed video model catalog initialized by the plugin upgrade
  *
- * Run: npx playwright test tests/e2e/
+ * Run: pnpm --filter echoflow-video exec playwright test tests/e2e/
  */
 
 const BASE_URL = process.env.BASE_URL || "http://localhost:4090";

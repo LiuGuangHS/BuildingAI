@@ -47,9 +47,6 @@ export class VideoPolicyConfig {
     @Column({ type: "int", default: 100 })
     dailyJobsPerUser: number;
 
-    @Column({ type: "boolean", default: false })
-    allowPublicMediaUrl: boolean;
-
     @Column({ type: "boolean", default: true })
     enabled: boolean;
 

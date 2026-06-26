@@ -2,6 +2,21 @@
 
 import { VideoGenerationStatus } from "../../../../../src/api/db/entities/video-generation.entity";
 import { GenerationService } from "../../../../../src/api/modules/generation/services/generation.service";
+import { VideoGatewayClient } from "../../../../../src/api/modules/generation/services/video-gateway-client";
+
+const mockSubmitTask = jest.fn(async () => ({
+    taskId: "task-001",
+    rawRequest: { prompt: "生成一个产品开场镜头" },
+    rawResponse: { task_id: "task-001" },
+}));
+const mockPollTask = jest.fn();
+
+jest.mock("../../../../../src/api/modules/generation/services/video-gateway-client", () => ({
+    VideoGatewayClient: jest.fn().mockImplementation(() => ({
+        submitTask: mockSubmitTask,
+        pollTask: mockPollTask,
+    })),
+}));
 
 const mockGenerationRepository = {
     create: jest.fn((value) => ({ id: "generation-001", ...value })),
@@ -86,8 +101,17 @@ function makeModelConfig(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
     jest.clearAllMocks();
+    mockSubmitTask.mockResolvedValue({
+        taskId: "task-001",
+        rawRequest: { prompt: "生成一个产品开场镜头" },
+        rawResponse: { task_id: "task-001" },
+    });
+    mockPollTask.mockResolvedValue({ status: "processing" });
     mockGenerationRepository.findOne.mockResolvedValue(null);
+    mockGenerationRepository.save.mockImplementation(async (value) => value);
     mockBillingService.hasSufficientPower.mockResolvedValue(true);
+    mockBillingService.hasBillingLog.mockResolvedValue(false);
+    mockVideoPollQueue.add.mockResolvedValue(undefined);
     mockModelConfigService.findEnabledByModel.mockResolvedValue(makeModelConfig());
     mockModelConfigService.resolveRuntimeEndpoint.mockResolvedValue({
         endpoint: { id: "endpoint-001" },
@@ -102,6 +126,102 @@ beforeEach(() => {
         resolutionMultipliers: {},
         minimumCost: 0,
         refundOnFailure: true,
+    });
+});
+
+describe("GenerationService queue handling", () => {
+    it("fails and refunds the generation when initial poll scheduling fails", async () => {
+        mockFileUploadService.findOneById.mockResolvedValue({
+            id: "file-001",
+            uploaderId: "current-user",
+            extensionIdentifier: "echoflow-video",
+            url: "https://cdn.example.com/uploads/first.png",
+            size: 1024,
+            mimeType: "image/png",
+            originalName: "first.png",
+        });
+        mockGenerationRepository.findOne.mockResolvedValue({
+            id: "generation-001",
+            userId: "current-user",
+            status: VideoGenerationStatus.PROCESSING,
+            billingStatus: "deducted",
+            billingAmount: 10,
+            billingRuleSnapshot: { refundOnFailure: true },
+            statusEvents: [],
+        });
+        mockVideoPollQueue.add.mockRejectedValue(new Error("redis down"));
+
+        await expect(makeService().createAndSubmit({
+            model: "happyhorse-1.0-i2v",
+            prompt: "生成一个产品开场镜头",
+            media: [{ type: "first_frame", fileId: "file-001", url: "https://example.com/ignored.png" }],
+        }, "current-user")).rejects.toThrow("视频任务轮询入队失败");
+
+        expect(mockBillingService.addUserPower).toHaveBeenCalledWith(expect.objectContaining({
+            userId: "current-user",
+            amount: 10,
+            associationNo: "generation-001",
+        }), expect.anything());
+        expect(mockGenerationRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+            id: "generation-001",
+            status: VideoGenerationStatus.FAILED,
+            failureCategory: "queue",
+        }));
+        expect(VideoGatewayClient).toHaveBeenCalled();
+    });
+
+    it("reschedules worker polling after a transient provider poll error", async () => {
+        mockGenerationRepository.findOne.mockResolvedValue({
+            id: "generation-001",
+            userId: "current-user",
+            model: "happyhorse-1.0-i2v",
+            taskId: "task-001",
+            status: VideoGenerationStatus.PROCESSING,
+            billingStatus: "deducted",
+            billingAmount: 10,
+            billingRuleSnapshot: { refundOnFailure: true },
+            progress: 35,
+            statusEvents: [],
+        });
+        mockPollTask.mockRejectedValue(new Error("provider timeout"));
+
+        await expect(makeService().pollAnyAndUpdate("generation-001", { scheduleNext: true })).resolves.toEqual(expect.objectContaining({
+            id: "generation-001",
+            status: VideoGenerationStatus.PROCESSING,
+        }));
+
+        expect(mockVideoPollQueue.add).toHaveBeenCalled();
+        expect(mockBillingService.addUserPower).not.toHaveBeenCalled();
+    });
+
+    it("fails and refunds when follow-up polling cannot be scheduled", async () => {
+        mockGenerationRepository.findOne.mockResolvedValue({
+            id: "generation-001",
+            userId: "current-user",
+            model: "happyhorse-1.0-i2v",
+            taskId: "task-001",
+            status: VideoGenerationStatus.PROCESSING,
+            billingStatus: "deducted",
+            billingAmount: 10,
+            billingRuleSnapshot: { refundOnFailure: true },
+            progress: 35,
+            statusEvents: [],
+        });
+        mockPollTask.mockResolvedValue({ status: "processing" });
+        mockVideoPollQueue.add.mockRejectedValue(new Error("redis down"));
+
+        await expect(makeService().pollAnyAndUpdate("generation-001", { scheduleNext: true })).rejects.toThrow("视频任务轮询入队失败");
+
+        expect(mockBillingService.addUserPower).toHaveBeenCalledWith(expect.objectContaining({
+            userId: "current-user",
+            amount: 10,
+            associationNo: "generation-001",
+        }), expect.anything());
+        expect(mockGenerationRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+            id: "generation-001",
+            status: VideoGenerationStatus.FAILED,
+            failureCategory: "queue",
+        }));
     });
 });
 

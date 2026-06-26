@@ -22,7 +22,6 @@ import {
     VideoGenerationStatus,
 } from "../../../db/entities/video-generation.entity";
 import {
-    CreateVideoModelConfigDto,
     QueryVideoModelConfigDto,
     UpdateVideoModelConfigDto,
     VideoModelEndpointDto,
@@ -35,7 +34,7 @@ import {
 } from "./video-model-catalog";
 
 export interface ResolvedVideoModelConfig {
-    id?: string;
+    id: string;
     provider: string;
     model: string;
     externalModelId: string;
@@ -157,11 +156,6 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         return config;
     }
 
-    async createConfig(dto: CreateVideoModelConfigDto) {
-        void dto;
-        throw HttpErrorFactory.badRequest("视频模型由插件内置目录提供，请调整启用、可见性、排序、默认参数和接入点");
-    }
-
     async updateConfig(id: string, dto: UpdateVideoModelConfigDto) {
         const config = await this.findByIdOrFail(id);
         this.assertSupportedModelConfig(config.model);
@@ -183,11 +177,6 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         const { VideoGatewayClient } = await import("./video-gateway-client.js");
         await new VideoGatewayClient(resolved, endpoint, credential.apiKey, credential.baseUrl).testConnection();
         return { success: true, message: "接入点配置可用" };
-    }
-
-    async deleteConfig(id: string) {
-        void id;
-        throw HttpErrorFactory.badRequest("内置视频模型不能删除，请使用停用或隐藏");
     }
 
     pickRuntimeEndpoint(config: ResolvedVideoModelConfig): VideoModelEndpoint {
@@ -221,7 +210,6 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
             modelConfigId: resolved.id,
             name: resolved.displayName,
             model: resolved.model,
-            provider: resolved.provider,
             modelType: resolved.capabilities?.abilityTypes?.[0] ?? "video",
             description: resolved.description ?? "",
             mediaTypes: resolved.capabilities?.mediaTypes ?? [],

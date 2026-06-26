@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 
 import { ErrorState } from "../components/error-state";
 import { HistoryList } from "../components/history-list";
-import { useWebVideoListQuery, useWebVideoModelOptionsQuery } from "../services";
+import { useWebVideoListQuery, useWebVideoModelOptionsQuery } from "../services/web";
 import type { VideoGenerationBillingStatus, VideoGenerationStatus } from "../services/types/generation";
 
 export default function WebHistoryPage() {

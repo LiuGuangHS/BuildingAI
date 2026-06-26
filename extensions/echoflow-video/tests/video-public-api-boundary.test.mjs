@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const SERVICE_FILE = new URL("../src/api/modules/generation/services/generation.service.ts", import.meta.url);
+const MODEL_CONFIG_SERVICE_FILE = new URL("../src/api/modules/generation/services/model-config.service.ts", import.meta.url);
 const WEB_SERVICE_FILE = new URL("../src/web/services/web/generation.ts", import.meta.url);
 const CONSOLE_SERVICE_FILE = new URL("../src/web/services/console/generation.ts", import.meta.url);
 const GENERATION_FORM_FILE = new URL("../src/web/components/generation-form.tsx", import.meta.url);
@@ -28,6 +29,7 @@ const MAIN_FILE = new URL("../src/web/main.tsx", import.meta.url);
 const WEB_SERVICES_BILLING_FILE = new URL("../src/web/services/web/billing.ts", import.meta.url);
 const WEB_SERVICES_GENERATION_FILE = new URL("../src/web/services/web/generation.ts", import.meta.url);
 const WEB_SERVICES_TEMPLATES_FILE = new URL("../src/web/services/web/templates.ts", import.meta.url);
+const UPGRADE_FILE = new URL("../src/api/upgrade/0.0.1/index.ts", import.meta.url);
 
 function extractMethod(source, name) {
     const start = Math.max(source.indexOf(`private ${name}`), source.indexOf(`private async ${name}`));
@@ -41,14 +43,45 @@ test("video web serializer strips provider debug fields", async () => {
     const method = extractMethod(source, "toPublicGeneration");
     for (const field of [
         "taskId",
+        "provider",
         "adminRemark",
         "rawRequest",
         "rawResponse",
         "billingRuleSnapshot",
-        "deletedAt",
+        "promptOptimizerModelId",
+        "failureCategory",
     ]) {
-        assert.match(method, new RegExp(`${field}: _${field}`));
+        assert.doesNotMatch(method, new RegExp(`\\b${field}\\b`));
     }
+    assert.match(method, /id:\s*record\.id/);
+    assert.match(method, /statusEvents:\s*\(record\.statusEvents \?\? \[\]\)\.map/);
+    assert.doesNotMatch(method, /\.\.\.publicRecord/);
+    assert.doesNotMatch(method, /deletedAt:\s*record\.deletedAt/);
+});
+
+test("video public model options keep the config id needed by generation submit", async () => {
+    const source = await readFile(MODEL_CONFIG_SERVICE_FILE, "utf8");
+    const method = source.slice(
+        source.indexOf("toWebOption("),
+        source.indexOf("\n    private async ensureDefaultModelConfigs", source.indexOf("toWebOption(")),
+    );
+
+    assert.match(method, /id:\s*resolved\.model/);
+    assert.match(method, /modelConfigId:\s*resolved\.id/);
+    assert.doesNotMatch(method, /\bprovider:/);
+});
+
+test("video web and console pages import separate service barrels", async () => {
+    for (const file of [WEB_INDEX_PAGE_FILE, WEB_HISTORY_PAGE_FILE, WEB_DETAIL_PAGE_FILE]) {
+        assert.match(await readFile(file, "utf8"), /from "\.\.\/services\/web"/);
+    }
+});
+
+test("video upgrade creates and backfills the soft-delete column used by the entity", async () => {
+    const source = await readFile(UPGRADE_FILE, "utf8");
+
+    assert.match(source, /"deleted_at" TIMESTAMP/);
+    assert.match(source, /ensureColumn\("video_generation", "deleted_at", "TIMESTAMP"\)/);
 });
 
 test("video web services use public client and public generation type", async () => {
@@ -120,8 +153,8 @@ test("video generation disables generation controls when no public model is usab
         readFile(GENERATION_FORM_FILE, "utf8"),
     ]);
 
-    assert.match(indexSource, /availableModelCount = models\.filter/);
-    assert.match(indexSource, /model\.available && model\.enabled && model\.configured/);
+    assert.match(indexSource, /availableModelCount = models\.length/);
+    assert.doesNotMatch(indexSource, /model\.available && model\.enabled && model\.configured/);
     assert.match(indexSource, /availableModelCount === 0/);
     assert.match(indexSource, /availableModelCount \? `\$\{availableModelCount\} 个规格可用` : "暂未开放"/);
     assert.match(formSource, /const controlsDisabled = Boolean\(disabledReason\) \|\| Boolean\(loading\) \|\| !selectedModel/);
@@ -324,7 +357,7 @@ test("video provider HTTP requests reuse the extension SDK provider client", asy
 
     assert.match(source, /requestProviderJson/);
     assert.match(source, /testProviderJsonEndpoint/);
-    assert.match(source, /normalizeProviderBaseUrl/);
+    assert.doesNotMatch(source, /normalizeProviderBaseUrl/);
     assert.doesNotMatch(source, /\bfetch\(/);
     assert.doesNotMatch(source, /function\s+sleep\b/);
     assert.match(generationSource, /safeJsonParse/);

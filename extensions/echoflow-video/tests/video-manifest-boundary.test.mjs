@@ -127,18 +127,6 @@ test("video install smoke plan matches platform upgrade preservation", async () 
     assert.match(source, /storage\/node_modules/);
 });
 
-test("video readme records current main-system install preflight status", async () => {
-    const source = await readFile(README_FILE, "utf8");
-
-    assert.match(source, /4090/);
-    assert.match(source, /Docker.*nodejs.*healthy/i);
-    assert.match(source, /echoflow-video.*Loaded extension/i);
-    assert.match(source, /WechatModule.*DictRepository/i);
-    assert.match(source, /echoflow-ai-town.*town-ai-rules\.mjs/i);
-    assert.match(source, /主系统安装未完成/);
-    assert.doesNotMatch(source, /nodejs.*unhealthy/i);
-});
-
 test("video manifest does not keep unused template dependencies", async () => {
     const pkg = JSON.parse(await readFile(PACKAGE_FILE, "utf8"));
     const deps = mergePackageDeps(pkg);

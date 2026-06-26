@@ -21,7 +21,7 @@ import {
     useTestVideoModelEndpointMutation,
     useUpdateVideoBillingRuleMutation,
     useUpdateVideoModelConfigMutation,
-} from "../../services";
+} from "../../services/console";
 import type {
     SaveVideoBillingRuleParams,
     SaveVideoModelConfigParams,

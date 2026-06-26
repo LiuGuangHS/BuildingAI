@@ -198,7 +198,6 @@ export class Upgrade {
                 "max_image_size_mb" integer NOT NULL DEFAULT 20,
                 "max_concurrent_jobs_per_user" integer NOT NULL DEFAULT 3,
                 "daily_jobs_per_user" integer NOT NULL DEFAULT 100,
-                "allow_public_media_url" boolean NOT NULL DEFAULT false,
                 "enabled" boolean NOT NULL DEFAULT true,
                 "created_at" TIMESTAMP NOT NULL DEFAULT now(),
                 "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
@@ -211,7 +210,6 @@ export class Upgrade {
         await this.ensureColumn("video_policy_config", "max_video_size_mb", "integer NOT NULL DEFAULT 300");
         await this.copyColumnIfExists("video_policy_config", "max_media_size_mb", "max_video_size_mb", "300");
         await this.ensureColumn("video_policy_config", "max_image_size_mb", "integer NOT NULL DEFAULT 20");
-        await this.ensureColumn("video_policy_config", "allow_public_media_url", "boolean NOT NULL DEFAULT false");
         await this.ensureColumn("video_policy_config", "max_concurrent_jobs_per_user", "integer NOT NULL DEFAULT 3");
         await this.dataSource.query(`
             CREATE INDEX IF NOT EXISTS "idx_video_policy_config_scope_model"
@@ -255,6 +253,7 @@ export class Upgrade {
                 "billing_amount" double precision NOT NULL DEFAULT 0,
                 "started_at" TIMESTAMP,
                 "completed_at" TIMESTAMP,
+                "deleted_at" TIMESTAMP,
                 "created_at" TIMESTAMP NOT NULL DEFAULT now(),
                 "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
                 CONSTRAINT "pk_video_generation" PRIMARY KEY ("id")
@@ -268,6 +267,7 @@ export class Upgrade {
         await this.ensureColumn("video_generation", "admin_remark", "text");
         await this.ensureColumn("video_generation", "status_events", "jsonb NOT NULL DEFAULT '[]'");
         await this.ensureColumn("video_generation", "progress", "integer NOT NULL DEFAULT 0");
+        await this.ensureColumn("video_generation", "deleted_at", "TIMESTAMP");
         await this.dataSource.query(`
             CREATE INDEX IF NOT EXISTS "idx_video_gen_user"
             ON "echoflow_video"."video_generation" ("user_id")

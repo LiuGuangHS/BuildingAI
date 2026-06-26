@@ -1,4 +1,3 @@
-import { createRequestId } from "@buildingai/http";
 import { uploadFileAuto, type UploadFileResult } from "@buildingai/services/shared";
 import { Alert, AlertDescription, AlertTitle } from "@buildingai/ui/components/ui/alert";
 import { Badge } from "@buildingai/ui/components/ui/badge";
@@ -46,7 +45,7 @@ import {
     modelSupportsMode,
     sanitizeMediaForMode,
 } from "../lib/video-mode";
-import { useWebEstimateVideoBillingMutation, useWebOptimizePromptMutation, useWebPromptOptimizerOptionsQuery } from "../services";
+import { useWebEstimateVideoBillingMutation, useWebOptimizePromptMutation, useWebPromptOptimizerOptionsQuery } from "../services/web";
 import type {
     CreateVideoParams,
     PromptOptimizationStyle,
@@ -64,15 +63,8 @@ interface GenerationFormProps {
     onSubmit: (data: CreateVideoParams) => Promise<void> | void;
 }
 
-const DEFAULT_TEMPLATES = [
-    { label: "自然风光", prompt: "日出时分的雪山湖泊，远处山峰被金色阳光照亮，湖面平静如镜，航拍视角，电影感。" },
-    { label: "城市夜景", prompt: "未来城市夜景，霓虹灯映在雨后街道上，车辆光轨穿过高楼之间，镜头缓慢推进。" },
-    { label: "产品展示", prompt: "一款科技产品在柔和棚拍光下旋转展示，干净背景，细节清晰，商业广告质感。" },
-    { label: "人物镜头", prompt: "年轻创作者在工作室里调整镜头，窗外自然光进入房间，浅景深，真实纪录片风格。" },
-];
-
 export function GenerationForm({ loading, models, modelsLoading, disabledReason, promptTemplates, initialValues, onSubmit }: GenerationFormProps) {
-    const templates = promptTemplates?.length ? promptTemplates : DEFAULT_TEMPLATES;
+    const templates = promptTemplates ?? [];
     const [mode, setMode] = useState<VideoGenerationMode>("text");
     const [prompt, setPrompt] = useState("");
     const [originalPrompt, setOriginalPrompt] = useState<string>();
@@ -288,7 +280,6 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             promptOptimizationStyle: promptOptimizationSource ? promptStyle : undefined,
             promptOptimizerModelId,
             model: selectedModel.id,
-            requestKey: createRequestId(),
             resolution,
             duration: Number(duration) || 5,
             ratio: supportsRatio ? ratio : undefined,
@@ -313,7 +304,6 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             model: selectedModel?.model ?? selectedModel?.id,
             style: promptStyle,
             modelId: optimizerModelId || undefined,
-            requestKey: `prompt-opt-${createRequestId()}`,
             ratio: supportsRatio ? ratio : undefined,
             resolution,
         });

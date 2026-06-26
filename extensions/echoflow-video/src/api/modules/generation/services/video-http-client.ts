@@ -1,6 +1,5 @@
 import { HttpErrorFactory } from "@buildingai/errors";
 import {
-    normalizeProviderBaseUrl,
     requestProviderJson,
     testProviderJsonEndpoint,
     type ProviderHttpErrorContext,
@@ -50,10 +49,6 @@ export async function testVideoJsonEndpoint(
         serviceLabel: retryOptions.serviceLabel ?? "视频接口",
         badRequestLabel: retryOptions.badRequestLabel ?? "视频接口请求参数有误",
     });
-}
-
-export function normalizeVideoBaseUrl(value: string, label = "视频接口 Base URL"): string {
-    return normalizeProviderBaseUrl(value, label);
 }
 
 function classifyVideoHttpError(context: ProviderHttpErrorContext): Error {

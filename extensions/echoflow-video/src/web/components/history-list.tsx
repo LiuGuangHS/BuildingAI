@@ -58,7 +58,6 @@ export function HistoryList({
             originalPrompt: item.originalPrompt,
             promptOptimizationSource: item.promptOptimizationSource,
             promptOptimizationStyle: item.promptOptimizationStyle,
-            promptOptimizerModelId: item.promptOptimizerModelId,
             model: item.model,
             media: item.media,
             resolution: item.parameters.resolution,

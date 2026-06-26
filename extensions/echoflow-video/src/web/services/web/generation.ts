@@ -66,7 +66,7 @@ export function useWebProviderStatusQuery(options?: QueryOptionsUtil<ProviderPub
 export function useWebPromptOptimizerOptionsQuery(options?: QueryOptionsUtil<PromptOptimizerOptions>) {
     return useQuery<PromptOptimizerOptions>({
         queryKey: ["echoflow-video", "web", "prompt-optimizer-options"],
-        queryFn: () => quietly(apiHttpClient.get<PromptOptimizerOptions>("/generation/prompt/options", { silent: true }), { models: [] }),
+        queryFn: () => quietly(apiHttpClient.get<PromptOptimizerOptions>("/generation/prompt/options", { silent: true }), { enabled: false, billingEnabled: false, models: [] }),
         staleTime: 60 * 1000,
         ...options,
     });

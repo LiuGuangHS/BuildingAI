@@ -24,7 +24,7 @@ import { writeReuseParams } from "../lib/reuse-params-storage";
 import {
     useWebRefreshVideoStatusMutation,
     useWebVideoDetailQuery,
-} from "../services";
+} from "../services/web";
 import type { VideoGeneration } from "../services/types/generation";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -232,7 +232,6 @@ function DetailPanel({ generation }: { generation: VideoGeneration }) {
                     {generation.promptOptimizationSource && (
                         <div><span className="text-xs text-muted-foreground">提示词优化</span><p className="text-sm">{getPromptSourceLabel(generation.promptOptimizationSource)} · {generation.promptOptimizationStyle ?? "默认"}</p></div>
                     )}
-                    {generation.failureCategory && <div><span className="text-xs text-muted-foreground">失败分类</span><p className="text-sm">{generation.failureCategory}</p></div>}
                     <div><span className="text-xs text-muted-foreground">创建时间</span><p className="text-sm">{formatFullDateTime(generation.createdAt)}</p></div>
                     {generation.completedAt && <div><span className="text-xs text-muted-foreground">完成时间</span><p className="text-sm">{formatFullDateTime(generation.completedAt)}</p></div>}
                     {duration && <div><span className="text-xs text-muted-foreground">耗时</span><p className="text-sm">{duration}</p></div>}
@@ -322,7 +321,6 @@ function ReuseButton({ generation }: { generation: VideoGeneration }) {
                     originalPrompt: generation.originalPrompt,
                     promptOptimizationSource: generation.promptOptimizationSource,
                     promptOptimizationStyle: generation.promptOptimizationStyle,
-                    promptOptimizerModelId: generation.promptOptimizerModelId,
                     model: generation.model,
                     media: generation.media,
                     resolution: generation.parameters.resolution,

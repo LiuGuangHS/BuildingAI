@@ -19,7 +19,7 @@ import {
     useCreateVideoTemplateMutation,
     useDeleteVideoTemplateMutation,
     useUpdateVideoTemplateMutation,
-} from "../../services";
+} from "../../services/console";
 import type { SaveVideoTemplateParams, VideoPromptTemplate } from "../../services/types/generation";
 
 const abilityOptions = [

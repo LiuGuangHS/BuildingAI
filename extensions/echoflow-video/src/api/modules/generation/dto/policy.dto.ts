@@ -56,9 +56,5 @@ export class UpsertVideoPolicyDto {
 
     @IsBoolean()
     @IsOptional()
-    allowPublicMediaUrl?: boolean;
-
-    @IsBoolean()
-    @IsOptional()
     enabled?: boolean;
 }

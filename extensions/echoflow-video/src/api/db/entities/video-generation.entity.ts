@@ -3,6 +3,7 @@ import { User } from "@buildingai/db/entities";
 import {
     Column,
     CreateDateColumn,
+    DeleteDateColumn,
     Index,
     JoinColumn,
     ManyToOne,
@@ -155,6 +156,9 @@ export class VideoGeneration {
 
     @UpdateDateColumn({ comment: "Updated time" })
     updatedAt: Date;
+
+    @DeleteDateColumn({ nullable: true, comment: "Deleted time" })
+    deletedAt?: Date | null;
 
     @ManyToOne(() => User, { nullable: false })
     @JoinColumn({ name: "user_id" })

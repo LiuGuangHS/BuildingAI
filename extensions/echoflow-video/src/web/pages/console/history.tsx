@@ -12,6 +12,7 @@ import { toast } from "sonner";
 
 import { ConfirmDialog } from "../../components/confirm-dialog";
 import { ConsolePage } from "../../components/console-page";
+import { getBillingLabel, getStatusLabel } from "../../lib/video-labels";
 import { ErrorState } from "../../components/error-state";
 import {
     useBatchCancelVideoMutation,
@@ -19,40 +20,14 @@ import {
     useBatchRetryVideoMutation,
     useDeleteVideoMutation,
     useVideoListQuery,
-} from "../../services";
+} from "../../services/console";
 import type { ConsoleVideoGeneration, VideoGenerationBillingStatus, VideoGenerationStatus } from "../../services/types/generation";
-
-const statusLabel: Record<string, string> = {
-    pending: "排队中",
-    processing: "生成中",
-    succeeded: "已完成",
-    failed: "失败",
-};
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
     pending: "secondary",
     processing: "secondary",
     succeeded: "default",
     failed: "destructive",
-};
-
-const modelLabel: Record<string, string> = {
-    "doubao-seedance-2-0-260128": "Seedance 2.0",
-    "doubao-seedance-1-5-pro-251215": "Seedance 1.5 Pro",
-    "kling-text2video": "可灵文生视频",
-    "kling-image2video": "可灵图生视频",
-    "kling-multi-image2video": "可灵多图参考",
-    "happyhorse-1.0-i2v": "图生视频",
-    "happyhorse-1.0-r2v": "参考图生视频",
-    "happyhorse-1.0-t2v": "文生视频",
-    "happyhorse-1.0-video-edit": "视频编辑",
-};
-
-const billingLabel: Record<string, string> = {
-    pending: "待扣费",
-    deducted: "已扣费",
-    refunded: "已退款",
-    failed: "扣费失败",
 };
 
 export default function HistoryPage() {
@@ -272,13 +247,13 @@ export default function HistoryPage() {
                                             <p className="text-sm font-medium truncate">{item.prompt}</p>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <Badge variant={statusVariant[item.status] ?? "secondary"} className="text-xs">
-                                                    {statusLabel[item.status] ?? item.status}
+                                                    {getStatusLabel(item.status)}
                                                 </Badge>
                                                 <span className="text-muted-foreground text-xs">
-                                                    {modelLabel[item.model] ?? item.model}
+                                                    {item.modelName || item.model}
                                                 </span>
                                                 <span className="text-muted-foreground text-xs">
-                                                    {billingLabel[item.billingStatus] ?? item.billingStatus}
+                                                    {getBillingLabel(item.billingStatus)}
                                                 </span>
                                                 <span className="text-muted-foreground text-xs">
                                                     {new Date(item.createdAt).toLocaleString("zh-CN")}

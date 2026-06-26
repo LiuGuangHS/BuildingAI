@@ -54,20 +54,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         };
     }
 
-    async getPublicTemplates() {
-        const config = await this.findHappyHorseConfig();
-        if (!config?.templates?.length) return [];
-        return config.templates;
-    }
-
-    async getPublicStatus() {
-        return {
-            available: true,
-            configured: true,
-            enabled: true,
-        };
-    }
-
     async updateConsoleConfig(dto: UpdateProviderConfigDto, operatorId?: string) {
         const existing = await this.findHappyHorseConfig();
         const config = existing ?? this.configRepository.create({ provider: HAPPYHORSE_PROVIDER });

@@ -16,7 +16,7 @@ import {
     useScanStaleVideoMutation,
     useVideoHealthQuery,
     useVideoListQuery,
-} from "../../services";
+} from "../../services/console";
 
 export default function AIVideoConsolePage() {
     useDocumentHead({ title: "视频生成管理" });

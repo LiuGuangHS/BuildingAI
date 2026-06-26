@@ -1,10 +1,9 @@
 import { BaseController } from "@buildingai/base";
 import { ExtensionConsoleController } from "@buildingai/core/decorators";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
-import { Body, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
+import { Body, Get, Param, Post, Put, Query } from "@nestjs/common";
 
 import {
-    CreateVideoModelConfigDto,
     QueryVideoModelConfigDto,
     UpdateVideoModelConfigDto,
     VideoModelEndpointDto,
@@ -22,11 +21,6 @@ export class ModelConfigController extends BaseController {
         return this.modelConfigService.list(query);
     }
 
-    @Post()
-    async create(@Body() dto: CreateVideoModelConfigDto) {
-        return this.modelConfigService.createConfig(dto);
-    }
-
     @Put(":id")
     async update(
         @Param("id", UUIDValidationPipe) id: string,
@@ -41,10 +35,5 @@ export class ModelConfigController extends BaseController {
         @Body() dto: VideoModelEndpointDto,
     ) {
         return this.modelConfigService.testEndpoint(id, dto);
-    }
-
-    @Delete(":id")
-    async remove(@Param("id", UUIDValidationPipe) id: string) {
-        return this.modelConfigService.deleteConfig(id);
     }
 }

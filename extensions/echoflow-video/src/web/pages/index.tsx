@@ -17,7 +17,7 @@ import {
     useWebVideoListQuery,
     useWebVideoModelOptionsQuery,
     useWebVideoStatusQuery,
-} from "../services";
+} from "../services/web";
 import type { CreateVideoParams, VideoGeneration } from "../services/types/generation";
 
 export default function AIVideoIndexPage() {
@@ -36,7 +36,7 @@ export default function AIVideoIndexPage() {
 
     const createMutation = useWebCreateVideoMutation();
     const { data: currentGeneration } = useWebVideoStatusQuery(currentId);
-    const availableModelCount = models.filter((model) => model.available && model.enabled && model.configured).length;
+    const availableModelCount = models.length;
     const disabledReason = !modelsLoading && availableModelCount === 0
         ? "视频生成功能暂未开放，请稍后再来。"
         : undefined;
@@ -65,7 +65,6 @@ export default function AIVideoIndexPage() {
         | "originalPrompt"
         | "promptOptimizationSource"
         | "promptOptimizationStyle"
-        | "promptOptimizerModelId"
         | "model"
         | "media"
         | "parameters"
@@ -75,7 +74,6 @@ export default function AIVideoIndexPage() {
             originalPrompt: generation.originalPrompt,
             promptOptimizationSource: generation.promptOptimizationSource,
             promptOptimizationStyle: generation.promptOptimizationStyle,
-            promptOptimizerModelId: generation.promptOptimizerModelId,
             model: generation.model,
             media: generation.media,
             resolution: generation.parameters.resolution,

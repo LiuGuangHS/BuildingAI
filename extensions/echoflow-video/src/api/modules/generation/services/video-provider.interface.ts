@@ -18,20 +18,3 @@ export interface PollTaskOutput {
     videoUrl?: string;
     rawResponse: Record<string, unknown>;
 }
-
-export interface VideoModelOption {
-    id: string;
-    name: string;
-    model: string;
-    modelType: string;
-    description: string;
-    mediaTypes: string[];
-}
-
-export interface VideoProviderClient {
-    readonly providerId: string;
-    submitTask(input: SubmitTaskInput): Promise<SubmitTaskOutput>;
-    pollTask(taskId: string, model?: string): Promise<PollTaskOutput>;
-    testConnection(): Promise<void>;
-    listModels(): VideoModelOption[];
-}

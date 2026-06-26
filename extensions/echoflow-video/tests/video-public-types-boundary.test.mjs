@@ -22,15 +22,18 @@ test("web video generation type does not expose provider debug fields", async ()
     const consoleType = extractInterface(source, "ConsoleVideoGeneration");
     const sensitiveFields = [
         "taskId",
+        "provider",
         "adminRemark",
         "rawRequest",
         "rawResponse",
         "billingRuleSnapshot",
+        "failureCategory",
+        "promptOptimizerModelId",
     ];
 
     for (const field of sensitiveFields) {
         assert.equal(
-            publicType.includes(field),
+            new RegExp(`^\\s+${field}\\??:`, "m").test(publicType),
             false,
             `VideoGeneration must not expose ${field}`,
         );
@@ -46,10 +49,11 @@ test("video web generation uses main system request ids", async () => {
     const generationFormSource = await readFile(GENERATION_FORM_FILE, "utf8");
     const indexPageSource = await readFile(INDEX_PAGE_FILE, "utf8");
 
-    for (const source of [generationFormSource, indexPageSource]) {
-        assert.match(source, /import\s+\{\s*createRequestId\s*\}\s+from\s+"@buildingai\/http"/);
-        assert.doesNotMatch(source, /request-key|createRequestKey/);
-    }
+    assert.match(indexPageSource, /import\s+\{\s*createRequestId\s*\}\s+from\s+"@buildingai\/http"/);
+    assert.match(indexPageSource, /requestKey/);
+    assert.doesNotMatch(generationFormSource, /import\s+\{\s*createRequestId\s*\}\s+from\s+"@buildingai\/http"/);
+    assert.doesNotMatch(generationFormSource, /requestKey:\s*createRequestId/);
+    assert.doesNotMatch(`${generationFormSource}\n${indexPageSource}`, /request-key|createRequestKey/);
     await assert.rejects(access(REQUEST_KEY_FILE));
 });
 

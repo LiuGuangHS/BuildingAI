@@ -20,7 +20,7 @@ import {
     useProviderConfigQuery,
     usePromptOptimizerModelsQuery,
     useUpdateProviderConfigMutation,
-} from "../../services";
+} from "../../services/console";
 
 export default function ProviderConfigPage() {
     useDocumentHead({ title: "视频生成配置" });

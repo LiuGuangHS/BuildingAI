@@ -87,6 +87,7 @@ describe("ModelConfigService", () => {
         const result = await makeService().listEnabledForWeb();
 
         expect(result.map((item) => item.id)).toEqual([ECHOFLOW_VIDEO_MODEL.SEEDANCE_2_0]);
+        expect(result.map((item) => item.model)).toEqual([ECHOFLOW_VIDEO_MODEL.SEEDANCE_2_0]);
     });
 
     it("rejects a model that exists but is disabled by console", async () => {
@@ -140,14 +141,6 @@ describe("ModelConfigService", () => {
 
         expect(result).toEqual([]);
         expect(mockRepository.save).toHaveBeenCalled();
-    });
-
-    it("does not allow creating arbitrary models", async () => {
-        await expect(makeService().createConfig({
-            provider: "other",
-            model: "other-video",
-            displayName: "Other",
-        })).rejects.toThrow("内置目录");
     });
 
     it("keeps protocol fields fixed and saves model endpoints", async () => {

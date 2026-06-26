@@ -256,11 +256,14 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             saved.progress = 20;
             this.appendStatusEvent(saved, VideoGenerationStatus.PROCESSING, "任务已提交到视频接口", "provider");
             await this.generationRepository.save(saved);
-            await this.schedulePollJob(saved.id, VIDEO_POLL_DELAY_MS);
+            await this.scheduleInitialPollOrFail(saved, userId);
 
             this.logger.log(`Video generation ${saved.id} submitted: taskId=${result.taskId}`);
             return saved;
         } catch (error) {
+            if (saved.failureCategory === "queue") {
+                throw error;
+            }
             // Submission failed
             saved.status = VideoGenerationStatus.FAILED;
             saved.errorMessage = this.truncateText(
@@ -429,7 +432,18 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             return saved;
         } catch (error) {
             this.logger.error(`Poll failed for generation ${record.id}`, error);
-            // Don't mark as failed on poll error — let the frontend retry
+            if (options.scheduleNext && !isTerminalStatus(record.status) && record.taskId) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.appendStatusEvent(
+                    record,
+                    record.status,
+                    this.truncateText(`自动轮询失败，将稍后重试: ${message}`, 500),
+                    "system",
+                );
+                const saved = await this.generationRepository.save(record);
+                await this.scheduleNextPollIfNeeded(saved, options);
+                return saved;
+            }
             throw error;
         }
     }
@@ -644,17 +658,33 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
     }
 
     private toPublicGeneration(record: VideoGeneration & { deletedAt?: Date | null }) {
-        const {
-            userId: _userId,
-            taskId: _taskId,
-            adminRemark: _adminRemark,
-            rawRequest: _rawRequest,
-            rawResponse: _rawResponse,
-            billingRuleSnapshot: _billingRuleSnapshot,
-            deletedAt: _deletedAt,
-            ...publicRecord
-        } = record;
-        return publicRecord;
+        return {
+            id: record.id,
+            model: record.model,
+            modelConfigId: record.modelConfigId,
+            modelName: record.modelName,
+            status: record.status,
+            billingStatus: record.billingStatus,
+            prompt: record.prompt,
+            originalPrompt: record.originalPrompt,
+            promptOptimizationSource: record.promptOptimizationSource,
+            promptOptimizationStyle: record.promptOptimizationStyle,
+            media: record.media,
+            parameters: record.parameters,
+            videoUrl: record.videoUrl,
+            errorMessage: record.errorMessage,
+            progress: record.progress,
+            billingAmount: record.billingAmount,
+            startedAt: record.startedAt,
+            completedAt: record.completedAt,
+            createdAt: record.createdAt,
+            updatedAt: record.updatedAt,
+            statusEvents: (record.statusEvents ?? []).map((event) => ({
+                status: event.status,
+                message: event.message,
+                at: event.at,
+            })),
+        };
     }
 
     async deleteOwnedById(id: string, userId: string) {
@@ -822,7 +852,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
                 if (!file) {
                     throw HttpErrorFactory.badRequest("媒体素材文件不存在");
                 }
-                if (file.deletedAt) {
+                if ((file as { deletedAt?: Date | null }).deletedAt) {
                     throw HttpErrorFactory.badRequest("媒体素材文件已删除");
                 }
                 if (file.uploaderId !== userId) {
@@ -996,7 +1026,11 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         if (!options.scheduleNext || isTerminalStatus(record.status) || !record.taskId) {
             return;
         }
-        await this.schedulePollJob(record.id, VIDEO_POLL_DELAY_MS);
+        try {
+            await this.schedulePollJob(record.id, VIDEO_POLL_DELAY_MS);
+        } catch (error) {
+            await this.failPollScheduling(record, record.userId, error);
+        }
     }
 
     private async schedulePollJob(id: string, delayMs: number) {
@@ -1016,7 +1050,36 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             const message = error instanceof Error ? error.message : String(error);
             this.logger.error(`Schedule video poll ${id} failed: ${message}`, error);
             await this.recordPollScheduleFailure(id, message);
+            throw HttpErrorFactory.badRequest("视频任务轮询入队失败，请稍后重试");
         }
+    }
+
+    private async scheduleInitialPollOrFail(record: VideoGeneration, userId: string) {
+        try {
+            await this.schedulePollJob(record.id, VIDEO_POLL_DELAY_MS);
+        } catch (error) {
+            await this.failPollScheduling(record, userId, error);
+        }
+    }
+
+    private async failPollScheduling(record: VideoGeneration, userId: string, error: unknown) {
+        const latest = await this.generationRepository.findOne({
+            where: { id: record.id } as FindOptionsWhere<VideoGeneration>,
+        });
+        const failed = latest ?? record;
+        if (isTerminalStatus(failed.status)) {
+            throw error;
+        }
+        failed.status = VideoGenerationStatus.FAILED;
+        failed.errorMessage = "视频任务轮询入队失败，请稍后重试";
+        failed.failureCategory = "queue";
+        failed.progress = 100;
+        failed.completedAt = new Date();
+        this.appendStatusEvent(failed, VideoGenerationStatus.FAILED, failed.errorMessage, "system");
+        await this.refundIfNeeded(failed, userId, "视频任务入队失败自动退款");
+        const saved = await this.generationRepository.save(failed);
+        await this.notifyTerminalStatus(saved);
+        throw error;
     }
 
     private async recordPollScheduleFailure(id: string, message: string) {
@@ -1039,22 +1102,28 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         if (!isTerminalStatus(record.status)) return;
 
         const succeeded = record.status === VideoGenerationStatus.SUCCEEDED;
-        await this.notificationService.notifyUser({
-            userId: record.userId,
-            sceneCode: succeeded
-                ? `${EXTENSION_ID}.generation.succeeded`
-                : `${EXTENSION_ID}.generation.failed`,
-            level: succeeded ? "success" : "error",
-            linkUrl: `/extension/${EXTENSION_ID}/`,
-            sourceType: "generation",
-            sourceId: record.id,
-            data: {
-                taskName: record.modelName || record.model || "视频任务",
-                modelName: record.modelName || record.model,
-                reason: record.errorMessage || "请稍后重试或联系管理员",
-                completedAt: record.completedAt?.toISOString(),
-            },
-        });
+        try {
+            await this.notificationService.notifyUser({
+                userId: record.userId,
+                sceneCode: succeeded
+                    ? `${EXTENSION_ID}.generation.succeeded`
+                    : `${EXTENSION_ID}.generation.failed`,
+                level: succeeded ? "success" : "error",
+                linkUrl: `/extension/${EXTENSION_ID}/`,
+                sourceType: "generation",
+                sourceId: record.id,
+                data: {
+                    taskName: record.modelName || record.model || "视频任务",
+                    modelName: record.modelName || record.model,
+                    reason: record.errorMessage || "请稍后重试或联系管理员",
+                    completedAt: record.completedAt?.toISOString(),
+                },
+            });
+        } catch (error) {
+            this.logger.warn(
+                `Notify video generation ${record.id} terminal status failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
     }
 
     private async saveNonTerminalUpdate(record: VideoGeneration) {
