@@ -171,9 +171,10 @@ export class VersionManagerService implements OnModuleInit {
      * Write version file
      */
     private async writeVersionFile(version: string): Promise<void> {
-        const versionsDir = path.join(process.cwd(), "data", "versions");
+        const versionsDir = this.versionDetector.getVersionsDir();
         const versionFilePath = path.join(versionsDir, version);
 
+        await fse.mkdirp(versionsDir);
         await fse.writeFile(
             versionFilePath,
             JSON.stringify(

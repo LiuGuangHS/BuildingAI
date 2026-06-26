@@ -22,13 +22,45 @@ function parseMigrationVersion(file: string) {
     if (!match) return null;
 
     const parts = match[1].split("-");
-    for (let i = parts.length; i > 0; i--) {
-        const version = parts.slice(0, i).join("-");
-        if (semver.valid(version)) return version;
+    if (parts.length === 0) return null;
+
+    // Migration naming: <timestamp>-<version>[-<prerelease>]-<description>.js
+    // - First segment is always the major.minor.patch base version (e.g. 26.1.2)
+    // - Second segment, if it matches <tag>.<number> (rc.1 / beta.2 / alpha.1 / next.3),
+    //   is the prerelease identifier and part of the version.
+    // - Everything after that is the human-readable description.
+    const versionParts = [parts[0]];
+    if (!semver.valid(parts[0])) return null;
+
+    if (parts.length > 1 && /^(alpha|beta|rc|next)\.\d+$/.test(parts[1])) {
+        versionParts.push(parts[1]);
     }
 
-    return null;
+    const version = versionParts.join("-");
+    return semver.valid(version) ? version : null;
 }
+
+/**
+ * Walk up from the given directory to find the project root
+ * (the directory containing pnpm-workspace.yaml).
+ * Falls back to process.cwd() if not found.
+ */
+function findProjectRoot(startDir: string): string {
+    let currentDir = startDir;
+    let maxDepth = 10;
+    while (maxDepth > 0) {
+        if (fse.existsSync(path.join(currentDir, "pnpm-workspace.yaml"))) {
+            return currentDir;
+        }
+        const parentDir = path.dirname(currentDir);
+        if (parentDir === currentDir) break;
+        currentDir = parentDir;
+        maxDepth--;
+    }
+    return process.cwd();
+}
+
+const PROJECT_ROOT = findProjectRoot(__dirname);
 
 /**
  * Version detector
@@ -41,8 +73,16 @@ export class VersionDetector {
     private readonly packageJsonPath: string;
 
     constructor() {
-        this.versionsDir = path.join(process.cwd(), "data", "versions");
-        this.packageJsonPath = path.join(process.cwd(), "..", "..", "package.json");
+        this.versionsDir = path.join(PROJECT_ROOT, "data", "versions");
+        this.packageJsonPath = path.join(PROJECT_ROOT, "package.json");
+    }
+
+    getProjectRoot(): string {
+        return PROJECT_ROOT;
+    }
+
+    getVersionsDir(): string {
+        return this.versionsDir;
     }
 
     /**

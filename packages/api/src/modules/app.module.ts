@@ -49,6 +49,7 @@ import { Pm2Module } from "./pm2/pm2.module";
 import { RechargeModule } from "./recharge/recharge.module";
 import { RoleModule } from "./role/role.module";
 import { ScheduleModule } from "./schedule/schedule.module";
+import { SitemapModule } from "./sitemap/sitemap.module";
 import { SystemModule } from "./system/system.module";
 import { TagModule } from "./tag/tag.module";
 import { UploadModule } from "./upload/upload.module";
@@ -122,6 +123,7 @@ export class AppModule {
                 CloudStorageModule,
                 ScheduleModule,
                 SmsModule,
+                SitemapModule,
                 NoticeModule,
                 NotificationModule,
                 await ExtensionCoreModule.register(),
