@@ -1,12 +1,10 @@
 import { Button } from "@buildingai/ui/components/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 
 import { ASSETS } from "../assets";
 import { AssetImage } from "../components/asset-image";
 import { AdvicePanel, AiCompanion, AiUsageConfirmCard, BuildingPanel, CommandSummary, CompactGoalBoard, EventCard, EventPanel, GameModalShell, NpcHotspotAvatar, NpcPanel, ResourceMeter, ResourcePill, RewardToast, SavePicker, SettlementPanel, StageTurnStrip, TaskPanel, getModalTitle, type GameModal } from "../components/game-panels";
-import { readAiUsageAcknowledged, writeAiUsageAcknowledged } from "../lib/ai-usage-storage";
 import { findPrimaryEvent, resolveActionModal, resolveEventScene } from "../lib/game-rules";
 import { createTownViewModel, getActionState, type TownBuildingHotspotViewModel, type TownCharacterHotspotViewModel, type TownSceneKind } from "../lib/town-view-model";
 import { chatWithTownCharacter, createTownSave, deleteTownSave, getTownSave, listTownSaves, runTownAction } from "../services/web/town";
@@ -36,7 +34,6 @@ export default function TownIndexPage() {
     const [resultEventId, setResultEventId] = useState<string | null>(null);
     const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
     const [pendingAiAction, setPendingAiAction] = useState<PendingAiAction>(null);
-    const [aiUsageAcknowledged, setAiUsageAcknowledged] = useState(readAiUsageAcknowledged);
 
     const savesQuery = useQuery({
         queryKey: ["town-saves"],
@@ -172,7 +169,6 @@ export default function TownIndexPage() {
     }
 
     function confirmAiUsage(action: PendingAiAction) {
-        if (aiUsageAcknowledged) return true;
         setPendingAiAction(action);
         setModal("ai-confirm");
         return false;
@@ -185,8 +181,6 @@ export default function TownIndexPage() {
     }
 
     function acceptAiUsage() {
-        writeAiUsageAcknowledged();
-        setAiUsageAcknowledged(true);
         const action = pendingAiAction;
         setPendingAiAction(null);
         setModal(action?.type === "chat" ? "npc" : null);
@@ -231,13 +225,6 @@ export default function TownIndexPage() {
                                 <li>最后休息结算</li>
                             </ol>
                             <p>完成后会留下关系、约定和第二天目标。</p>
-                        </div>
-                        <div className="onboarding-growth-card" aria-label="成长预览">
-                            <span>成长预览</span>
-                            <div className="onboarding-growth-lanes">
-                                {["故事", "记忆", "章节", "活动", "外观"].map((item) => <em key={item}>{item}</em>)}
-                            </div>
-                            <p>不是购买入口，正式扣费和订阅权益接入后再开放。</p>
                         </div>
                         <div className="onboarding-actions">
                                 <Button type="button" variant="default" className="game-primary" disabled={createMutation.isPending || !townServiceAvailable} onClick={() => createMutation.mutate()}>
@@ -313,8 +300,7 @@ export default function TownIndexPage() {
                     <ActionPendingBanner action={pendingAction} characterName={activeCharacter?.name} />
                     {visibleResultEvent?.result ? <div className="floating-result"><RewardToast event={visibleResultEvent} /></div> : null}
                     {errorMessage ? <div className="game-toast error" role="alert" aria-live="assertive">{errorMessage}</div> : null}
-                    <AnimatePresence>
-                        {modal ? (
+                    {modal ? (
                         <GameModalShell key={modal} title={getModalTitle(modal, selectedBuilding, activeCharacter)} onClose={() => setModal(null)}>
                             {modal === "building" && selectedBuilding ? (
                                 <BuildingPanel building={selectedBuilding} pending={actionMutation.isPending} save={save} onAction={runAction} />
@@ -330,7 +316,6 @@ export default function TownIndexPage() {
                                 {modal === "ai-confirm" ? <AiUsageConfirmCard kind={pendingAiAction?.type ?? "advice"} characterName={pendingAiAction?.type === "chat" ? pendingAiAction.characterName : undefined} onAccept={acceptAiUsage} onCancel={() => { setPendingAiAction(null); setModal(null); }} /> : null}
                         </GameModalShell>
                     ) : null}
-                    </AnimatePresence>
                 </section>
             )}
         </main>

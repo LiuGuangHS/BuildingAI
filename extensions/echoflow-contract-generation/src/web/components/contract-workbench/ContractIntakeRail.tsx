@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@buildingai/ui/components/ui/tabs";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
+import { useId } from "react";
 
 import type { ContractWorkbenchMode, ContractWorkbenchState } from "./contract-workbench-view-model";
 import type { ContractTemplate, ContractTemplateField } from "../../services/types";
@@ -37,6 +38,7 @@ export function ContractIntakeRail(props: {
     stance: string;
     exportType: "contract" | "contract_with_report" | "risk_report";
     isBusy: boolean;
+    disabled?: boolean;
     primaryActionPending: boolean;
     primaryActionLabel: string;
     onPrimaryAction: () => void;
@@ -48,13 +50,16 @@ export function ContractIntakeRail(props: {
     onFillExample: () => void;
 }) {
     const requiredFields = props.selectedTemplate?.fields.filter((field) => field.required).slice(0, 5) ?? [];
+    const promptId = useId();
+    const uploadId = useId();
+    const inputDisabled = Boolean(props.disabled || props.isBusy || props.primaryActionPending);
 
     return (
         <section className="grid gap-2.5 rounded-lg border bg-card/95 p-3 shadow-sm">
             <Tabs value={props.mode} onValueChange={(value) => props.onModeChange(value as ContractWorkbenchMode)}>
                 <TabsList className="w-full">
-                    <TabsTrigger value="draft">起草</TabsTrigger>
-                    <TabsTrigger value="review">审查</TabsTrigger>
+                    <TabsTrigger value="draft" disabled={inputDisabled}>起草</TabsTrigger>
+                    <TabsTrigger value="review" disabled={inputDisabled}>审查</TabsTrigger>
                 </TabsList>
             </Tabs>
 
@@ -88,32 +93,33 @@ export function ContractIntakeRail(props: {
                             field={field}
                             value={props.variables[field.key] ?? ""}
                             error={props.errors[field.key]}
+                            disabled={inputDisabled}
                             onChange={(value) => props.onVariablesChange({ ...props.variables, [field.key]: value })}
                         />
                     ))}
-                    <Label className="grid gap-1.5">
-                        <span className="text-xs font-semibold text-muted-foreground">补充要求</span>
-                        <Textarea className="min-h-[104px] resize-y bg-muted/30" value={props.prompt} onChange={(event) => props.onPromptChange(event.target.value)} placeholder="付款节点、验收标准、违约责任..." />
-                    </Label>
+                    <div className="grid gap-1.5">
+                        <Label htmlFor={promptId} className="text-xs font-semibold text-muted-foreground">补充要求</Label>
+                        <Textarea id={promptId} className="min-h-[104px] resize-y bg-muted/30" value={props.prompt} onChange={(event) => props.onPromptChange(event.target.value)} placeholder="付款节点、验收标准、违约责任..." disabled={inputDisabled} />
+                    </div>
                 </div>
             )}
 
             {props.mode === "review" && (
-                <Label className="grid gap-2 rounded-lg border border-dashed border-primary/25 bg-primary/5 p-2.5">
-                    <span className="text-sm font-semibold">上传合同</span>
-                    <Input className="bg-muted/30" type="file" accept=".doc,.docx,.pdf,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" onChange={(event) => props.onReviewFileChange(event.target.files?.[0] ?? null)} />
+                <div className="grid gap-2 rounded-lg border border-dashed border-primary/25 bg-primary/5 p-2.5">
+                    <Label htmlFor={uploadId} className="text-sm font-semibold">上传合同</Label>
+                    <Input id={uploadId} className="bg-muted/30" type="file" accept=".doc,.docx,.pdf,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" onChange={(event) => props.onReviewFileChange(event.target.files?.[0] ?? null)} disabled={inputDisabled} />
                     <em className="text-xs not-italic text-muted-foreground">{props.reviewFile ? props.reviewFile.name : "Word / PDF / 文本"}</em>
-                </Label>
+                </div>
             )}
 
             <div className="grid grid-cols-2 gap-2">
-                <Select value={props.stance} onValueChange={props.onStanceChange}>
+                <Select value={props.stance} onValueChange={props.onStanceChange} disabled={inputDisabled}>
                     <SelectTrigger className="bg-muted/30"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {stanceOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                <Select value={props.exportType} onValueChange={(value) => props.onExportTypeChange(value as typeof props.exportType)}>
+                <Select value={props.exportType} onValueChange={(value) => props.onExportTypeChange(value as typeof props.exportType)} disabled={inputDisabled}>
                     <SelectTrigger className="bg-muted/30"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {exportTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
@@ -122,8 +128,8 @@ export function ContractIntakeRail(props: {
             </div>
 
             <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
-                <Button className="min-h-9" variant="outline" type="button" onClick={props.onFillExample}>示例</Button>
-                <Button type="button" onClick={props.onPrimaryAction} disabled={props.isBusy || props.primaryActionPending || props.state.primaryAction.tone === "blocked"} loading={props.primaryActionPending}>
+                <Button className="min-h-9" variant="outline" type="button" onClick={props.onFillExample} disabled={inputDisabled}>示例</Button>
+                <Button type="button" onClick={props.onPrimaryAction} disabled={inputDisabled || props.state.primaryAction.tone === "blocked"} loading={props.primaryActionPending}>
                     {props.primaryActionLabel}
                 </Button>
             </div>
@@ -139,23 +145,25 @@ function TemplateCompactField(props: {
     field: ContractTemplateField;
     value: string;
     error?: string;
+    disabled?: boolean;
     onChange: (value: string) => void;
 }) {
+    const id = useId();
     return (
-        <Label className="grid gap-1.5">
-            <span className="text-xs font-semibold text-muted-foreground">{props.field.label}{props.field.required ? " *" : ""}</span>
+        <div className="grid gap-1.5">
+            <Label htmlFor={id} className="text-xs font-semibold text-muted-foreground">{props.field.label}{props.field.required ? " *" : ""}</Label>
             {props.field.type === "select" ? (
-                <Select value={props.value || EMPTY_SELECT_VALUE} onValueChange={(value) => props.onChange(value === EMPTY_SELECT_VALUE ? "" : value)}>
-                    <SelectTrigger className="bg-muted/30"><SelectValue placeholder="请选择" /></SelectTrigger>
+                <Select value={props.value || EMPTY_SELECT_VALUE} onValueChange={(value) => props.onChange(value === EMPTY_SELECT_VALUE ? "" : value)} disabled={props.disabled}>
+                    <SelectTrigger id={id} className="bg-muted/30"><SelectValue placeholder="请选择" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value={EMPTY_SELECT_VALUE}>请选择</SelectItem>
                         {(props.field.options ?? []).map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
                     </SelectContent>
                 </Select>
             ) : (
-                <Input className="bg-muted/30" type={props.field.type === "number" ? "number" : props.field.type === "date" ? "date" : "text"} value={props.value} onChange={(event) => props.onChange(event.target.value)} placeholder={props.field.placeholder} />
+                <Input id={id} className="bg-muted/30" type={props.field.type === "number" ? "number" : props.field.type === "date" ? "date" : "text"} value={props.value} onChange={(event) => props.onChange(event.target.value)} placeholder={props.field.placeholder} disabled={props.disabled} />
             )}
             {props.error && <em className={cn("text-xs not-italic text-destructive")}>{props.error}</em>}
-        </Label>
+        </div>
     );
 }

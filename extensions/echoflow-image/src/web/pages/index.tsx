@@ -123,7 +123,7 @@ export default function EchoflowImagePublicPage() {
             referenceImageUrl: generation.referenceImageUrl,
             referenceImageFileId: generation.referenceImageFileId,
             sourceImages: generation.sourceImages,
-            modelId: generation.modelConfigId ?? generation.modelId,
+            modelId: generation.modelId,
             size: generation.size,
             n: generation.n,
             quality: generation.quality,
@@ -202,7 +202,7 @@ export default function EchoflowImagePublicPage() {
                         estimatedPower={estimateMutation.data?.amount}
                         onEstimateChange={(data) => {
                             estimateMutation.mutate({
-                                modelConfigId: data.pluginConfigId,
+                                modelConfigId: data.modelId,
                                 mode: data.mode,
                                 size: data.size,
                                 n: data.n,
@@ -210,9 +210,14 @@ export default function EchoflowImagePublicPage() {
                             });
                         }}
                         onEnhancePrompt={async (data) => {
-                            const result = await promptEnhanceMutation.mutateAsync(data);
-                            toast.success(result.source === "ai" ? "提示词已润色" : "已用本地规则润色");
-                            return result;
+                            try {
+                                const result = await promptEnhanceMutation.mutateAsync(data);
+                                toast.success("提示词已润色");
+                                return result;
+                            } catch (error) {
+                                toast.error(error instanceof Error ? error.message : "提示词润色失败");
+                                throw error;
+                            }
                         }}
                         onSubmit={handleSubmit}
                     />

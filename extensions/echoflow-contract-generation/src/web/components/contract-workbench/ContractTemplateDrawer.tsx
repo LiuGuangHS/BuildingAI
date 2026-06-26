@@ -10,6 +10,7 @@ export function ContractTemplateDrawer(props: {
     tasks: ContractGenerationTask[];
     keyword: string;
     selectedTemplate?: ContractTemplate;
+    disabled?: boolean;
     onKeywordChange: (value: string) => void;
     onSelectTemplate: (template: ContractTemplate) => void;
     onSelectTask: (task: ContractGenerationTask) => void;
@@ -24,7 +25,7 @@ export function ContractTemplateDrawer(props: {
                     <SheetTitle>模板与最近合同</SheetTitle>
                 </SheetHeader>
                 <div className="grid gap-2.5 px-3.5 pb-3.5">
-                    <Input value={props.keyword} onChange={(event) => props.onKeywordChange(event.target.value)} placeholder="搜索模板、行业或类型" />
+                    <Input value={props.keyword} onChange={(event) => props.onKeywordChange(event.target.value)} placeholder="搜索模板、行业或类型" disabled={props.disabled} />
                     <div className="grid gap-2">
                         <h3 className="mt-2 text-sm font-semibold tracking-normal">模板</h3>
                         {props.templates.map((template) => (
@@ -32,9 +33,10 @@ export function ContractTemplateDrawer(props: {
                                 key={template.id}
                                 variant="ghost"
                                 className={cn("grid h-auto justify-stretch whitespace-normal p-2.5 text-left", props.selectedTemplate?.id === template.id && "bg-primary/10 text-primary")}
-                                type="button"
-                                onClick={() => props.onSelectTemplate(template)}
-                            >
+                                 type="button"
+                                 onClick={() => props.onSelectTemplate(template)}
+                                 disabled={props.disabled}
+                             >
                                 <strong className="block min-w-0 truncate">{template.name}</strong>
                                 <span className="block min-w-0 truncate text-xs text-muted-foreground">{template.industry} / {template.contractType}</span>
                             </Button>

@@ -7,6 +7,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { TownCharacter, TownEvent, TownSave, type TownCharacterMemory, type TownEventChoice, type TownEventResult, type TownWorldState } from "../../../db/entities";
 import {
     TOWN_ACTION_CATALOG,
+    TOWN_ACTION_LABELS,
     TOWN_CHARACTER_CATALOG,
     TOWN_CHOICE_ACTION_OVERRIDES,
     TOWN_CONTENT_PACK_MANIFEST,
@@ -23,7 +24,7 @@ import {
 } from "../catalog";
 import { type CreateTownSaveDto, type QueryTownSaveDto, type TownActionDto, type TownChatDto } from "../dto";
 import { TownAiService, type TownAiBillingContext } from "./town-ai.service";
-import { TownProgressRulesService, type ProgressContext, type ProgressResult, type TownGoal, type TownQuestState, type TownTask } from "./town-progress-rules.service";
+import { TownProgressRulesService, type ProgressContext, type ProgressResult, type TownGoal, type TownTask } from "./town-progress-rules.service";
 import { TownRelationshipRulesService, type RelationshipBonus, type RelationshipUpdate } from "./town-relationship-rules.service";
 import { TownWorldRulesService, type TownFestivalState } from "./town-world-rules.service";
 
@@ -84,37 +85,19 @@ type TownActionAuditContext = {
 
 @Injectable()
 export class TownService {
-    private readonly saveRepo: Repository<TownSave>;
-    private readonly characterRepo: Repository<TownCharacter>;
-    private readonly eventRepo: Repository<TownEvent>;
-    private readonly townAiService: TownAiService;
-    private readonly townWorldRulesService: TownWorldRulesService;
-    private readonly townRelationshipRulesService: TownRelationshipRulesService;
-    private readonly townProgressRulesService: TownProgressRulesService;
-    private readonly billingService: ExtensionBillingService;
-
     constructor(
         @InjectRepository(TownSave)
-        saveRepo: Repository<TownSave>,
+        private readonly saveRepo: Repository<TownSave>,
         @InjectRepository(TownCharacter)
-        characterRepo: Repository<TownCharacter>,
+        private readonly characterRepo: Repository<TownCharacter>,
         @InjectRepository(TownEvent)
-        eventRepo: Repository<TownEvent>,
-        townAiService: TownAiService,
-        townWorldRulesService: TownWorldRulesService,
-        townRelationshipRulesService: TownRelationshipRulesService,
-        townProgressRulesService: TownProgressRulesService,
-        billingService: ExtensionBillingService,
-    ) {
-        this.saveRepo = saveRepo;
-        this.characterRepo = characterRepo;
-        this.eventRepo = eventRepo;
-        this.townAiService = townAiService;
-        this.townWorldRulesService = townWorldRulesService;
-        this.townRelationshipRulesService = townRelationshipRulesService;
-        this.townProgressRulesService = townProgressRulesService;
-        this.billingService = billingService;
-    }
+        private readonly eventRepo: Repository<TownEvent>,
+        private readonly townAiService: TownAiService,
+        private readonly townWorldRulesService: TownWorldRulesService,
+        private readonly townRelationshipRulesService: TownRelationshipRulesService,
+        private readonly townProgressRulesService: TownProgressRulesService,
+        private readonly billingService: ExtensionBillingService,
+    ) {}
 
     async createSave(userId: string, dto: CreateTownSaveDto) {
         const save = this.saveRepo.create({
@@ -155,21 +138,19 @@ export class TownService {
     }
 
     async getUserSaves(userId: string, query: QueryTownSaveDto) {
-        const page = query.page ?? 1;
-        const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
-        const [list, total] = await this.buildSaveQuery(query)
-            .andWhere("save.userId = :userId", { userId })
-            .skip((page - 1) * pageSize)
-            .take(pageSize)
-            .getManyAndCount();
-
-        return { list, total, page, pageSize };
+        return this.getSavesPage(query, userId);
     }
 
     async getAllSaves(query: QueryTownSaveDto) {
+        return this.getSavesPage(query);
+    }
+
+    private async getSavesPage(query: QueryTownSaveDto, userId?: string) {
         const page = query.page ?? 1;
         const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
-        const [list, total] = await this.buildSaveQuery(query)
+        const queryBuilder = this.buildSaveQuery(query);
+        if (userId) queryBuilder.andWhere("save.userId = :userId", { userId });
+        const [list, total] = await queryBuilder
             .skip((page - 1) * pageSize)
             .take(pageSize)
             .getManyAndCount();
@@ -178,21 +159,16 @@ export class TownService {
     }
 
     async getSaveDetailByAdmin(saveId: string): Promise<TownSaveDetail> {
-        const save = await this.saveRepo.findOne({
-            where: { id: saveId },
-            relations: { characters: true, events: true },
-        });
-
-        if (!save) {
-            throw new NotFoundException("小镇存档不存在");
-        }
-
-        return this.hydrateSave(save);
+        return this.getSaveDetailByWhere({ id: saveId });
     }
 
     async getSaveDetail(userId: string, saveId: string): Promise<TownSaveDetail> {
+        return this.getSaveDetailByWhere({ id: saveId, userId });
+    }
+
+    private async getSaveDetailByWhere(where: { id: string; userId?: string }): Promise<TownSaveDetail> {
         const save = await this.saveRepo.findOne({
-            where: { id: saveId, userId },
+            where,
             relations: { characters: true, events: true },
         });
 
@@ -224,7 +200,7 @@ export class TownService {
                 const config = this.applyRelationshipBonuses(this.createActionConfig(dto.action, save, characters, choice, dto.buildingId), bonuses);
                 this.ensureActionAffordable(save, dto.action, config);
                 const retentionReward = this.consumeRetentionReward(save, dto.action);
-                const settlement = dto.action === "rest" ? this.createDailySettlement(save) : null;
+                const settlement = dto.action === "rest" ? this.townWorldRulesService.createDailySettlement(save, this.normalizeWorldState(save.worldState, save.day)) : null;
                 const auditContext: TownActionAuditContext = {
                 action: dto.action,
                 source: settlement ? "settlement" : preparedAi ? "model-assisted" : "rules",
@@ -265,12 +241,12 @@ export class TownService {
                     weather: settlement.weather,
                     focus: "新的一天",
                     lastSettlement: settlement,
-                    dailyTasks: this.createDailyTasks(currentDay),
-                    weeklyGoal: this.shouldRefreshWeeklyGoal(save.worldState.weeklyGoal, currentDay) ? this.createWeeklyGoal({ ...save, day: currentDay }) : save.worldState.weeklyGoal,
+                    dailyTasks: this.townProgressRulesService.createDailyTasks(currentDay),
+                    weeklyGoal: this.shouldRefreshWeeklyGoal(save.worldState.weeklyGoal, currentDay) ? this.townProgressRulesService.createWeeklyGoal(currentDay) : save.worldState.weeklyGoal,
                 };
             }
             if (config.upgradedBuildingId) {
-                save.worldState = this.upgradeBuilding(save.worldState, config.upgradedBuildingId);
+                save.worldState = this.townWorldRulesService.upgradeBuilding(this.normalizeWorldState(save.worldState), config.upgradedBuildingId);
             }
             const progress = this.applyProgress(save, {
                 action: dto.action,
@@ -422,9 +398,9 @@ export class TownService {
                     throw new NotFoundException("小镇居民不存在");
                 }
 
-                const oldLevel = this.getRelationshipLevel(character.relationship);
+                const oldLevel = this.townRelationshipRulesService.getRelationshipLevel(character.relationship);
                 character.relationship = Math.min(100, character.relationship + 3);
-                const newLevel = this.getRelationshipLevel(character.relationship);
+                const newLevel = this.townRelationshipRulesService.getRelationshipLevel(character.relationship);
                 character.status = "刚聊过天";
                 character.memory = this.updateCharacterMemory(character, dto.message, replyResult.text, save.day);
 
@@ -537,7 +513,7 @@ export class TownService {
             ...current,
             lastMessage: message,
             lastReply: reply,
-            relationshipLevel: this.getRelationshipLevel(character.relationship),
+            relationshipLevel: this.townRelationshipRulesService.getRelationshipLevel(character.relationship),
             mood: this.inferMemoryMood(message, reply),
             preferences,
             promises,
@@ -830,9 +806,9 @@ export class TownService {
             unlockedAreas: [...TOWN_INITIAL_AREAS],
             buildings: createDefaultTownBuildings(),
             flags: {},
-            dailyTasks: this.createDailyTasks(1),
-            weeklyGoal: this.createWeeklyGoal(),
-            mainQuest: this.createMainQuest(1),
+            dailyTasks: this.townProgressRulesService.createDailyTasks(1),
+            weeklyGoal: this.townProgressRulesService.createWeeklyGoal(1),
+            mainQuest: this.townProgressRulesService.createMainQuest(1),
             achievements: [],
             activeFestival: null,
             lastSettlement: null,
@@ -1149,18 +1125,6 @@ export class TownService {
         return !budget.usedActions.includes(action);
     }
 
-    private getBuildingLevel(worldState: TownWorldState, buildingId: string) {
-        return this.townWorldRulesService.getBuildingLevel(worldState, buildingId);
-    }
-
-    private getWeatherEffect(weather: string) {
-        return this.townWorldRulesService.getWeatherEffect(weather);
-    }
-
-    private createDailySettlement(save: TownSave): TownSettlement {
-        return this.townWorldRulesService.createDailySettlement(save, this.normalizeWorldState(save.worldState, save.day));
-    }
-
     private applyAreaUnlocks(save: TownSave) {
         const worldState = this.normalizeWorldState(save.worldState, save.day);
         const result = this.townWorldRulesService.applyAreaUnlocks(worldState);
@@ -1170,10 +1134,10 @@ export class TownService {
 
     private createActionConfig(action: TownActionDto["action"], save: TownSave, characters: TownCharacter[], choice?: TownEventChoice | null, buildingId?: string): ActionConfig {
         const worldState = this.normalizeWorldState(save.worldState, save.day);
-        const restaurantLevel = this.getBuildingLevel(worldState, "restaurant");
-        const floristLevel = this.getBuildingLevel(worldState, "florist");
-        const squareLevel = this.getBuildingLevel(worldState, "square");
-        const weatherEffect = this.getWeatherEffect(worldState.weather);
+        const restaurantLevel = this.townWorldRulesService.getBuildingLevel(worldState, "restaurant");
+        const floristLevel = this.townWorldRulesService.getBuildingLevel(worldState, "florist");
+        const squareLevel = this.townWorldRulesService.getBuildingLevel(worldState, "square");
+        const weatherEffect = this.townWorldRulesService.getWeatherEffect(worldState.weather);
         if (action === "upgrade") {
             return this.createUpgradeConfig(save, characters, buildingId);
         }
@@ -1203,9 +1167,13 @@ export class TownService {
 
     private resolveChoice(dto: TownActionDto): TownEventChoice | null {
         if (!dto.choiceId) return null;
-        const choice = this.createChoiceCatalog()[dto.choiceId];
+        const choice = createTownChoiceCatalog()[dto.choiceId];
         if (!choice) {
             throw new BadRequestException("小镇事件选项不存在");
+        }
+        // 修复：choiceId 必须与 action 匹配，否则可绕过行动机制（如 action=operate+choiceId=rest 免费恢复体力）
+        if (choice.id !== dto.action) {
+            throw new BadRequestException("事件选项与当前行动不匹配");
         }
         return choice;
     }
@@ -1222,7 +1190,7 @@ export class TownService {
             throw new BadRequestException("该建筑已达到当前最高等级");
         }
         const discount = this.townRelationshipRulesService.getUpgradeDiscount(characters);
-        const cost = Math.max(20, this.getBuildingUpgradeCost(building?.level ?? 1) - discount);
+        const cost = Math.max(20, this.townWorldRulesService.getBuildingUpgradeCost(building?.level ?? 1) - discount);
         return {
             title: `${building.name}升级`,
             content: `你召集居民一起翻新${building.name}。新的木牌挂上门口，来往的人都能看见这里正在变得更可靠。${discount ? `阿泽帮你压低了 ${discount} 金币成本。` : ""}`,
@@ -1276,33 +1244,9 @@ export class TownService {
         }
     }
 
-    private upgradeBuilding(worldState: TownWorldState, buildingId: string): TownWorldState {
-        return this.townWorldRulesService.upgradeBuilding(this.normalizeWorldState(worldState), buildingId);
-    }
-
-    private getBuildingUpgradeCost(level: number) {
-        return this.townWorldRulesService.getBuildingUpgradeCost(level);
-    }
-
-    private createDailyTasks(day: number): TownTask[] {
-        return this.townProgressRulesService.createDailyTasks(day);
-    }
-
-    private getRelationshipLevel(value: number) {
-        return this.townRelationshipRulesService.getRelationshipLevel(value);
-    }
-
-    private createWeeklyGoal(save?: TownSave): TownGoal {
-        return this.townProgressRulesService.createWeeklyGoal(save?.day ?? 1);
-    }
-
-    private createMainQuest(chapter: number): TownQuestState {
-        return this.townProgressRulesService.createMainQuest(chapter);
-    }
-
     private applyProgress(save: TownSave, context: ProgressContext): ProgressResult {
         const worldState = this.normalizeWorldState(save.worldState, save.day);
-        const result = this.townProgressRulesService.applyProgress(save, worldState, context, (state, buildingId) => this.getBuildingLevel(state, buildingId));
+        const result = this.townProgressRulesService.applyProgress(save, worldState, context, (state, buildingId) => this.townWorldRulesService.getBuildingLevel(state, buildingId));
         save.worldState = worldState;
         return result;
     }
@@ -1519,7 +1463,7 @@ export class TownService {
         character.relationship = Math.min(100, character.relationship + 1);
         character.memory = {
             ...(character.memory ?? {}),
-            relationshipLevel: this.getRelationshipLevel(character.relationship),
+            relationshipLevel: this.townRelationshipRulesService.getRelationshipLevel(character.relationship),
             promises: promises.slice(1),
             keyMoments: this.mergeLimitedMoments(character.memory?.keyMoments, [{
                 day,
@@ -1558,8 +1502,7 @@ export class TownService {
     }
 
     private formatActionName(action: TownActionDto["action"]) {
-        const labels: Record<string, string> = { operate: "经营餐馆", visit: "拜访居民", decorate: "布置小镇", explore: "探索街区", rest: "休息", advice: "规划经营", upgrade: "升级建筑" };
-        return labels[action] ?? action;
+        return TOWN_ACTION_LABELS[action] ?? action;
     }
 
     private createRelationshipLevelEvent(userId: string, saveId: string, character: TownCharacter, oldLevel: string, newLevel: string, delta: number) {
@@ -1602,7 +1545,7 @@ export class TownService {
             return null;
         }
 
-        const catalog = this.createChoiceCatalog();
+        const catalog = createTownChoiceCatalog();
         if (action === "explore") {
             return [catalog.explore, catalog.visit, catalog.operate];
         }
@@ -1610,10 +1553,6 @@ export class TownService {
             return [catalog.operate, catalog.visit, catalog.explore];
         }
         return [catalog.operate, catalog.visit, catalog.rest];
-    }
-
-    private createChoiceCatalog(): Record<string, TownEventChoice> {
-        return createTownChoiceCatalog();
     }
 
     private createSuggestion(save: TownSave) {

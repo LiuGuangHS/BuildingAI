@@ -7,8 +7,6 @@ export type TownFestivalTemplate = Omit<NonNullable<TownWorldState["activeFestiv
         building?: string;
         buildingLevel?: number;
     };
-    reserved?: boolean;
-    experimental?: boolean;
 };
 
 export const TOWN_FESTIVAL_CATALOG: TownFestivalTemplate[] = [

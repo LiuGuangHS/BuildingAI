@@ -58,6 +58,36 @@ export type AstrologyReportResult = {
     closing?: string;
 };
 
+export type PublicAstrologyReportMetadata = {
+    feedback?: {
+        rating: "useful" | "too_generic" | "inaccurate" | "too_long";
+        note?: string;
+        updatedAt?: string;
+    };
+    sourceReport?: {
+        id?: string;
+        reportType?: AstrologyReportType;
+        title?: string | null;
+    };
+    generationContext?: {
+        reportType?: AstrologyReportType;
+        focusArea?: string;
+        currentState?: string;
+        question?: string;
+        language?: string;
+        sourceReportId?: string;
+        hasTargetProfile?: boolean;
+        questionQuality?: {
+            level?: "weak" | "usable" | "strong";
+            score?: number;
+            signals?: string[];
+            missing?: string[];
+        };
+    };
+};
+
+export type ConsoleAstrologyReportMetadata = PublicAstrologyReportMetadata & Record<string, unknown>;
+
 export type AstrologyReport = {
     id: string;
     profileId?: string | null;
@@ -71,41 +101,16 @@ export type AstrologyReport = {
     isFavorite: boolean;
     costCredits: number | string;
     errorMessage?: string | null;
-    providerMetadata?: (Record<string, unknown> & {
-        feedback?: {
-            rating: "useful" | "too_generic" | "inaccurate" | "too_long";
-            note?: string;
-            updatedAt?: string;
-        };
-        sourceReport?: {
-            id?: string;
-            reportType?: AstrologyReportType;
-            title?: string | null;
-        };
-        generationContext?: {
-            reportType?: AstrologyReportType;
-            focusArea?: string;
-            currentState?: string;
-            question?: string;
-            language?: string;
-            sourceReportId?: string;
-            hasTargetProfile?: boolean;
-            questionQuality?: {
-                level?: "weak" | "usable" | "strong";
-                score?: number;
-                signals?: string[];
-                missing?: string[];
-            };
-        };
-    }) | null;
+    providerMetadata?: PublicAstrologyReportMetadata | null;
     createdAt: string;
     updatedAt: string;
 };
 
-export type ConsoleAstrologyReport = AstrologyReport & {
+export type ConsoleAstrologyReport = Omit<AstrologyReport, "providerMetadata"> & {
     userId: string;
     modelId?: string;
     providerId?: string;
+    providerMetadata?: ConsoleAstrologyReportMetadata | null;
     requestPayload?: Record<string, unknown> | null;
 };
 

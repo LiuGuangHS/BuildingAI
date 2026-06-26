@@ -30,11 +30,9 @@ export function ContractRiskReasoningPanel(props: {
                         <article key={reasoning.key} className={cn("grid gap-2 rounded-lg border border-l-4 bg-muted/35 p-2.5", riskBorderClass(risk.level))}>
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <Badge variant={risk.level === "high" ? "destructive" : "secondary"}>{reasoning.severityLabel}</Badge>
-                                <span className="text-xs font-medium text-muted-foreground">置信度 {reasoning.confidence}%</span>
                             </div>
                             <dl className="grid gap-2">
                                 <div><dt className="text-[11px] font-semibold uppercase tracking-normal text-muted-foreground">风险点</dt><dd className="mt-0.5 text-xs leading-relaxed">{reasoning.riskPoint}</dd></div>
-                                <div><dt className="text-[11px] font-semibold uppercase tracking-normal text-muted-foreground">影响</dt><dd className="mt-0.5 text-xs leading-relaxed">{reasoning.impact}</dd></div>
                                 <div><dt className="text-[11px] font-semibold uppercase tracking-normal text-muted-foreground">AI 建议</dt><dd className="mt-0.5 text-xs leading-relaxed">{reasoning.suggestion}</dd></div>
                                 <div><dt className="text-[11px] font-semibold uppercase tracking-normal text-muted-foreground">来源条款</dt><dd className="mt-0.5 text-xs leading-relaxed">{reasoning.sourceClause}</dd></div>
                             </dl>

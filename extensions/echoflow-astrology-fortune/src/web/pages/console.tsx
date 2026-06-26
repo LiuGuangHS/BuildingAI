@@ -837,8 +837,8 @@ function ReportDetailDialog({
             ["时间段", lucky.timeRange],
         ].filter(([, value]) => Boolean(value))
         : [];
-    const actions = report ? (report.result?.actions ?? []).filter(Boolean).slice(0, 6) : [];
-    const warnings = report ? (report.result?.warnings ?? []).filter(Boolean).slice(0, 6) : [];
+    const actions = report ? (report.result?.actions ?? []).filter(Boolean).slice(0, 6).map(formatActionItem) : [];
+    const warnings = report ? (report.result?.warnings ?? []).filter(Boolean).slice(0, 6).map(formatWarningItem) : [];
     const followUps = report ? (report.result?.followUps ?? []).filter(Boolean).slice(0, 6) : [];
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1225,6 +1225,20 @@ function formatMetadataValue(value: unknown) {
     } catch {
         return String(value);
     }
+}
+
+function formatActionItem(item: unknown) {
+    if (typeof item === "string") return item;
+    if (!item || typeof item !== "object") return String(item ?? "");
+    const action = item as { item?: unknown; reason?: unknown; timebox?: unknown };
+    return [action.item, action.reason, action.timebox].filter(Boolean).join(" · ");
+}
+
+function formatWarningItem(item: unknown) {
+    if (typeof item === "string") return item;
+    if (!item || typeof item !== "object") return String(item ?? "");
+    const warning = item as { title?: unknown; detail?: unknown };
+    return [warning.title, warning.detail].filter(Boolean).join(" · ");
 }
 
 function formatAiRepairAttempt(value: unknown) {

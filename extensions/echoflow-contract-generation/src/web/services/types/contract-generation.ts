@@ -1,5 +1,20 @@
 export type ContractGenerationStatus = "pending" | "processing" | "draft" | "reviewing" | "exporting" | "success" | "failed" | "export_failed";
 
+export function contractStatusText(status: ContractGenerationStatus | "draft" | string) {
+    return { pending: "等待中", processing: "生成中", draft: "草稿", reviewing: "审查中", exporting: "导出中", success: "已导出", failed: "失败", export_failed: "导出失败" }[status] ?? status;
+}
+
+export function contractStatusVariant(status: ContractGenerationStatus | "draft" | string): "default" | "secondary" | "destructive" | "outline" {
+    if (["failed", "export_failed"].includes(status)) return "destructive";
+    if (["pending", "processing", "reviewing", "exporting"].includes(status)) return "secondary";
+    if (status === "draft") return "outline";
+    return "default";
+}
+
+export function isContractBusyStatus(status: ContractGenerationStatus | string) {
+    return ["pending", "processing", "reviewing", "exporting"].includes(status);
+}
+
 export type ContractTemplateField = {
     key: string;
     label: string;
@@ -9,7 +24,7 @@ export type ContractTemplateField = {
     options?: string[];
 };
 
-export type ContractTemplate = {
+export type PublicContractTemplate = {
     id: string;
     name: string;
     industry: string;
@@ -17,11 +32,16 @@ export type ContractTemplate = {
     description: string;
     fields: ContractTemplateField[];
     defaultSections: string[];
+};
+
+export type AdminContractTemplate = PublicContractTemplate & {
     promptTemplate?: string | null;
     isBuiltin?: boolean;
     isActive?: boolean;
     sortOrder?: number;
 };
+
+export type ContractTemplate = PublicContractTemplate;
 
 export type UpsertContractTemplateParams = {
     name: string;
@@ -77,7 +97,6 @@ export type RiskActions = Record<string, { status: "accepted" | "ignored"; acted
 
 export type GenerateContractParams = {
     title: string;
-    modelId?: string;
     templateId?: string;
     contractType?: string;
     industry?: string;
@@ -102,6 +121,19 @@ export type ExportContractParams = {
 
 export type ContractGenerationConfig = {
     configured: boolean;
+    canGenerate: boolean;
+    unavailableReason?: string | null;
+    pricePerContract?: number;
+    model?: {
+        name: string;
+        pricePerContract?: number;
+    } | null;
+};
+
+export type AdminContractGenerationConfig = Omit<ContractGenerationConfig, "model"> & {
+    id: string;
+    key: string;
+    modelId?: string | null;
     model?: {
         id: string;
         name: string;
@@ -109,12 +141,6 @@ export type ContractGenerationConfig = {
         provider: string;
         pricePerContract?: number;
     } | null;
-};
-
-export type AdminContractGenerationConfig = ContractGenerationConfig & {
-    id: string;
-    key: string;
-    modelId?: string | null;
     metadata: Record<string, unknown>;
 };
 
@@ -206,19 +232,6 @@ export type QueryContractTasksParams = {
     status?: ContractGenerationStatus;
     templateId?: string;
     contractType?: string;
-};
-
-export type AiProviderResponse = {
-    id: string;
-    name: string;
-    provider: string;
-    models?: Array<{
-        id: string;
-        name: string;
-        model: string;
-        modelType: string;
-        isActive?: boolean;
-    }>;
 };
 
 export type PaginatedResponse<T> = {

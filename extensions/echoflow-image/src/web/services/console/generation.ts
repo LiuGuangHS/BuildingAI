@@ -11,8 +11,6 @@ import type {
     ConsoleImageGeneration,
     CreateGenerationParams,
     ImageModelOption,
-    PromptEnhanceParams,
-    PromptEnhanceResult,
     QueryGenerationParams,
 } from "../types/generation";
 import type { OperationResult } from "../types/common";
@@ -74,13 +72,6 @@ export function useDeleteGenerationMutation(options?: MutationOptionsUtil<Operat
 export function useRetryGenerationMutation(options?: MutationOptionsUtil<ConsoleImageGeneration, string>) {
     return useMutation<ConsoleImageGeneration, Error, string>({
         mutationFn: (id) => consoleHttpClient.post<ConsoleImageGeneration>(`/generation/${id}/retry`),
-        ...options,
-    });
-}
-
-export function usePromptEnhanceMutation(options?: MutationOptionsUtil<PromptEnhanceResult, PromptEnhanceParams>) {
-    return useMutation<PromptEnhanceResult, Error, PromptEnhanceParams>({
-        mutationFn: (data) => consoleHttpClient.post<PromptEnhanceResult>("/generation/prompt/enhance", data),
         ...options,
     });
 }

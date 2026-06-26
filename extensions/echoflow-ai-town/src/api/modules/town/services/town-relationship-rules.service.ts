@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import type { TownCharacter, TownEvent, TownSave, TownEventResult } from "../../../db/entities";
+import { TOWN_ACTION_LABELS } from "../catalog";
 import type { TownActionDto } from "../dto";
 
 export type RelationshipUpdate = {
@@ -162,7 +163,6 @@ export class TownRelationshipRulesService {
     }
 
     private formatActionName(action: TownActionDto["action"]) {
-        const labels: Record<string, string> = { operate: "经营餐馆", visit: "拜访居民", decorate: "布置小镇", explore: "探索街区", rest: "休息", advice: "规划经营", upgrade: "升级建筑" };
-        return labels[action] ?? action;
+        return TOWN_ACTION_LABELS[action] ?? action;
     }
 }

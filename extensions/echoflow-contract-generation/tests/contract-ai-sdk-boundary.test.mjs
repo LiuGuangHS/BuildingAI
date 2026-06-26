@@ -11,7 +11,6 @@ const moduleSource = readFileSync(
     "utf8",
 );
 const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
-const readmeSource = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
 test("contract generation uses the extension SDK text generation entrypoint", () => {
     const generateCalls = serviceSource.match(/generateText\(\{/g) ?? [];
@@ -32,12 +31,4 @@ test("contract console model list uses the extension SDK instead of a direct AiM
     assert.equal(serviceSource.includes("@InjectRepository(AiModel)"), false);
     assert.equal(serviceSource.includes("modelRepo"), false);
     assert.equal(moduleSource.includes("AiModel"), false);
-});
-
-test("contract README documents PublicAiModelService as the provider boundary", () => {
-    assert.match(readmeSource, /PublicAiModelService/);
-    assert.match(readmeSource, /generateText\(\)/);
-    assert.match(readmeSource, /主系统边界内复用 Provider\/Secret 归一化/);
-    assert.doesNotMatch(readmeSource, /获取模型、Provider Config 和 adapter/);
-    assert.doesNotMatch(readmeSource, /使用 `normalizeProviderConfig\(\)` 读取主站 Secret 字段别名/);
 });

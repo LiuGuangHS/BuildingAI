@@ -54,20 +54,6 @@ export default defineExtensionViteConfig(packageJson, {
                 replacement: plateReactEntry,
             },
             {
-                find: /^react-router\/dom$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/react-router/dist/production/dom-export.mjs",
-                ),
-            },
-            {
-                find: /^react-router$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/react-router/dist/production/index.mjs",
-                ),
-            },
-            {
                 find: /^radix-ui$/,
                 replacement: resolve(
                     __dirname,
@@ -87,14 +73,6 @@ export default defineExtensionViteConfig(packageJson, {
                     __dirname,
                     "../../node_modules/.pnpm/node_modules/zustand/esm/index.mjs",
                 ),
-            },
-            {
-                find: /^@buildingai\/utils\/(.+)$/,
-                replacement: resolve(__dirname, "../../packages/@buildingai/utils/src/$1.ts"),
-            },
-            {
-                find: "@buildingai/utils",
-                replacement: resolve(__dirname, "../../packages/@buildingai/utils/src/index.ts"),
             },
         ],
     },

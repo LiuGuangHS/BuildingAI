@@ -4,7 +4,6 @@ import { Column, CreateDateColumn, Index, PrimaryGeneratedColumn } from "@buildi
 @ExtensionEntity({ name: "town_ai_call_logs", comment: "AI town generation call logs" })
 export class TownAiCallLog {
     @PrimaryGeneratedColumn("uuid")
-    @Index()
     id!: string;
 
     @Column({ type: "uuid", nullable: true, comment: "Owner user id" })

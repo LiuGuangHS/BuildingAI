@@ -8,8 +8,6 @@ export type TownTaskTemplate = {
     target: number;
     reward: { coins?: number; stamina?: number; reputation?: number };
     availableFromDay?: number;
-    reserved?: boolean;
-    experimental?: boolean;
 };
 
 export type TownWeeklyGoalTemplate = {
@@ -19,14 +17,9 @@ export type TownWeeklyGoalTemplate = {
     type: NonNullable<TownWorldState["weeklyGoal"]>["type"];
     target: number;
     reward: { coins?: number; stamina?: number; reputation?: number };
-    reserved?: boolean;
-    experimental?: boolean;
 };
 
-export type TownQuestTemplate = Omit<NonNullable<TownWorldState["mainQuest"]>, "completed"> & {
-    reserved?: boolean;
-    experimental?: boolean;
-};
+export type TownQuestTemplate = Omit<NonNullable<TownWorldState["mainQuest"]>, "completed">;
 
 export type TownAchievementTemplate = {
     id: string;
@@ -34,8 +27,6 @@ export type TownAchievementTemplate = {
     target?: number;
     buildingLevel?: number;
     area?: string;
-    reserved?: boolean;
-    experimental?: boolean;
 };
 
 export const TOWN_DAILY_TASK_ROTATION: TownTaskTemplate[][] = [
@@ -113,7 +104,19 @@ export function createTownWeeklyGoal(day = 1) {
 }
 
 export function createTownMainQuest(chapter: number) {
-    const template = TOWN_MAIN_QUEST_CATALOG[chapter] ?? TOWN_MAIN_QUEST_CATALOG[4];
+    const template = TOWN_MAIN_QUEST_CATALOG[chapter];
+    if (!template) {
+        // 终态：所有章节已完成，不再发放奖励（修复章节 4 无限重复完成 Bug）
+        const lastChapter = Math.max(...Object.keys(TOWN_MAIN_QUEST_CATALOG).map(Number));
+        return {
+            chapter: lastChapter,
+            title: "乐园圆满",
+            desc: "所有章节已完成，乐园已达至圆满状态。",
+            requirements: [],
+            reward: {},
+            completed: true,
+        };
+    }
     return {
         chapter: template.chapter,
         title: template.title,

@@ -14,11 +14,9 @@ export interface ImageModelEndpoint {
     retryDelayMs?: number;
 }
 
-export type SaveModelEndpointParams = ImageModelEndpoint;
-
 export interface ImageModelConfig {
     id: string;
-    aiModelId?: string | null;
+    promptEnhancerModelId?: string | null;
     provider: string;
     model: string;
     externalModelId: string;
@@ -45,10 +43,20 @@ export interface ImageModelConfig {
 export interface SaveModelConfigParams {
     displayName?: string;
     description?: string;
+    promptEnhancerModelId?: string | null;
     enabled?: boolean;
     visibleToUser?: boolean;
     defaultParams?: Record<string, unknown>;
     allowedParams?: Record<string, unknown>;
-    endpoints?: SaveModelEndpointParams[];
+    endpoints?: ImageModelEndpoint[];
     sortOrder?: number;
+}
+
+export interface PromptEnhancerModelOption {
+    id: string;
+    name: string;
+    model: string;
+    modelType: string;
+    providerName: string;
+    provider: string;
 }

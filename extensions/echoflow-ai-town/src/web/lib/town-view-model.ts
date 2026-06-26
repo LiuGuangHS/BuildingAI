@@ -1,7 +1,6 @@
 import type { TownBuilding, TownCharacter, TownEvent, TownRetentionState, TownSave } from "../services/types";
 import {
     createCompanionMessage,
-    formatEventType,
     getActionAffordability,
     getActionTask,
     getBuildingStatus,
@@ -113,17 +112,6 @@ export type TownActionBudgetViewModel = {
     label: string;
 };
 
-export type TownEventSummaryViewModel = {
-    id: string;
-    type: string;
-    label: string;
-    title: string;
-    content: string;
-    hasChoices: boolean;
-    createdAt: string;
-    event: TownEvent;
-};
-
 export type TownViewModel = {
     hud: TownHudViewModel;
     scene: TownSceneKind;
@@ -134,7 +122,6 @@ export type TownViewModel = {
     commands: TownCommandViewModel[];
     goal: TownGoalViewModel;
     latestEvent: TownEvent | null;
-    events: TownEventSummaryViewModel[];
 };
 
 export function createTownViewModel(save: TownSave, latestEvent: TownEvent | null = save.events[0] ?? null): TownViewModel {
@@ -151,7 +138,6 @@ export function createTownViewModel(save: TownSave, latestEvent: TownEvent | nul
         commands: getCommandBarState(save, recommendedAction),
         goal: createGoalViewModel(save),
         latestEvent,
-        events: save.events.map(createEventSummary),
     };
 }
 
@@ -314,19 +300,6 @@ export function getActionBudget(save: TownSave): TownActionBudgetViewModel {
         remaining,
         usedActions,
         label: `${remaining}/${maxPerDay}`,
-    };
-}
-
-export function createEventSummary(event: TownEvent): TownEventSummaryViewModel {
-    return {
-        id: event.id,
-        type: event.type,
-        label: formatEventType(event.type),
-        title: event.title,
-        content: event.content,
-        hasChoices: Boolean(event.choices?.length),
-        createdAt: event.createdAt,
-        event,
     };
 }
 

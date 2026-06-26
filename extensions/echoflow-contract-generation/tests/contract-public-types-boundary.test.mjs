@@ -25,6 +25,19 @@ test("web public contract task type does not expose host, provider, or raw reque
     assert.equal(/\brequestPayload\b/.test(taskBlock), false);
 });
 
+test("web generation params and public templates do not expose model or console-only template fields", () => {
+    const paramsMatch = source.match(/export type GenerateContractParams = \{([\s\S]*?)\n\};/);
+    assert.ok(paramsMatch, "GenerateContractParams type should exist");
+    assert.equal(/\bmodelId\b/.test(paramsMatch[1]), false);
+
+    const templateMatch = source.match(/export type PublicContractTemplate = \{([\s\S]*?)\n\};/);
+    assert.ok(templateMatch, "PublicContractTemplate type should exist");
+    const templateBlock = templateMatch[1];
+    assert.equal(/\bpromptTemplate\b/.test(templateBlock), false);
+    assert.equal(/\bisActive\b/.test(templateBlock), false);
+    assert.equal(/\bsortOrder\b/.test(templateBlock), false);
+});
+
 test("console-only task type carries admin troubleshooting fields separately", () => {
     assert.ok(source.includes("export type AdminContractGenerationTask = ContractGenerationTask &"));
     assert.ok(source.includes("userId: string"));

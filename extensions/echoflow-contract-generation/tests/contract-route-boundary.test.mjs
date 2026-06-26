@@ -36,5 +36,13 @@ test("contract non-platform uploaded file URLs are DNS-checked before parsing", 
     assert.match(serviceSource, /assertPublicHttpUrl/);
     assert.match(serviceSource, /private async normalizeStoredFileUrl/);
     assert.match(serviceSource, /await this\.normalizeStoredFileUrl\(file\.url\)/);
+    assert.match(serviceSource, /value\.startsWith\(`\/\$\{EXTENSION_ID\}\/uploads\/`\) \|\| value\.startsWith\("\/uploads\/"\)/);
     assert.match(serviceSource, /await assertPublicHttpUrl\(value, \{ label: "合同文件 URL" \}\)/);
+    assert.doesNotMatch(serviceSource, /url\.pathname\.startsWith\(`\/\$\{EXTENSION_ID\}\/uploads\/`\)|url\.pathname\.startsWith\("\/uploads\/"\)/);
+});
+
+test("contract failure notifications do not expose internal errors to users", () => {
+    assert.match(serviceSource, /reason: "合同任务处理失败，请稍后重试或联系管理员。"/);
+    assert.doesNotMatch(serviceSource, /refundError: task\.providerMetadata\?\.refundError/);
+    assert.doesNotMatch(serviceSource, /reason: message/);
 });

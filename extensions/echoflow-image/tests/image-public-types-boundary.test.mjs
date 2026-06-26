@@ -32,10 +32,10 @@ test("shared image history list does not depend on console generation type", asy
     assert.match(source, /type\s+HistoryListItem\s*=\s*ImageGeneration\s*&\s*\{\s*userId\?:\s*string\s*\}/);
 });
 
-test("image web generation uses main system request ids", async () => {
+test("image web generation uses browser UUID request ids", async () => {
     const source = await readFile(GENERATION_FORM_FILE, "utf8");
 
-    assert.match(source, /import\s+\{\s*createRequestId\s*\}\s+from\s+"@buildingai\/http"/);
+    assert.match(source, /crypto\.randomUUID\(\)/);
     assert.doesNotMatch(source, /request-key|createRequestKey/);
     await assert.rejects(access(REQUEST_KEY_FILE));
 });

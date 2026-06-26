@@ -1,7 +1,7 @@
 import { BaseController } from "@buildingai/base";
 import { ExtensionConsoleController } from "@buildingai/core/decorators";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
-import { Body, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
+import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
 import { Category } from "../../../../db/entities/category.entity";
 import { CreateCategoryDto, QueryCategoryDto, UpdateCategoryDto } from "../../dto";
@@ -61,7 +61,7 @@ export class CategoryController extends BaseController {
      * @param updateCategoryDto DTO for updating a category
      * @returns Updated category
      */
-    @Put(":id")
+    @Patch(":id")
     async update(
         @Param("id", UUIDValidationPipe) id: string,
         @Body() updateCategoryDto: UpdateCategoryDto,

@@ -59,6 +59,7 @@ export class GenerationWebController extends BaseController {
 
     @Post(":id/retry")
     async retry(@Param("id", UUIDValidationPipe) id: string, @Playground() user: UserPlayground) {
+        await this.assertRateLimit("generation", user.id);
         return this.generationService.retryForWeb(id, user.id);
     }
 

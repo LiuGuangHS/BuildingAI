@@ -95,6 +95,10 @@ export class TownProgressRulesService {
 
     private updateMainQuest(save: TownSave, worldState: TownWorldState, getBuildingLevel: (worldState: TownWorldState, buildingId: string) => number): TownQuestState | null {
         const currentQuest = worldState.mainQuest ?? this.createMainQuest(1);
+        // 终态：所有章节已完成，不再发放奖励
+        if (currentQuest.completed) {
+            return null;
+        }
         const nextQuest = {
             ...currentQuest,
             requirements: currentQuest.requirements.map((requirement) => ({ ...requirement, current: this.getRequirementCurrent(save, worldState, requirement.type, getBuildingLevel) })),

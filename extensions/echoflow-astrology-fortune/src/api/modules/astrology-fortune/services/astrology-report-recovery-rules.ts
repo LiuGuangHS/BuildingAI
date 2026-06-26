@@ -4,6 +4,7 @@ export const ASTROLOGY_REPORT_RECOVERY_LOCK_MS = 5 * 60 * 1000;
 export const ASTROLOGY_REPORT_PENDING_STATUS = "pending";
 export const ASTROLOGY_REPORT_PROCESSING_STATUS = "processing";
 export const ASTROLOGY_REPORT_FAILED_STATUS = "failed";
+export const ASTROLOGY_REPORT_SUCCESS_STATUS = "success";
 
 export const ASTROLOGY_REPORT_BUSY_STATUSES = [
     ASTROLOGY_REPORT_PENDING_STATUS,
@@ -36,7 +37,7 @@ export function isAstrologyReportRecoveryLockActive(
 export function isAstrologyReportProcessingLockActive(
     metadata: Record<string, unknown> | null | undefined,
     nowMs: number,
-    lockMs = ASTROLOGY_REPORT_RECOVERY_LOCK_MS,
+    lockMs = ASTROLOGY_REPORT_STALE_PROCESSING_MS,
 ) {
     const processingLockedAt = typeof metadata?.processingLockedAt === "string" ? Date.parse(metadata.processingLockedAt) : 0;
     return Boolean(processingLockedAt && nowMs - processingLockedAt < lockMs);
@@ -62,4 +63,10 @@ export function canClaimAstrologyReportForProcessing<T extends ReportLike>(
     if (!isAstrologyReportBusyStatus(report.status)) return false;
     if (report.status !== ASTROLOGY_REPORT_PROCESSING_STATUS) return true;
     return !isAstrologyReportProcessingLockActive(report.providerMetadata, nowMs);
+}
+
+export function canRefundAstrologyReportCredits<T extends { status: string; costCredits?: number | string | null }>(
+    report: T | null | undefined,
+): report is T {
+    return Boolean(report && report.status !== ASTROLOGY_REPORT_SUCCESS_STATUS && Number(report.costCredits ?? 0) > 0);
 }

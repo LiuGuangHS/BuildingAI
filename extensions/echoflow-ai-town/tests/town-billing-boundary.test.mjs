@@ -87,9 +87,8 @@ test("town user result cards expose billing facts without model or provider deta
     assert.doesNotMatch(gamePanelsSource, /Provider|secretId|defaultModelId/);
 });
 
-test("town README documents billing as ready but still not a purchase entry", () => {
+test("town README documents billing as ready", () => {
     assert.match(readmeSource, /正式计费 \| ready \|/);
     assert.match(readmeSource, /事件 ID 作为 `associationNo`/);
     assert.match(readmeSource, /默认价格为 0 时不扣费/);
-    assert.match(readmeSource, /成长册仍不是购买入口/);
 });

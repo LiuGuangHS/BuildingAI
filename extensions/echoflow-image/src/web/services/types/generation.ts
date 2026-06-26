@@ -51,7 +51,6 @@ export interface ImageGeneration {
     status: ImageGenerationStatus;
     billingStatus: ImageGenerationBillingStatus;
     requestKey?: string;
-    modelConfigId?: string;
     prompt: string;
     negativePrompt?: string;
     referenceImageUrl?: string;
@@ -60,7 +59,6 @@ export interface ImageGeneration {
     maskImage?: ImageSourceRecord;
     modelId: string;
     modelName?: string;
-    provider?: string;
     size: string;
     n: number;
     quality?: string;
@@ -77,18 +75,15 @@ export interface ImageGeneration {
 
 export interface ConsoleImageGeneration extends ImageGeneration {
     userId: string;
+    provider?: string;
     baseURL?: string;
 }
 
 export interface ImageModelOption {
     id: string;
-    pluginConfigId?: string;
-    aiModelId?: string;
     name: string;
     model: string;
     modelType?: string;
-    provider?: string;
-    providerName?: string;
     apiMode?: "images" | "responses";
     requestPolicy?: "openai" | "compat";
     capabilities?: Record<string, boolean>;
@@ -136,16 +131,15 @@ export interface CreateGenerationParams {
     moderation?: string;
     seed?: string;
     source?: "main-system" | "plugin-config";
-    pluginConfigId?: string;
 }
 
 export interface PromptEnhanceParams {
     prompt: string;
-    modelId?: string;
+    modelId: string;
     style?: string;
 }
 
 export interface PromptEnhanceResult {
     prompt: string;
-    source: "ai" | "local";
+    source: "ai";
 }

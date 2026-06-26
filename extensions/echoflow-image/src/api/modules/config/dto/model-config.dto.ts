@@ -7,6 +7,7 @@ import {
     IsObject,
     IsOptional,
     IsString,
+    IsUUID,
     Length,
     Max,
     Min,
@@ -113,6 +114,10 @@ export class CreateModelConfigDto {
     @IsString()
     @IsOptional()
     description?: string;
+
+    @IsUUID("4")
+    @IsOptional()
+    promptEnhancerModelId?: string | null;
 
     @IsBoolean()
     @IsOptional()

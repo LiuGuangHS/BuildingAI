@@ -30,6 +30,22 @@ function RouteLoading() {
     );
 }
 
+function getParentFrameOrigin() {
+    return window.location.origin;
+}
+
+function normalizeParentNavigation(data: unknown) {
+    const message = data as { path?: unknown; search?: unknown; hash?: unknown };
+    const path = typeof message.path === "string" ? message.path : "/";
+    const search = typeof message.search === "string" ? message.search : "";
+    const hash = typeof message.hash === "string" ? message.hash : "";
+
+    if (!path.startsWith("/") || path.startsWith("//")) return null;
+    if (search && !search.startsWith("?")) return null;
+    if (hash && !hash.startsWith("#")) return null;
+    return `${path}${search}${hash}`;
+}
+
 function TownRouteError() {
     const navigate = useNavigate();
 
@@ -56,6 +72,7 @@ function ParentFrameSync() {
 
     useEffect(() => {
         if (window.parent === window) return;
+        const parentOrigin = getParentFrameOrigin();
         if (isParentNavigatingRef.current) {
             isParentNavigatingRef.current = false;
             return;
@@ -68,20 +85,20 @@ function ParentFrameSync() {
                 search: location.search,
                 hash: location.hash,
             },
-            "*",
+            parentOrigin,
         );
     }, [location.hash, location.pathname, location.search]);
 
     useEffect(() => {
         if (window.parent === window) return;
+        const parentOrigin = getParentFrameOrigin();
 
         const handleMessage = (event: MessageEvent) => {
+            if (event.source !== window.parent || event.origin !== parentOrigin) return;
             if (event.data?.type !== "parent-navigate") return;
 
-            const path = event.data.path ?? "/";
-            const search = event.data.search ?? "";
-            const hash = event.data.hash ?? "";
-            const target = `${path}${search}${hash}`;
+            const target = normalizeParentNavigation(event.data);
+            if (!target) return;
             const current = `${location.pathname}${location.search}${location.hash}`;
 
             if (target !== current) {
@@ -103,6 +120,7 @@ function TownNotFoundPage() {
 
     useEffect(() => {
         if (window.parent === window) return;
+        const parentOrigin = getParentFrameOrigin();
 
         window.parent.postMessage(
             {
@@ -111,7 +129,7 @@ function TownNotFoundPage() {
                 search: location.search,
                 hash: location.hash,
             },
-            "*",
+            parentOrigin,
         );
     }, [location.hash, location.pathname, location.search]);
 

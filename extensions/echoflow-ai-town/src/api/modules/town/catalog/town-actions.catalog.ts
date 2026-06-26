@@ -2,6 +2,16 @@ import type { TownActionDto } from "../dto";
 
 export type TownActionCatalogKey = Exclude<TownActionDto["action"], "upgrade">;
 
+export const TOWN_ACTION_LABELS: Record<string, string> = {
+    operate: "经营餐馆",
+    visit: "拜访居民",
+    decorate: "布置小镇",
+    explore: "探索街区",
+    rest: "休息",
+    advice: "规划经营",
+    upgrade: "升级建筑",
+};
+
 type CatalogValue<T> = T | ((context: TownActionCatalogContext) => T);
 
 export type TownActionCatalogItem = {
@@ -12,8 +22,6 @@ export type TownActionCatalogItem = {
     reputation?: CatalogValue<number>;
     mood: CatalogValue<string>;
     focus: string;
-    reserved?: boolean;
-    experimental?: boolean;
 };
 
 export type TownActionCatalogContext = {

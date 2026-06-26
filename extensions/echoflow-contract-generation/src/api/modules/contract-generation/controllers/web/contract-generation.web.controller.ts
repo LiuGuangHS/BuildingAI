@@ -7,6 +7,7 @@ import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 
+import type { ContractGenerationTask } from "../../../../db/entities";
 import { ExportContractDto, GenerateContractDto, QueryContractTaskDto, ReviewUploadedContractDto, RewriteContractClauseDto, UpdateContractContentDto, UpdateRiskActionDto } from "../../dto";
 import { ContractGenerationService } from "../../services";
 
@@ -116,18 +117,20 @@ export class ContractGenerationWebController extends BaseController {
         });
     }
 
-    private toPublicTask(task: Awaited<ReturnType<ContractGenerationService["generate"]>> | Awaited<ReturnType<ContractGenerationService["reviewUploadedContract"]>> | Awaited<ReturnType<ContractGenerationService["reviewTask"]>> | Awaited<ReturnType<ContractGenerationService["updateTaskContent"]>> | Awaited<ReturnType<ContractGenerationService["updateRiskAction"]>> | Awaited<ReturnType<ContractGenerationService["restoreTaskVersion"]>> | Awaited<ReturnType<ContractGenerationService["exportTask"]>> | Awaited<ReturnType<ContractGenerationService["getTaskDetail"]>>) {
+    private toPublicTask(task: ContractGenerationTask) {
         const {
             userId: _userId,
             modelId: _modelId,
             providerId: _providerId,
             requestPayload: _requestPayload,
             providerMetadata,
+            errorMessage,
             deletedAt: _deletedAt,
             ...publicTask
         } = task;
         return {
             ...publicTask,
+            errorMessage: errorMessage ? "合同任务处理失败，请稍后重试或联系管理员。" : null,
             providerMetadata: {
                 templateName: providerMetadata?.templateName,
                 language: providerMetadata?.language,

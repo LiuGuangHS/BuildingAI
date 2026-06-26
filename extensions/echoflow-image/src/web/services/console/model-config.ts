@@ -3,7 +3,12 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { consoleHttpClient } from "../base";
 import type { OperationResult } from "../types/common";
-import type { ImageModelConfig, ImageModelEndpoint, SaveModelConfigParams } from "../types/model-config";
+import type {
+    ImageModelConfig,
+    ImageModelEndpoint,
+    PromptEnhancerModelOption,
+    SaveModelConfigParams,
+} from "../types/model-config";
 
 const queryDefaults = { retry: false, staleTime: 30_000 } as const;
 
@@ -25,6 +30,15 @@ export function useConsoleModelConfigQuery(id: string, options?: QueryOptionsUti
         queryKey: ["echoflow-image", "console", "model-config", id],
         queryFn: () => consoleHttpClient.get<ImageModelConfig>(`/model-configs/${id}`),
         enabled: !!id && options?.enabled !== false,
+        ...options,
+    });
+}
+
+export function useConsoleLlmModelsQuery(options?: QueryOptionsUtil<PromptEnhancerModelOption[]>) {
+    return useQuery<PromptEnhancerModelOption[]>({
+        ...queryDefaults,
+        queryKey: ["echoflow-image", "console", "llm-models"],
+        queryFn: () => consoleHttpClient.get<PromptEnhancerModelOption[]>("/model-configs/llm-models"),
         ...options,
     });
 }

@@ -8,7 +8,9 @@ import {
     ASTROLOGY_REPORT_PROCESSING_STATUS,
     ASTROLOGY_REPORT_RECOVERY_LOCK_MS,
     ASTROLOGY_REPORT_STALE_PROCESSING_MS,
+    ASTROLOGY_REPORT_SUCCESS_STATUS,
     canClaimAstrologyReportForProcessing,
+    canRefundAstrologyReportCredits,
     canRecoverAstrologyReport,
     isAstrologyReportBusyStatus,
     isAstrologyReportProcessingLockActive,
@@ -64,12 +66,19 @@ describe("astrology report recovery rules", () => {
         assert.equal(canRecoverAstrologyReport(report({ providerMetadata: { recoveryLockedAt: expiredAt } }), cutoff, nowMs), true);
     });
 
-    it("claims pending reports and skips processing reports that still hold a fresh lock", () => {
-        const freshProcessingLock = new Date(nowMs - ASTROLOGY_REPORT_RECOVERY_LOCK_MS + 1).toISOString();
-        const expiredProcessingLock = new Date(nowMs - ASTROLOGY_REPORT_RECOVERY_LOCK_MS - 1).toISOString();
+    it("claims pending reports and skips processing reports that still hold a fresh processing lock", () => {
+        const freshProcessingLock = new Date(nowMs - ASTROLOGY_REPORT_STALE_PROCESSING_MS + 1).toISOString();
+        const expiredProcessingLock = new Date(nowMs - ASTROLOGY_REPORT_STALE_PROCESSING_MS - 1).toISOString();
 
         assert.equal(canClaimAstrologyReportForProcessing(report(), nowMs), true);
         assert.equal(isAstrologyReportProcessingLockActive({ processingLockedAt: freshProcessingLock }, nowMs), true);
+        assert.equal(
+            isAstrologyReportProcessingLockActive(
+                { processingLockedAt: new Date(nowMs - ASTROLOGY_REPORT_RECOVERY_LOCK_MS - 1).toISOString() },
+                nowMs,
+            ),
+            true,
+        );
         assert.equal(
             canClaimAstrologyReportForProcessing(
                 report({
@@ -90,5 +99,12 @@ describe("astrology report recovery rules", () => {
             ),
             true,
         );
+    });
+
+    it("does not refund successful reports after a late crash", () => {
+        assert.equal(canRefundAstrologyReportCredits(report({ status: ASTROLOGY_REPORT_SUCCESS_STATUS, costCredits: 10 })), false);
+        assert.equal(canRefundAstrologyReportCredits(report({ status: ASTROLOGY_REPORT_PROCESSING_STATUS, costCredits: 10 })), true);
+        assert.equal(canRefundAstrologyReportCredits(report({ status: ASTROLOGY_REPORT_FAILED_STATUS, costCredits: "10" })), true);
+        assert.equal(canRefundAstrologyReportCredits(report({ status: ASTROLOGY_REPORT_FAILED_STATUS, costCredits: 0 })), false);
     });
 });

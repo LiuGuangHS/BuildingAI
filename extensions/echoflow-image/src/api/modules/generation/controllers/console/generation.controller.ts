@@ -5,7 +5,7 @@ import { Playground } from "@buildingai/decorators/playground.decorator";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Post, Query } from "@nestjs/common";
 
-import { CreateGenerationDto, PromptEnhanceDto, QueryGenerationDto } from "../../dto";
+import { CreateGenerationDto, QueryGenerationDto } from "../../dto";
 import { GenerationService } from "../../services/generation.service";
 
 @ExtensionConsoleController("generation", "Echoflow Image Generation")
@@ -20,11 +20,6 @@ export class GenerationController extends BaseController {
         @Playground() user: UserPlayground,
     ) {
         return this.generationService.createAndGenerate(createGenerationDto, user.id);
-    }
-
-    @Post("prompt/enhance")
-    async enhancePrompt(@Body() dto: PromptEnhanceDto) {
-        return this.generationService.enhancePrompt(dto);
     }
 
     @Post("jobs/recover")

@@ -1,6 +1,7 @@
 import type { DataSource } from "@buildingai/db/typeorm";
 import { Logger } from "@nestjs/common";
 
+import manifest from "../../../../manifest.json";
 import { TOWN_CONTENT_PACK_MANIFEST } from "../../modules/town/catalog";
 
 export class Upgrade {
@@ -81,20 +82,16 @@ export class Upgrade {
 
     private async ensureExtensionRecord(): Promise<void> {
         const extensionData = {
-            icon: "/echoflow-ai-town/static/icon.png",
-            name: "乐园小镇",
-            identifier: "echoflow-ai-town",
-            version: "0.0.1",
-            description: "治愈系小镇经营叙事游戏。经营、探索、居民对话和随机事件动态串联，帮助玩家打造有记忆的个性乐园。",
-            type: 1,
+            icon: manifest.icon,
+            name: manifest.name,
+            identifier: manifest.identifier,
+            version: manifest.version,
+            description: manifest.description,
+            type: manifest.type === "application" ? 1 : 2,
             isLocal: true,
             status: "1",
             supportTerminal: [1],
-            author: {
-                avatar: "/echoflow-ai-town/static/icon.png",
-                name: "EchoflowAI Teams",
-                homepage: "",
-            },
+            author: manifest.author,
         };
 
         await this.dataSource.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);

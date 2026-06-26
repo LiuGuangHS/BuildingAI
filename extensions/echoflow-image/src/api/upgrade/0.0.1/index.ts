@@ -26,7 +26,7 @@ export class Upgrade {
         await this.dataSource.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_image"."image_model_config" (
                 "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-                "ai_model_id" uuid,
+                "prompt_enhancer_model_id" uuid,
                 "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
                 "model" varchar(100),
                 "external_model_id" varchar(100) NOT NULL DEFAULT '',
@@ -44,7 +44,7 @@ export class Upgrade {
                 "updated_at" timestamp NOT NULL DEFAULT now()
             )
         `);
-        await this.ensureColumn("image_model_config", "ai_model_id", "uuid");
+        await this.ensureColumn("image_model_config", "prompt_enhancer_model_id", "uuid");
         await this.ensureColumn("image_model_config", "provider", "varchar(50) NOT NULL DEFAULT 'echoflow-api'");
         await this.ensureColumn("image_model_config", "model", "varchar(100)");
         await this.ensureColumn("image_model_config", "external_model_id", "varchar(100) NOT NULL DEFAULT ''");
@@ -55,7 +55,7 @@ export class Upgrade {
         await this.ensureColumn("image_model_config", "allowed_params", "jsonb NOT NULL DEFAULT '{}'");
         await this.ensureColumn("image_model_config", "endpoints", "jsonb NOT NULL DEFAULT '[]'");
         await this.ensureColumn("image_model_config", "sort_order", "int NOT NULL DEFAULT 0");
-        await this.dataSource.query(`ALTER TABLE "echoflow_image"."image_model_config" ALTER COLUMN "ai_model_id" DROP NOT NULL`);
+        await this.dataSource.query(`ALTER TABLE "echoflow_image"."image_model_config" ALTER COLUMN "prompt_enhancer_model_id" DROP NOT NULL`);
 
         await this.dataSource.query(`
             CREATE TABLE IF NOT EXISTS "echoflow_image"."image_billing_rule" (
@@ -137,7 +137,6 @@ export class Upgrade {
                 "status" varchar(30) NOT NULL DEFAULT 'pending',
                 "billing_status" varchar(30) NOT NULL DEFAULT 'pending',
                 "request_key" varchar(100),
-                "model_config_id" uuid,
                 "prompt" text NOT NULL DEFAULT '',
                 "negative_prompt" text,
                 "reference_image_url" text,
@@ -176,7 +175,8 @@ export class Upgrade {
                 "started_at" timestamp,
                 "completed_at" timestamp,
                 "created_at" timestamp NOT NULL DEFAULT now(),
-                "updated_at" timestamp NOT NULL DEFAULT now()
+                "updated_at" timestamp NOT NULL DEFAULT now(),
+                "deleted_at" timestamp
             )
         `);
         await this.ensureColumn("image_generation", "api_mode", "varchar(30)");
@@ -194,14 +194,19 @@ export class Upgrade {
         await this.ensureColumn("image_generation", "storage_files", "jsonb NOT NULL DEFAULT '[]'");
         await this.ensureColumn("image_generation", "raw_events", "jsonb NOT NULL DEFAULT '[]'");
         await this.ensureColumn("image_generation", "progress", "int NOT NULL DEFAULT 0");
+        await this.ensureColumn("image_generation", "deleted_at", "timestamp");
     }
 
     private async ensureIndexes(): Promise<void> {
+        await this.dataSource.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS "uq_image_model_config_model"
+            ON "echoflow_image"."image_model_config" ("model")
+            WHERE "model" IS NOT NULL
+        `);
         await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_model_config_enabled" ON "echoflow_image"."image_model_config" ("enabled", "visible_to_user")`);
         await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_billing_rule_model_config_id" ON "echoflow_image"."image_billing_rule" ("model_config_id")`);
         await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_policy_config_scope_model" ON "echoflow_image"."image_policy_config" ("scope", "model_config_id")`);
         await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_prompt_template_enabled" ON "echoflow_image"."image_prompt_template" ("enabled", "sort_order")`);
-        await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_generation_model_config_id" ON "echoflow_image"."image_generation" ("model_config_id")`);
         await this.dataSource.query(`CREATE INDEX IF NOT EXISTS "idx_image_generation_user_status_created" ON "echoflow_image"."image_generation" ("user_id", "status", "created_at")`);
 
         const duplicateRows = await this.dataSource.query(`

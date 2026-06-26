@@ -17,9 +17,9 @@ export type TownWorldState = {
     contentPack?: {
         packId: "launch-core";
         version: string;
-        seasonId: "season-0";
         seededAt: string;
-        seedStrategy: {
+        seasonId?: "season-0";
+        seedStrategy?: {
             mode: "first-install";
             shouldRun: "create-save" | "upgrade-normalize";
             idempotencyKey: string;

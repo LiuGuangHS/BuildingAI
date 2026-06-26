@@ -621,6 +621,8 @@ export default function AstrologyFortuneHomePage() {
                             />
                             <ReportPanel
                                 report={currentReport}
+                                generationDisabled={generationDisabled}
+                                generationUnavailableReason={generationUnavailableReason}
                                 onFavorite={handleFavorite}
                                 onCopy={copyReport}
                                 onDownload={downloadReport}
@@ -667,6 +669,8 @@ export default function AstrologyFortuneHomePage() {
                                         ? activeReport
                                         : (latestCompatibilityReport ?? currentReport)
                                 }
+                                generationDisabled={generationDisabled}
+                                generationUnavailableReason={generationUnavailableReason}
                                 onFavorite={handleFavorite}
                                 onCopy={copyReport}
                                 onDownload={downloadReport}
@@ -708,6 +712,8 @@ export default function AstrologyFortuneHomePage() {
                         />
                         <ReportPanel
                             report={currentReport}
+                            generationDisabled={generationDisabled}
+                            generationUnavailableReason={generationUnavailableReason}
                             onFavorite={handleFavorite}
                             onCopy={copyReport}
                             onDownload={downloadReport}
@@ -731,6 +737,8 @@ export default function AstrologyFortuneHomePage() {
                 onRegenerate={handleRegenerate}
                 onFollowUp={prepareFollowUp}
                 onFeedback={handleFeedback}
+                generationDisabled={generationDisabled}
+                generationUnavailableReason={generationUnavailableReason}
             />
         </main>
     );
@@ -974,6 +982,8 @@ function TodayView({
                 <ReportPanel
                     report={report}
                     compact
+                    generationDisabled={generationDisabled}
+                    generationUnavailableReason={generationUnavailableReason}
                     onFavorite={onFavorite}
                     onCopy={onCopy}
                     onOpen={onOpenReport}
@@ -1615,6 +1625,8 @@ function HistoryContextLine({ report }: { report: AstrologyReport }) {
 function ReportPanel({
     report,
     compact,
+    generationDisabled,
+    generationUnavailableReason,
     onFavorite,
     onCopy,
     onDownload,
@@ -1626,6 +1638,8 @@ function ReportPanel({
 }: {
     report: AstrologyReport | null;
     compact?: boolean;
+    generationDisabled: boolean;
+    generationUnavailableReason: string;
     onFavorite: (report: AstrologyReport) => void;
     onCopy: (report: AstrologyReport) => void;
     onDownload: (report: AstrologyReport) => void;
@@ -1698,7 +1712,13 @@ function ReportPanel({
                     ))}
                     <ActionList items={result.actions ?? []} compact={compact} />
                     <SignalList items={result.warnings ?? []} compact={compact} />
-                    <FollowUpPanel report={report} compact={compact} onFollowUp={onFollowUp} />
+                    <FollowUpPanel
+                        report={report}
+                        compact={compact}
+                        generationDisabled={generationDisabled}
+                        generationUnavailableReason={generationUnavailableReason}
+                        onFollowUp={onFollowUp}
+                    />
                     <FeedbackPanel report={report} compact={compact} onFeedback={onFeedback} />
                     {!compact && (
                         <>
@@ -1733,7 +1753,7 @@ function ReportPanel({
                         <Action onClick={() => onFavorite(report)}>
                             {report.isFavorite ? "取消收藏" : "收藏"}
                         </Action>
-                        <Action onClick={() => onRegenerate(report)}>
+                        <Action disabled={generationDisabled || isReportBusy(report.status)} onClick={() => onRegenerate(report)}>
                             <RefreshCw size={14} />
                             重生成
                         </Action>
@@ -2440,10 +2460,14 @@ function CompletionMeter({
 function FollowUpPanel({
     report,
     compact,
+    generationDisabled,
+    generationUnavailableReason,
     onFollowUp,
 }: {
     report: AstrologyReport;
     compact?: boolean;
+    generationDisabled: boolean;
+    generationUnavailableReason: string;
     onFollowUp: (report: AstrologyReport, prompt: string) => void;
 }) {
     const fallbackPrompts = [
@@ -2466,12 +2490,14 @@ function FollowUpPanel({
                         variant="outline"
                         size="sm"
                         type="button"
+                        disabled={generationDisabled}
                         onClick={() => onFollowUp(report, prompt)}
                     >
                         {prompt.replace("「{title}」", "这份报告")}
                     </Button>
                 ))}
             </div>
+            {generationDisabled && <GenerationUnavailableNotice text={generationUnavailableReason} />}
         </div>
     );
 }
@@ -2547,6 +2573,8 @@ function ReportDetailModal({
     onRegenerate,
     onFollowUp,
     onFeedback,
+    generationDisabled,
+    generationUnavailableReason,
 }: {
     report: AstrologyReport | null;
     onClose: () => void;
@@ -2557,6 +2585,8 @@ function ReportDetailModal({
     onRegenerate: (report: AstrologyReport) => void;
     onFollowUp: (report: AstrologyReport, prompt: string) => void;
     onFeedback: ReportFeedbackHandler;
+    generationDisabled: boolean;
+    generationUnavailableReason: string;
 }) {
     const result = report?.result;
     const deleteDisabled = report ? isReportBusy(report.status) : false;
@@ -2622,6 +2652,8 @@ function ReportDetailModal({
                         <ListBlock title="风险提醒" items={result.warnings ?? []} />
                         <FollowUpPanel
                             report={report}
+                            generationDisabled={generationDisabled}
+                            generationUnavailableReason={generationUnavailableReason}
                             onFollowUp={(nextReport, prompt) => {
                                 onClose();
                                 onFollowUp(nextReport, prompt);
@@ -2644,7 +2676,7 @@ function ReportDetailModal({
                         <Action onClick={() => onFavorite(report)}>
                             {report.isFavorite ? "取消收藏" : "收藏"}
                         </Action>
-                        <Action onClick={() => onRegenerate(report)}>
+                        <Action disabled={generationDisabled || isReportBusy(report.status)} onClick={() => onRegenerate(report)}>
                             <RefreshCw size={14} />
                             重新生成
                         </Action>

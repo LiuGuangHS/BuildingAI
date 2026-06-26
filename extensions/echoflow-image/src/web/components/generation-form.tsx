@@ -1,6 +1,5 @@
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent } from "@buildingai/ui/components/ui/card";
-import { createRequestId } from "@buildingai/http";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
@@ -28,7 +27,7 @@ interface GenerationFormProps {
     estimatedPower?: number;
     onSubmit: (data: CreateGenerationParams) => Promise<void> | void;
     onEstimateChange?: (data: CreateGenerationParams) => void;
-    onEnhancePrompt?: (data: { prompt: string; modelId?: string; style?: string }) => Promise<{ prompt: string; source: "ai" | "local" }>;
+    onEnhancePrompt?: (data: { prompt: string; modelId: string; style?: string }) => Promise<{ prompt: string; source: "ai" }>;
 }
 
 const promptTemplates = [
@@ -156,24 +155,24 @@ export function GenerationForm({
         style,
         responseFormat,
         mode: effectiveMode,
-        requestKey: includeRequestKey ? createRequestId() : undefined,
+        requestKey: includeRequestKey ? crypto.randomUUID() : undefined,
         source: includeClientMetadata ? selectedModel?.source : undefined,
-        pluginConfigId: includeClientMetadata ? selectedModel?.pluginConfigId : undefined,
     });
 
     const handleEnhancePrompt = async () => {
         const value = prompt.trim();
-        if (!value) return;
-        const enhanced = await onEnhancePrompt?.({ prompt: value, modelId, style });
+        if (!value || !modelId) return;
+        let enhanced: Awaited<ReturnType<NonNullable<GenerationFormProps["onEnhancePrompt"]>>> | undefined;
+        try {
+            enhanced = await onEnhancePrompt?.({ prompt: value, modelId, style });
+        } catch {
+            return;
+        }
         if (enhanced?.prompt) {
             setPrompt(enhanced.prompt);
-        } else {
-            const styleHint = style === "natural" ? "自然色彩，真实光影" : "鲜明色彩，视觉张力";
-            const qualityHint = quality === "hd" ? "超高细节，边缘清晰，质感精致" : "构图完整，主体明确，细节丰富";
-            setPrompt(`${value}，${styleHint}，${qualityHint}，画面干净，背景协调`);
-        }
-        if (!negativePrompt.trim()) {
-            setNegativePrompt("低清晰度，畸形，重复元素，水印，错误文字，过度噪点");
+            if (!negativePrompt.trim()) {
+                setNegativePrompt("低清晰度，畸形，重复元素，水印，错误文字，过度噪点");
+            }
         }
     };
 
@@ -202,7 +201,6 @@ export function GenerationForm({
         effectiveMode,
         canUseNegativePrompt,
         selectedModel?.source,
-        selectedModel?.pluginConfigId,
     ]);
 
     useEffect(() => {
@@ -267,7 +265,7 @@ export function GenerationForm({
                             <div className="flex flex-wrap items-center gap-2">
                                 <Button
                                     type="button"
-                                    disabled={loading || !prompt.trim()}
+                                    disabled={loading || !prompt.trim() || !modelId}
                                     onClick={handleEnhancePrompt}
                                     variant="outline"
                                     size="sm"
@@ -332,7 +330,7 @@ export function GenerationForm({
                                                 <div className="flex min-w-0 flex-col">
                                                     <span className="truncate">{model.name}</span>
                                                     <span className="truncate text-xs text-muted-foreground">
-                                                        {model.providerName || model.provider} / {model.model}
+                                                        {model.model}
                                                     </span>
                                                 </div>
                                             </SelectItem>
@@ -341,7 +339,7 @@ export function GenerationForm({
                                 </Select>
                                 {selectedModel && (
                                     <p className="truncate text-xs text-muted-foreground">
-                                        {selectedModel.providerName || selectedModel.provider} / {selectedModel.model}
+                                        {selectedModel.model}
                                         {canUseImageToImage ? " / 支持参考图" : " / 文生图"}
                                         {canUseMultiReference ? " / 多参考" : ""}
                                     </p>

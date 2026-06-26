@@ -3,8 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const SERVICE_FILE = new URL("../src/api/modules/generation/services/generation.service.ts", import.meta.url);
+const MODEL_CONFIG_SERVICE_FILE = new URL("../src/api/modules/config/services/model-config.service.ts", import.meta.url);
 const WEB_SERVICE_FILE = new URL("../src/web/services/web/generation.ts", import.meta.url);
 const CONSOLE_SERVICE_FILE = new URL("../src/web/services/console/generation.ts", import.meta.url);
+const SERVICE_INDEX_FILE = new URL("../src/web/services/index.ts", import.meta.url);
+const TYPES_FILE = new URL("../src/web/services/types/generation.ts", import.meta.url);
 const GENERATION_FORM_FILE = new URL("../src/web/components/generation-form.tsx", import.meta.url);
 const RESULT_GALLERY_FILE = new URL("../src/web/components/result-gallery.tsx", import.meta.url);
 const ERROR_STATE_FILE = new URL("../src/web/components/error-state.tsx", import.meta.url);
@@ -25,11 +28,46 @@ function extractMethod(source, name) {
     return source.slice(start, next === -1 ? undefined : next);
 }
 
+function extractInterface(source, name) {
+    const start = source.indexOf(`export interface ${name}`);
+    assert.notEqual(start, -1, `${name} should exist`);
+    const next = source.indexOf("\nexport interface ", start + 1);
+    return source.slice(start, next === -1 ? undefined : next);
+}
+
 test("image web serializer strips provider debug fields", async () => {
     const source = await readFile(SERVICE_FILE, "utf8");
     const method = extractMethod(source, "toPublicGeneration");
-    for (const field of ["rawRequest", "rawResponse", "baseURL", "deletedAt"]) {
+    for (const field of ["rawRequest", "rawResponse", "baseURL", "provider", "deletedAt"]) {
         assert.match(method, new RegExp(`${field}: _${field}`));
+    }
+});
+
+test("image public model options and types do not expose provider details", async () => {
+    const [modelConfigSource, formSource, typesSource] = await Promise.all([
+        readFile(MODEL_CONFIG_SERVICE_FILE, "utf8"),
+        readFile(GENERATION_FORM_FILE, "utf8"),
+        readFile(TYPES_FILE, "utf8"),
+    ]);
+    const methodStart = modelConfigSource.indexOf("toWebOption(config:");
+    const method = modelConfigSource.slice(
+        methodStart,
+        modelConfigSource.indexOf("\n    private async ensureDefaultModelConfigs", methodStart),
+    );
+
+    assert.doesNotMatch(method, /\bprovider:/);
+    assert.doesNotMatch(method, /pluginConfigId|modelConfigId|promptEnhancerModelId/);
+    assert.doesNotMatch(formSource, /\.provider\b/);
+    assert.doesNotMatch(extractInterface(typesSource, "ImageGeneration"), /^\s+provider\??:/m);
+    assert.doesNotMatch(extractInterface(typesSource, "ImageModelOption"), /^\s+provider(Name)?\??:/m);
+    assert.doesNotMatch(extractInterface(typesSource, "ImageModelOption"), /^\s+promptEnhancerModelId\??:/m);
+});
+
+test("image service barrel exports console services used by console pages", async () => {
+    const source = await readFile(SERVICE_INDEX_FILE, "utf8");
+
+    for (const item of ["billing", "generation", "model-config", "policy", "templates"]) {
+        assert.match(source, new RegExp(`export \\* from "\\./console/${item}"`));
     }
 });
 
@@ -70,6 +108,8 @@ test("image console services use console client and console generation type", as
     assert.match(source, /consoleHttpClient/);
     assert.doesNotMatch(source, /apiHttpClient/);
     assert.match(source, /ConsoleImageGeneration/);
+    assert.doesNotMatch(source, /usePromptEnhanceMutation/);
+    assert.doesNotMatch(source, /\/generation\/prompt\/enhance/);
 });
 
 test("image generation form uses system Button instead of native buttons", async () => {
@@ -185,7 +225,7 @@ test("image external reference and mask URLs are DNS-checked before being saved 
 
     assert.match(source, /private async normalizeReferenceImageUrl/);
     assert.match(source, /await assertPublicHttpUrl\(value, \{ label: "参考图 URL" \}\)/);
-    assert.match(source, /await this\.normalizeGenerationRequest\(dto, effectiveConfig\)/);
+    assert.match(source, /await this\.normalizeGenerationRequest\(dto, effectiveConfig, userId\)/);
     assert.doesNotMatch(source, /const url = new URL\(trustedFile \? value : normalizePublicHttpUrl\(value, \{ label: "参考图 URL" \}\)\)/);
 });
 
@@ -194,6 +234,8 @@ test("image platform upload fileId paths do not persist client supplied referenc
 
     assert.match(source, /if \(trustedFile\) return undefined/);
     assert.match(source, /normalized\.push\(\{ url, fileId \}\)/);
+    assert.match(source, /assertUploadFileUsable\(fileId, userId/);
+    assert.match(source, /assertUploadFilesWithinLimit/);
     assert.doesNotMatch(source, /const url = await this\.normalizeReferenceImageUrl\(item\.url, Boolean\(fileId\)\);/);
 });
 

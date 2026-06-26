@@ -1,11 +1,12 @@
 const AI_OUTPUT_FORMAT_MESSAGE = "AI 返回的星盘报告格式异常，本次生成已失败并会按账务事实退款，请稍后重试。";
+const PROVIDER_ERROR_MESSAGE = "星盘报告生成失败，本次生成已按账务事实处理，请稍后重试。";
 
 type AstrologyReportFailureType = "ai_output_format" | "provider_error";
 
 export function buildAstrologyReportFailure(error: unknown) {
     const reason = getFailureReason(error);
     const failureType = isAiOutputFormatError(reason) ? "ai_output_format" : "provider_error";
-    const message = failureType === "ai_output_format" ? AI_OUTPUT_FORMAT_MESSAGE : reason;
+    const message = failureType === "ai_output_format" ? AI_OUTPUT_FORMAT_MESSAGE : PROVIDER_ERROR_MESSAGE;
 
     return {
         message,

@@ -37,7 +37,7 @@ describe("astrology web generation availability", () => {
         assert.match(serviceSource, /async getPublicGenerationStatus/);
         assert.match(serviceSource, /canGenerate/);
         assert.match(serviceSource, /unavailableReason/);
-        assert.doesNotMatch(serviceSource.match(/async getPublicGenerationStatus[\s\S]*?}\n/)?.[0] ?? "", /defaultModelId|providerId|secret|apiKey/i);
+        assert.doesNotMatch(serviceSource.match(/return \{\s*canGenerate[\s\S]*?prices,\s*};/)?.[0] ?? "", /defaultModelId|providerId|secret|apiKey/i);
     });
 
     it("loads public generation availability through the web service without console-only fields", () => {
@@ -54,6 +54,9 @@ describe("astrology web generation availability", () => {
         const rootBody = extractFunction("AstrologyFortuneHomePage");
         const composerBody = extractFunction("ReportComposer");
         const footerBody = extractFunction("GenerationFooter");
+        const reportPanelBody = extractFunction("ReportPanel");
+        const followUpBody = extractFunction("FollowUpPanel");
+        const detailModalBody = extractFunction("ReportDetailModal");
 
         assert.match(rootBody, /useAstrologyGenerationStatusQuery/);
         assert.match(rootBody, /generationDisabled/);
@@ -61,5 +64,19 @@ describe("astrology web generation availability", () => {
         assert.match(composerBody, /disabled={generationDisabled}/);
         assert.match(composerBody, /当前生成服务暂不可用/);
         assert.match(footerBody, /disabled={busy \|\| generationDisabled}/);
+        assert.match(reportPanelBody, /disabled={generationDisabled \|\| isReportBusy\(report\.status\)}/);
+        assert.match(followUpBody, /disabled={generationDisabled}/);
+        assert.match(detailModalBody, /disabled={generationDisabled \|\| isReportBusy\(report\.status\)}/);
+    });
+
+    it("keeps public report metadata typed as an explicit whitelist", () => {
+        const publicMetadata = typesSource.match(/export type PublicAstrologyReportMetadata[\s\S]*?};\n\nexport type ConsoleAstrologyReportMetadata/)?.[0] ?? "";
+        assert.match(publicMetadata, /feedback\?/);
+        assert.match(publicMetadata, /sourceReport\?/);
+        assert.match(publicMetadata, /generationContext\?/);
+        assert.doesNotMatch(publicMetadata, /Record<string, unknown>/);
+        assert.doesNotMatch(publicMetadata, /requestPayload|rawResponse|modelId|providerId|secret|apiKey/i);
+        assert.match(typesSource, /export type ConsoleAstrologyReport = Omit<AstrologyReport, "providerMetadata">/);
+        assert.match(typesSource, /providerMetadata\?: ConsoleAstrologyReportMetadata \| null/);
     });
 });

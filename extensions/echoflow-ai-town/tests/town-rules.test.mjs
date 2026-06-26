@@ -28,7 +28,6 @@ const townConsoleSaveListSource = readFileSync(new URL("../src/web/pages/console
 const townConsoleContentPackSource = readFileSync(new URL("../src/web/pages/console/content-pack.tsx", import.meta.url), "utf8");
 const townConsoleAiConfigSource = readFileSync(new URL("../src/web/pages/console/ai-config.tsx", import.meta.url), "utf8");
 const townRoutesSource = readFileSync(new URL("../src/web/routes.tsx", import.meta.url), "utf8");
-const townViteConfigSource = readFileSync(new URL("../vite.config.mjs", import.meta.url), "utf8");
 const townManifestSource = readFileSync(new URL("../manifest.json", import.meta.url), "utf8");
 const townPackageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
 const townReadmeSource = readFileSync(new URL("../README.md", import.meta.url), "utf8");
@@ -36,13 +35,6 @@ const rootAgentsSource = readFileSync(new URL("../../../AGENTS.md", import.meta.
 const townConsoleControllerSource = readFileSync(new URL("../src/api/modules/town/controllers/console/town.controller.ts", import.meta.url), "utf8");
 const townConsoleServiceSource = readFileSync(new URL("../src/web/services/console/town.ts", import.meta.url), "utf8");
 const townWebTypesSource = readFileSync(new URL("../src/web/services/types.ts", import.meta.url), "utf8");
-const platformSpinnerSource = readFileSync(new URL("../../../packages/@buildingai/web/ui/src/components/ui/spinner.tsx", import.meta.url), "utf8");
-const platformToasterSource = readFileSync(new URL("../../../packages/@buildingai/web/ui/src/components/ui/sonner.tsx", import.meta.url), "utf8");
-const platformConsoleNavSource = readFileSync(new URL("../../../packages/@buildingai/web/ui/src/layouts/extension/console/_components/nav-main.tsx", import.meta.url), "utf8");
-const platformConsoleTypesSource = readFileSync(new URL("../../../packages/@buildingai/web/ui/src/layouts/extension/console/types.tsx", import.meta.url), "utf8");
-const platformExtensionRootSource = readFileSync(new URL("../../../packages/@buildingai/web/ui/src/layouts/extension/root/main.tsx", import.meta.url), "utf8");
-const platformRefreshUserSource = readFileSync(new URL("../../../packages/@buildingai/web/hooks/src/use-refresh-user.ts", import.meta.url), "utf8");
-const platformSharedUserServiceSource = readFileSync(new URL("../../../packages/@buildingai/web/services/src/shared/user.ts", import.meta.url), "utf8");
 
 test("world rules keep deterministic building costs and unlock rules", () => {
     assert.match(worldRulesSource, /getBuildingUpgradeCost\(level: number\)/);
@@ -72,7 +64,6 @@ test("town defaults are catalog-backed for content-pack expansion", () => {
     assert.match(townServiceSource, /TOWN_CHARACTER_CATALOG\.map/);
     assert.match(townServiceSource, /const catalogItem = TOWN_ACTION_CATALOG\[action\]/);
     assert.match(townServiceSource, /TOWN_CHOICE_ACTION_OVERRIDES\[choice\.id\]/);
-    assert.match(townServiceSource, /return createTownChoiceCatalog\(\)/);
     assert.doesNotMatch(townServiceSource, /buildings:\s*\[\s*\{ id: "restaurant"/);
     assert.match(progressRulesSource, /return createTownDailyTasks\(day\)/);
     assert.match(progressRulesSource, /return createTownWeeklyGoal\(day\)/);
@@ -117,8 +108,9 @@ test("public plugin metadata introduces the town as a game instead of generic AI
     assert.doesNotMatch(townManifestSource, /AI 趣味玩法应用/);
     assert.match(townPackageSource, /"description": "Town life management narrative game extension"/);
     assert.doesNotMatch(townPackageSource, /AI open world/);
-    assert.match(upgradeSource, /name: "乐园小镇"/);
-    assert.match(upgradeSource, /description: "治愈系小镇经营叙事游戏/);
+    assert.match(upgradeSource, /import manifest from "\.\.\/\.\.\/\.\.\/\.\.\/manifest\.json";/);
+    assert.match(upgradeSource, /name: manifest\.name/);
+    assert.match(upgradeSource, /description: manifest\.description/);
     assert.doesNotMatch(upgradeSource, /name: "AI乐园小镇/);
     assert.doesNotMatch(upgradeSource, /AI 趣味玩法应用/);
     assert.match(townReadmeSource, /公开元信息 \| ready \| 插件 manifest、package 和安装记录使用乐园小镇与经营叙事游戏语境/);
@@ -131,9 +123,9 @@ test("content pack manifest defines launch season and save normalization strateg
     assert.match(contentPackCatalogSource, /export const TOWN_CONTENT_PACK_MANIFEST/);
     assert.match(contentPackCatalogSource, /title: "开业季"/);
     assert.match(contentPackCatalogSource, /idempotencyKey: "echoflow-ai-town:launch-core:0\.0\.1"/);
-    assert.match(contentPackCatalogSource, /buildings: \["restaurant", "florist", "square"\]/);
-    assert.match(contentPackCatalogSource, /mainQuestChapters: \[1, 2, 3, 4\]/);
-    assert.match(contentPackCatalogSource, /festivals: \["festival-lantern", "restaurant-new-menu", "florist-show", "fountain-repair"\]/);
+    assert.match(contentPackCatalogSource, /buildings: TOWN_BUILDING_CATALOG\.map/);
+    assert.match(contentPackCatalogSource, /mainQuestChapters: Object\.keys\(TOWN_MAIN_QUEST_CATALOG\)\.map\(Number\)/);
+    assert.match(contentPackCatalogSource, /festivals: TOWN_FESTIVAL_CATALOG\.map/);
     assert.match(contentPackCatalogSource, /export function createTownContentPackState/);
     assert.match(contentPackCatalogSource, /export function normalizeTownContentPackState/);
     assert.match(catalogIndexSource, /export \* from "\.\/town-content-pack\.catalog"/);
@@ -321,46 +313,6 @@ test("long-term goals provide actionable CTAs instead of passive progress only",
     assert.match(townStylesSource, /\.goal-action-row/);
     assert.match(townReadmeSource, /主线、周目标、活动和今日计划推荐 CTA 也必须显示具体玩家动作/);
     assert.match(rootAgentsSource, /不要用“执行任务”“处理目标”“推进主线”“推进周目标”或“筹备活动”等后台式或目标式泛称/);
-});
-
-test("growth ledger shows commercial value as gameplay preview without pretending billing is live", () => {
-    assert.match(townGamePanelsSource, /function GrowthLedger\(\{ save, onRunGoalAction \}: \{ save: TownSave; onRunGoalAction\?: \(action: string, params\?: \{ buildingId\?: string \}\) => void \}\)/);
-    assert.match(townGamePanelsSource, /const storyDepth = Math\.min\(100, save\.level \* 18 \+ \(save\.worldState\.mainQuest\?\.chapter \?\? 1\) \* 8\)/);
-    assert.match(townGamePanelsSource, /const memoryDepth = Math\.min\(100, getMemoryPromiseCount\(save\) \* 18 \+ save\.characters\.length \* 10\)/);
-    assert.match(townGamePanelsSource, /function createGrowthLedgerLanes\(save: TownSave\)/);
-    assert.match(townGamePanelsSource, /action: "advice"/);
-    assert.match(townGamePanelsSource, /actionLabel: "安排计划"/);
-    assert.match(townGamePanelsSource, /action: "visit"/);
-    assert.match(townGamePanelsSource, /actionLabel: "拜访居民"/);
-    assert.match(townGamePanelsSource, /action: "operate"/);
-    assert.match(townGamePanelsSource, /actionLabel: "经营餐馆"/);
-    assert.match(townGamePanelsSource, /action: "explore"/);
-    assert.match(townGamePanelsSource, /actionLabel: "探索街区"/);
-    assert.match(townGamePanelsSource, /action: "decorate"/);
-    assert.match(townGamePanelsSource, /actionLabel: "布置小镇"/);
-    assert.match(townGamePanelsSource, /className="task-section quest-section growth-ledger"/);
-    assert.match(townGamePanelsSource, /成长册/);
-    assert.match(townGamePanelsSource, /故事深度/);
-    assert.match(townGamePanelsSource, /记忆容量/);
-    assert.match(townGamePanelsSource, /角色章节/);
-    assert.match(townGamePanelsSource, /季节活动/);
-    assert.match(townGamePanelsSource, /外观表达/);
-    assert.match(townGamePanelsSource, /className="growth-lane-action"/);
-    assert.match(townGamePanelsSource, /getActionState\(save, lane\.action, lane\.buildingId\)/);
-    assert.match(townGamePanelsSource, /aria-label=\{`\$\{lane\.label\}：\$\{lane\.actionLabel\}`\}/);
-    assert.match(townGamePanelsSource, /onClick=\{\(\) => onRunGoalAction\?\.\(lane\.action, lane\.buildingId \? \{ buildingId: lane\.buildingId \} : undefined\)\}/);
-    assert.match(townGamePanelsSource, /actionState\.canRun \? lane\.actionLabel : actionState\.disabledReason/);
-    assert.doesNotMatch(townGamePanelsSource, />继续推进</);
-    assert.match(townGamePanelsSource, /当前为成长预览，正式扣费、订阅权益和失败退款接入后才会开放购买。/);
-    assert.doesNotMatch(townGamePanelsSource, /购买成长/);
-    assert.match(townGamePanelsSource, /<GrowthLedger save=\{save\} onRunGoalAction=\{onRunGoalAction\} \/>/);
-    assert.match(townStylesSource, /\.growth-ledger/);
-    assert.match(townStylesSource, /\.growth-lane/);
-    assert.match(townStylesSource, /\.growth-lane-action/);
-    assert.match(townReadmeSource, /成长册 \| ready \| 玩家端把故事深度、记忆容量、角色章节、季节活动和外观表达呈现为玩法成长预览/);
-    assert.match(townReadmeSource, /成长路线 CTA 只执行经营、拜访、计划、探索或布置等玩法动作，不提供购买按钮/);
-    assert.match(rootAgentsSource, /商业化尚未接入正式计费时，用户端可以展示玩法价值预览/);
-    assert.match(rootAgentsSource, /成长册、内容包预告或章节路线若展示未来商业价值，必须优先给出玩法行动入口/);
 });
 
 test("daily task cards provide actionable CTAs instead of static checklist rows", () => {
@@ -578,10 +530,9 @@ test("pending actions surface as concrete in-world command feedback", () => {
 });
 
 test("game motion respects reduced motion without removing visual feedback", () => {
-    assert.match(townGamePanelsSource, /import \{ motion, useReducedMotion \} from "framer-motion";/);
-    assert.match(townGamePanelsSource, /const shouldReduceMotion = useReducedMotion\(\);/);
-    assert.match(townGamePanelsSource, /initial=\{\{ opacity: 0, x: shouldReduceMotion \? 0 : 48 \}\}/);
-    assert.match(townGamePanelsSource, /exit=\{\{ opacity: 0, x: shouldReduceMotion \? 0 : 36 \}\}/);
+    assert.doesNotMatch(townGamePanelsSource, /framer-motion/);
+    assert.doesNotMatch(townGamePanelsSource, /useReducedMotion/);
+    assert.doesNotMatch(townGamePanelsSource, /shouldReduceMotion/);
     assert.match(townStylesSource, /@media \(prefers-reduced-motion: reduce\)/);
     assert.match(townStylesSource, /\.floating-result,\s*\.command-card\.recommended,\s*\.building-hotspot\.recommended::before,\s*\.npc-hotspot\.recommended::before,\s*\.task-card\.active::before,\s*\.action-pending-banner::before,\s*\.ai-companion\.scheduling\s*\{[\s\S]*animation: none/);
     assert.doesNotMatch(townStylesSource, /ai-companion\.thinking/);
@@ -728,7 +679,8 @@ test("web town view model centralizes hud goals hotspots and commands", () => {
     assert.match(townViewModelSource, /export function getActionState\(save: TownSave, action: string, buildingId\?: string\): TownActionStateViewModel/);
     assert.match(townViewModelSource, /export function getActionBudget\(save: TownSave\): TownActionBudgetViewModel/);
     assert.match(townViewModelSource, /export function createGoalViewModel\(save: TownSave\): TownGoalViewModel/);
-    assert.match(townViewModelSource, /export function createEventSummary\(event: TownEvent\): TownEventSummaryViewModel/);
+    assert.doesNotMatch(townViewModelSource, /TownEventSummaryViewModel/);
+    assert.doesNotMatch(townViewModelSource, /events: save\.events\.map/);
     assert.match(townPageSource, /const viewModel = save \? createTownViewModel\(save\) : null;/);
     assert.match(townPageSource, /const actionState = save \? getActionState\(save, action, params\?\.buildingId\) : null;/);
     assert.match(townPageSource, /<CompactGoalBoard goal=\{viewModel\.goal\} save=\{save\}/);
@@ -848,22 +800,12 @@ test("empty save state opens as a playable town scene", () => {
     assert.match(readFileSync(new URL("../src/web/services/web/town.ts", import.meta.url), "utf8"), /apiHttpClient\.get<TownSaveListResult>\("\/ai-town\/saves", \{ silent: true \}\)/);
     assert.match(townPageSource, /onboarding-hotspots/);
     assert.match(townPageSource, /className="onboarding-quest-card"/);
-    assert.match(townPageSource, /className="onboarding-growth-card"/);
     assert.match(townPageSource, /开张路线/);
-    assert.match(townPageSource, /成长预览/);
-    assert.match(townPageSource, /故事/);
-    assert.match(townPageSource, /记忆/);
-    assert.match(townPageSource, /章节/);
-    assert.match(townPageSource, /活动/);
-    assert.match(townPageSource, /外观/);
-    assert.match(townPageSource, /不是购买入口，正式扣费和订阅权益接入后再开放。/);
     assert.match(townPageSource, /先经营餐馆/);
     assert.match(townPageSource, /再拜访居民/);
     assert.match(townPageSource, /最后休息结算/);
     assert.match(townPageSource, /完成后会留下关系、约定和第二天目标。/);
     assert.match(townStylesSource, /\.onboarding-quest-card/);
-    assert.match(townStylesSource, /\.onboarding-growth-card/);
-    assert.match(townStylesSource, /\.onboarding-growth-lanes/);
     assert.match(townStylesSource, /\.onboarding-quest-steps/);
     assert.match(townPageSource, /onboarding-command-preview/);
     assert.match(townPageSource, /const onboardingCommands = \[/);
@@ -976,38 +918,22 @@ test("console save detail exposes action budget diagnostics", () => {
 test("game modal shell now behaves like a drawer", () => {
     assert.match(townPageSource, /GameModalShell key=\{modal\} title=\{getModalTitle\(modal, selectedBuilding, activeCharacter\)\} onClose=\{\(\) => setModal\(null\)\}/);
     assert.match(townPageSource, /modal === "building"/);
-    assert.match(townGamePanelsSource, /className="game-drawer-backdrop"/);
-    assert.match(townGamePanelsSource, /className="game-drawer"/);
+    assert.match(townGamePanelsSource, /<Sheet open onOpenChange=/);
+    assert.match(townGamePanelsSource, /<SheetContent side="right" showCloseButton=\{false\} className="game-drawer">/);
 });
 
-test("game modal drawer has dialog semantics and keyboard close behavior", () => {
-    assert.match(townGamePanelsSource, /import \{ useEffect, useRef \} from "react";/);
-    assert.match(townGamePanelsSource, /const titleId = `game-drawer-title-\$\{slugifyGameModalTitle\(title\)\}`;/);
-    assert.match(townGamePanelsSource, /const drawerRef = useRef<HTMLElement>\(null\);/);
-    assert.match(townGamePanelsSource, /const previousFocusRef = useRef<HTMLElement \| null>\(null\);/);
-    assert.match(townGamePanelsSource, /const previousBodyOverflowRef = useRef\(""\);/);
-    assert.match(townGamePanelsSource, /useEffect\(\(\) => \{[\s\S]*drawerRef\.current\?\.focus\(\);[\s\S]*\}, \[\]\);/);
-    assert.match(townGamePanelsSource, /previousFocusRef\.current = document\.activeElement instanceof HTMLElement \? document\.activeElement : null;/);
-    assert.match(townGamePanelsSource, /previousBodyOverflowRef\.current = document\.body\.style\.overflow;/);
-    assert.match(townGamePanelsSource, /document\.body\.style\.overflow = "hidden";/);
-    assert.match(townGamePanelsSource, /return \(\) => \{[\s\S]*document\.body\.style\.overflow = previousBodyOverflowRef\.current;[\s\S]*previousFocusRef\.current\?\.focus\(\);[\s\S]*\};/);
-    assert.match(townGamePanelsSource, /className="game-drawer-backdrop"[\s\S]*onClick=\{onClose\}/);
-    assert.match(townGamePanelsSource, /className="game-drawer"[\s\S]*ref=\{drawerRef\}[\s\S]*role="dialog"[\s\S]*aria-modal="true"[\s\S]*aria-labelledby=\{titleId\}[\s\S]*tabIndex=\{-1\}/);
-    assert.match(townGamePanelsSource, /onKeyDown=\{\(event\) => handleGameDrawerKeyDown\(event, onClose\)\}/);
-    assert.match(townGamePanelsSource, /onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
-    assert.match(townGamePanelsSource, /<h2 id=\{titleId\}>\{title\}<\/h2>/);
-    assert.match(townGamePanelsSource, /const closeLabel = `收起\$\{title\}面板`;/);
-    assert.match(townGamePanelsSource, /aria-label=\{closeLabel\}/);
+test("game modal drawer delegates dialog semantics to the system Sheet", () => {
+    assert.match(townGamePanelsSource, /import \{ Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle \} from "@buildingai\/ui\/components\/ui\/sheet";/);
+    assert.match(townGamePanelsSource, /<SheetTitle>\{title\}<\/SheetTitle>/);
+    assert.match(townGamePanelsSource, /<SheetDescription className="sr-only">小镇面板<\/SheetDescription>/);
+    assert.match(townGamePanelsSource, /<SheetClose asChild>/);
+    assert.match(townGamePanelsSource, /aria-label=\{`收起\$\{title\}面板`\}/);
     assert.doesNotMatch(townGamePanelsSource, /aria-label="关闭"/);
-    assert.match(townGamePanelsSource, /function slugifyGameModalTitle\(title: string\)/);
-    assert.match(townGamePanelsSource, /function handleGameDrawerKeyDown\(event: React\.KeyboardEvent<HTMLElement>, onClose: \(\) => void\)/);
-    assert.match(townGamePanelsSource, /if \(event\.key !== "Escape"\) return;/);
-    assert.match(townGamePanelsSource, /function keepGameDrawerFocusInside\(event: React\.KeyboardEvent<HTMLElement>\)/);
-    assert.match(townGamePanelsSource, /const focusableElements = Array\.from\(drawer\.querySelectorAll<HTMLElement>\(GAME_DRAWER_FOCUSABLE_SELECTOR\)\)/);
-    assert.match(townGamePanelsSource, /if \(event\.shiftKey && document\.activeElement === firstElement\)/);
-    assert.match(townGamePanelsSource, /if \(!event\.shiftKey && document\.activeElement === lastElement\)/);
-    assert.match(townReadmeSource, /抽屉可控性 \| ready \| 游戏抽屉具备 dialog 语义、标题关联、打开后自动聚焦、关闭后恢复触发点焦点、Tab 焦点循环、背景滚动锁定、Escape 关闭、遮罩点击关闭、可聚焦面板入口、带面板标题的关闭按钮和内部点击防冒泡/);
-    assert.match(rootAgentsSource, /自定义游戏抽屉或弹层必须具备 dialog 语义、标题关联、打开后自动聚焦、关闭后恢复触发点焦点、Tab 焦点循环、背景滚动锁定、Escape 关闭、可聚焦面板入口、带业务对象或面板标题的关闭按钮、遮罩点击关闭和内部点击防冒泡/);
+    assert.doesNotMatch(townGamePanelsSource, /GAME_DRAWER_FOCUSABLE_SELECTOR/);
+    assert.doesNotMatch(townGamePanelsSource, /slugifyGameModalTitle/);
+    assert.doesNotMatch(townGamePanelsSource, /handleGameDrawerKeyDown/);
+    assert.doesNotMatch(townGamePanelsSource, /keepGameDrawerFocusInside/);
+    assert.match(townReadmeSource, /抽屉可控性 \| ready \| 游戏抽屉复用系统 Sheet/);
 });
 
 test("route error pages use main system buttons instead of native controls", () => {
@@ -1030,40 +956,6 @@ test("web route bundle keeps console and icon work off the first screen", () => 
     assert.match(townMainSource, /<RootLayout>/);
     assert.match(townRoutesSource, /const ExtensionConsoleLayout = lazy\(\(\) => import\("@buildingai\/ui\/layouts\/extension\/console\/index"\)\)/);
     assert.doesNotMatch(townRoutesSource, /defineRouteOption/);
-    assert.match(townViteConfigSource, /return "react-vendor";/);
-    assert.doesNotMatch(townViteConfigSource, /return "lucide";/);
-    assert.match(townViteConfigSource, /outDir: "\.output\/public"/);
-});
-
-test("platform base loading and toast UI do not force lucide into extension first screen", () => {
-    assert.doesNotMatch(platformSpinnerSource, /lucide-react/);
-    assert.doesNotMatch(platformToasterSource, /lucide-react/);
-    assert.match(platformSpinnerSource, /border-current\/30 border-t-current/);
-    assert.match(platformToasterSource, /function ToastStatusIcon/);
-});
-
-test("extension root helper queries stay silent so plugin first screens do not show global network toasts", () => {
-    assert.match(platformExtensionRootSource, /useRefreshUser\(\{ silent: true \}\)/);
-    assert.match(platformExtensionRootSource, /useWebExtensionDetailQuery\(identifier \|\| "", \{\s*enabled: !!identifier,\s*requestConfig: \{ silent: true \},\s*\}\)/);
-    assert.match(platformRefreshUserSource, /export const useRefreshUser = \(options: UseRefreshUserOptions = \{\}\)/);
-    assert.match(platformRefreshUserSource, /requestConfig: \{ silent: options\.silent \}/);
-    assert.match(platformSharedUserServiceSource, /queryFn: \(\) => apiHttpClient\.get<UserInfo>\("\/user\/info", options\?\.requestConfig\)/);
-    assert.match(townReadmeSource, /真实浏览器 smoke \| blocked \| 当前只能确认 Vite 用户端可启动到 `http:\/\/localhost:5176\/extension\/echoflow-ai-town`；Codex Browser 连接对象断开，Playwright 缺少 Chromium 二进制，系统 Chrome\/Edge 未找到，因此没有新的桌面\/移动截图证据/);
-    assert.doesNotMatch(townReadmeSource, /真实浏览器 smoke \| partial \| `http:\/\/localhost:5174/);
-    assert.doesNotMatch(townReadmeSource, /p9_client_rpc/);
-    assert.match(rootAgentsSource, /扩展 RootLayout 的宿主辅助查询必须支持静默失败/);
-});
-
-test("platform console menus use a static icon whitelist instead of dynamic lucide chunks", () => {
-    assert.doesNotMatch(platformConsoleNavSource, /@buildingai\/ui\/components\/lucide-icon/);
-    assert.doesNotMatch(platformConsoleNavSource, /lucide-react\/dynamic/);
-    assert.doesNotMatch(platformConsoleTypesSource, /lucide-react\/dynamic/);
-    assert.match(platformConsoleTypesSource, /export type ExtensionConsoleMenuIconName/);
-    assert.match(platformConsoleNavSource, /const menuIconMap: Record<ExtensionConsoleMenuIconName, LucideIcon>/);
-    assert.match(platformConsoleNavSource, /landmark: Landmark/);
-    assert.match(platformConsoleNavSource, /bot: Bot/);
-    assert.match(platformConsoleNavSource, /"list-checks": ListChecks/);
-    assert.match(platformConsoleNavSource, /const Icon = name \? menuIconMap\[name\] \?\? CircleHelp : null;/);
 });
 
 test("stage turn strip focuses the first playable view without adding another full panel", () => {

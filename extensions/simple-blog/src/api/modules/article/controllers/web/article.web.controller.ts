@@ -1,10 +1,11 @@
 import { BaseController } from "@buildingai/base";
 import { ExtensionWebController } from "@buildingai/core/decorators";
+import { HttpErrorFactory } from "@buildingai/errors";
 import { Public } from "@buildingai/decorators/public.decorator";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Get, Param, Query } from "@nestjs/common";
 
-import { Article } from "../../../../db/entities/article.entity";
+import { Article, ArticleStatus } from "../../../../db/entities/article.entity";
 import { QueryArticleDto } from "../../dto";
 import { ArticleService } from "../../services/article.service";
 
@@ -29,7 +30,6 @@ export class ArticleWebController extends BaseController {
      * @returns Article list
      */
     @Get()
-    @Public()
     async findAll(@Query() queryArticleDto: QueryArticleDto) {
         return this.articleService.list(queryArticleDto);
     }
@@ -41,7 +41,7 @@ export class ArticleWebController extends BaseController {
      * @returns Published article list
      */
     @Get("published")
-    // @Public()
+    @Public()
     async getPublished(@Query("categoryId") categoryId?: string): Promise<Article[]> {
         return this.articleService.getPublishedArticles(categoryId);
     }
@@ -66,10 +66,13 @@ export class ArticleWebController extends BaseController {
             },
         });
 
-        if (article) {
-            // Increment view count
-            await this.articleService.incrementViewCount(id);
+        // 修复：公开端点仅返回已发布文章，草稿返回 404
+        if (!article || article.status !== ArticleStatus.PUBLISHED) {
+            throw HttpErrorFactory.notFound("文章不存在或未发布");
         }
+
+        // Increment view count
+        await this.articleService.incrementViewCount(id);
 
         return article;
     }

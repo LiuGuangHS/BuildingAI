@@ -8,13 +8,10 @@ import { TownService } from "../../services/town.service";
 
 @ExtensionConsoleController("ai-town", "AI乐园小镇管理")
 export class TownConsoleController {
-    private readonly townService: TownService;
-    private readonly townAiService: TownAiService;
-
-    constructor(townService: TownService, townAiService: TownAiService) {
-        this.townService = townService;
-        this.townAiService = townAiService;
-    }
+    constructor(
+        private readonly townService: TownService,
+        private readonly townAiService: TownAiService,
+    ) {}
 
     @Get("saves")
     getSaves(@Query() query: QueryTownSaveDto) {

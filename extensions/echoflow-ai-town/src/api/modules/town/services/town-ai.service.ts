@@ -4,6 +4,7 @@ import { PublicAiModelService, safeJsonParse } from "@buildingai/extension-sdk";
 import { Injectable, Logger } from "@nestjs/common";
 
 import { TownAiCallLog, TownAiConfig, TownCharacter, TownEvent, TownSave } from "../../../db/entities";
+import { TOWN_ACTION_LABELS } from "../catalog";
 import { type UpdateTownAiConfigDto } from "../dto";
 import {
     TOWN_AI_CONFIG_KEY,
@@ -58,21 +59,14 @@ export type AiTownStrategyDraft = {
 @Injectable()
 export class TownAiService {
     private readonly logger = new Logger(TownAiService.name);
-    private readonly configRepo: Repository<TownAiConfig>;
-    private readonly callLogRepo: Repository<TownAiCallLog>;
-    private readonly aiModelService: PublicAiModelService;
 
     constructor(
         @InjectRepository(TownAiConfig)
-        configRepo: Repository<TownAiConfig>,
+        private readonly configRepo: Repository<TownAiConfig>,
         @InjectRepository(TownAiCallLog)
-        callLogRepo: Repository<TownAiCallLog>,
-        aiModelService: PublicAiModelService,
-    ) {
-        this.configRepo = configRepo;
-        this.callLogRepo = callLogRepo;
-        this.aiModelService = aiModelService;
-    }
+        private readonly callLogRepo: Repository<TownAiCallLog>,
+        private readonly aiModelService: PublicAiModelService,
+    ) {}
 
     async getConfig() {
         const config = await this.configRepo.findOne({ where: { key: TOWN_AI_CONFIG_KEY } });
@@ -528,8 +522,8 @@ export class TownAiService {
     }
 
     private formatStrategyAction(action: string) {
-        const labels: Record<string, string> = { operate: "经营餐馆", visit: "拜访居民", decorate: "布置小镇", explore: "探索街区", upgrade: "升级建筑", rest: "休息一天" };
-        return labels[action] ?? action;
+        if (action === "rest") return "休息一天";
+        return TOWN_ACTION_LABELS[action] ?? action;
     }
 
     private isSupportedIntent(intent: unknown): intent is AiTownEventDraft["choices"][number]["intent"] {

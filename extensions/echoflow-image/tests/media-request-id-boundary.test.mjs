@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-const formFiles = [
-    new URL("../src/web/components/generation-form.tsx", import.meta.url),
+const imageFormFile = new URL("../src/web/components/generation-form.tsx", import.meta.url);
+
+const mediaFormFiles = [
+    imageFormFile,
     new URL("../../echoflow-video/src/web/components/generation-form.tsx", import.meta.url),
 ];
 
@@ -12,12 +14,15 @@ const deletedPluginHelpers = [
     new URL("../../echoflow-video/src/web/lib/request-key.ts", import.meta.url),
 ];
 
-test("media generation forms reuse main-system request id helper", async () => {
-    for (const file of formFiles) {
+test("image generation form uses browser UUID request ids", async () => {
+    const source = await readFile(imageFormFile, "utf8");
+    assert.match(source, /\bcrypto\.randomUUID\(\)/);
+});
+
+test("media generation forms do not keep local request-key helpers", async () => {
+    for (const file of mediaFormFiles) {
         const source = await readFile(file, "utf8");
 
-        assert.match(source, /@buildingai\/http/);
-        assert.match(source, /\bcreateRequestId\b/);
         assert.doesNotMatch(source, /createRequestKey/);
         assert.doesNotMatch(source, /request-key/);
     }

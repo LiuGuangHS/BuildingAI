@@ -1,9 +1,6 @@
 import type { TownWorldState } from "../../../db/entities";
 
-export type TownBuildingCatalogItem = TownWorldState["buildings"][number] & {
-    reserved?: boolean;
-    experimental?: boolean;
-};
+export type TownBuildingCatalogItem = TownWorldState["buildings"][number];
 
 export const TOWN_BUILDING_CATALOG: TownBuildingCatalogItem[] = [
     { id: "restaurant", name: "暖光餐馆", level: 1, status: "可经营", effect: "提高经营收入", maxLevel: 5 },

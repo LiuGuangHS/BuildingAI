@@ -1,5 +1,6 @@
 import { SecretModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
+import { AiPublicModule } from "@buildingai/extension-sdk";
 import { Module } from "@nestjs/common";
 
 import { ImageModelConfig } from "../../db/entities/image-model-config.entity";
@@ -11,7 +12,7 @@ import { ModelOptionsWebController } from "./controllers/web/model-options.web.c
 import { ModelConfigService } from "./services/model-config.service";
 
 @Module({
-    imports: [TypeOrmModule.forFeature([ImageModelConfig, ImageBillingRule, ImageGeneration, ImagePolicyConfig]), SecretModule],
+    imports: [TypeOrmModule.forFeature([ImageModelConfig, ImageBillingRule, ImageGeneration, ImagePolicyConfig]), SecretModule, AiPublicModule],
     controllers: [ModelConfigController, ModelOptionsWebController],
     providers: [ModelConfigService],
     exports: [ModelConfigService],

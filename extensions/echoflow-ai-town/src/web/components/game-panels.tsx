@@ -1,11 +1,11 @@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@buildingai/ui/components/ui/alert-dialog";
 import { Button } from "@buildingai/ui/components/ui/button";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@buildingai/ui/components/ui/sheet";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
-import { motion, useReducedMotion } from "framer-motion";
-import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 
 import { ASSETS, getNpcAsset } from "../assets";
-import { createCompanionMessage, formatEventType, formatFestivalAction, formatFestivalStatus, formatRequirement, getActionForTaskType, getBuildingActionCopy, getChoicePreview, getChoiceTone, getGoalActionLabel, getGoalActionTarget, getNextUnlockGoal, getRecommendedAction, getRecommendedTarget, getRelationshipBenefit, getRelationshipLevel, getResultSummary, getStrategyPlan, getUpgradeCost, groupEvents, isAiEventType, type TownGoalActionTarget } from "../lib/game-rules";
+import { createCompanionMessage, formatEventType, formatFestivalAction, formatFestivalStatus, formatRequirement, getActionForTaskType, getBuildingActionCopy, getChoicePreview, getChoiceTone, getGoalActionLabel, getGoalActionTarget, getRecommendedAction, getRecommendedTarget, getRelationshipBenefit, getRelationshipLevel, getResultSummary, getStrategyPlan, getUpgradeCost, groupEvents, isAiEventType, type TownGoalActionTarget } from "../lib/game-rules";
 import type { TownBuilding, TownCharacter, TownEvent, TownSave, TownSaveListResult } from "../services/types";
 import type { TownCommandViewModel, TownGoalViewModel } from "../lib/town-view-model";
 import { getActionState } from "../lib/town-view-model";
@@ -14,7 +14,6 @@ import { AssetImage } from "./asset-image";
 type SaveSummary = TownSaveListResult["list"][number];
 export type GameModal = "building" | "npc" | "event" | "events" | "advice" | "settlement" | "tasks" | "ai-confirm" | null;
 type AiUsageConfirmKind = "advice" | "chat";
-const GAME_DRAWER_FOCUSABLE_SELECTOR = 'a[href], button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 export function SavePicker({ saves, pendingId, onDelete, onLoad }: { saves: SaveSummary[]; pendingId?: string; onDelete: (saveId: string) => void; onLoad: (saveId: string) => void }) {
     return (
@@ -521,7 +520,6 @@ export function TaskPanel({ save, onRunGoalAction, onRunRetentionAction }: { sav
                     <Stat label="成就徽章" value={achievements.length} />
                 </div>
             </section>
-            <GrowthLedger save={save} onRunGoalAction={onRunGoalAction} />
             {retention ? (
                 <section className="task-section quest-section retention-plan">
                     <div className="section-title"><GameIcon label="灯" /><h3>下次开张</h3></div>
@@ -647,50 +645,6 @@ export function TaskPanel({ save, onRunGoalAction, onRunRetentionAction }: { sav
             </section>
         </div>
     );
-}
-
-function GrowthLedger({ save, onRunGoalAction }: { save: TownSave; onRunGoalAction?: (action: string, params?: { buildingId?: string }) => void }) {
-    const lanes = createGrowthLedgerLanes(save);
-    return (
-        <section className="task-section quest-section growth-ledger" aria-label="成长册">
-            <div className="section-title"><GameIcon label="册" /><h3>成长册</h3></div>
-            <p className="growth-ledger-copy">这些是适合商业化的玩法价值，但当前只做预览，不直接售卖数值优势。</p>
-            <div className="growth-lane-grid">
-                {lanes.map((lane) => {
-                    const actionState = getActionState(save, lane.action, lane.buildingId);
-                    return (
-                        <article className="growth-lane" key={lane.label}>
-                            <div>
-                                <span>{lane.label}</span>
-                                <strong>{lane.value}%</strong>
-                            </div>
-                            <div className="growth-lane-track"><i style={{ width: `${lane.value}%` }} /></div>
-                            <p>{lane.desc}</p>
-                            <Button type="button" variant="outline" className="growth-lane-action" disabled={!onRunGoalAction || !actionState.canRun} title={actionState.disabledReason || lane.reason} aria-label={`${lane.label}：${lane.actionLabel}`} onClick={() => onRunGoalAction?.(lane.action, lane.buildingId ? { buildingId: lane.buildingId } : undefined)}>
-                                {actionState.canRun ? lane.actionLabel : actionState.disabledReason}
-                            </Button>
-                        </article>
-                    );
-                })}
-            </div>
-            <small className="growth-ledger-note">当前为成长预览，正式扣费、订阅权益和失败退款接入后才会开放购买。</small>
-        </section>
-    );
-}
-
-function createGrowthLedgerLanes(save: TownSave) {
-    const storyDepth = Math.min(100, save.level * 18 + (save.worldState.mainQuest?.chapter ?? 1) * 8);
-    const memoryDepth = Math.min(100, getMemoryPromiseCount(save) * 18 + save.characters.length * 10);
-    const chapterDepth = Math.min(100, (save.worldState.mainQuest?.chapter ?? 1) * 24 + (save.worldState.achievements?.length ?? 0) * 10);
-    const seasonDepth = Math.min(100, (save.worldState.activeFestival?.progress ?? 0) * 22 + save.worldState.unlockedAreas.length * 12);
-    const styleDepth = Math.min(100, save.worldState.buildings.reduce((total, building) => total + building.level, 0) * 8);
-    return [
-        { label: "故事深度", value: storyDepth, desc: "主线章节、事件分支和参谋计划会逐步变密。", action: "advice", actionLabel: "安排计划", reason: "先让镇务参谋安排下一步。" },
-        { label: "记忆容量", value: memoryDepth, desc: "居民偏好、约定和关键时刻会影响后续行动。", action: "visit", actionLabel: "拜访居民", reason: "拜访居民能留下新的记忆线索。" },
-        { label: "角色章节", value: chapterDepth, desc: "关系推进后打开更多居民专属小事件。", action: "operate", actionLabel: "经营餐馆", reason: "稳定经营能支撑后续角色章节。" },
-        { label: "季节活动", value: seasonDepth, desc: "活动筹备会把经营、拜访和探索串成阶段目标。", action: "explore", actionLabel: "探索街区", reason: "探索街区会发现活动线索。" },
-        { label: "外观表达", value: styleDepth, desc: "建筑等级和布置路线会改变小镇呈现。", action: "decorate", actionLabel: "布置小镇", reason: "布置小镇能推进外观表达。" },
-    ];
 }
 
 function getTaskActionTarget(save: TownSave, task: TownSave["worldState"]["dailyTasks"][number]): TownGoalActionTarget | null {
@@ -935,69 +889,23 @@ export function SettlementPanel({ onRest, save }: { onRest?: () => void; save: T
     );
 }
 
-export function GameModalShell({ children, title, onClose }: { children: React.ReactNode; title: string; onClose: () => void }) {
-    const shouldReduceMotion = useReducedMotion();
-    const titleId = `game-drawer-title-${slugifyGameModalTitle(title)}`;
-    const closeLabel = `收起${title}面板`;
-    const drawerRef = useRef<HTMLElement>(null);
-    const previousFocusRef = useRef<HTMLElement | null>(null);
-    const previousBodyOverflowRef = useRef("");
-
-    useEffect(() => {
-        previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        previousBodyOverflowRef.current = document.body.style.overflow;
-        document.body.style.overflow = "hidden";
-        drawerRef.current?.focus();
-
-        return () => {
-            document.body.style.overflow = previousBodyOverflowRef.current;
-            previousFocusRef.current?.focus();
-        };
-    }, []);
-
-        return (
-            <motion.div className="game-drawer-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
-                <motion.section className="game-drawer" ref={drawerRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} initial={{ opacity: 0, x: shouldReduceMotion ? 0 : 48 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: shouldReduceMotion ? 0 : 36 }} transition={{ duration: 0.18 }} onKeyDown={(event) => handleGameDrawerKeyDown(event, onClose)} onClick={(event) => event.stopPropagation()}>
-                <header>
-                    <h2 id={titleId}>{title}</h2>
-                    <Button type="button" variant="ghost" size="icon-sm" aria-label={closeLabel} onClick={onClose}>×</Button>
-                </header>
+export function GameModalShell({ children, title, onClose }: { children: ReactNode; title: string; onClose: () => void }) {
+    return (
+        <Sheet open onOpenChange={(open) => {
+            if (!open) onClose();
+        }}>
+            <SheetContent side="right" showCloseButton={false} className="game-drawer">
+                <SheetHeader>
+                    <SheetTitle>{title}</SheetTitle>
+                    <SheetDescription className="sr-only">小镇面板</SheetDescription>
+                    <SheetClose asChild>
+                        <Button type="button" variant="ghost" size="icon-sm" aria-label={`收起${title}面板`}>×</Button>
+                    </SheetClose>
+                </SheetHeader>
                 {children}
-            </motion.section>
-        </motion.div>
+            </SheetContent>
+        </Sheet>
     );
-}
-
-function slugifyGameModalTitle(title: string) {
-    return title.trim().toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g, "-").replace(/^-+|-+$/g, "") || "panel";
-}
-
-function handleGameDrawerKeyDown(event: React.KeyboardEvent<HTMLElement>, onClose: () => void) {
-    keepGameDrawerFocusInside(event);
-    if (event.key !== "Escape") return;
-    event.stopPropagation();
-    onClose();
-}
-
-function keepGameDrawerFocusInside(event: React.KeyboardEvent<HTMLElement>) {
-    if (event.key !== "Tab") return;
-    const drawer = event.currentTarget;
-    const focusableElements = Array.from(drawer.querySelectorAll<HTMLElement>(GAME_DRAWER_FOCUSABLE_SELECTOR)).filter((element) => !element.hasAttribute("disabled") && element.tabIndex !== -1);
-    if (!focusableElements.length) {
-        event.preventDefault();
-        drawer.focus();
-        return;
-    }
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
-    if (event.shiftKey && document.activeElement === firstElement) {
-        event.preventDefault();
-        lastElement.focus();
-    }
-    if (!event.shiftKey && document.activeElement === lastElement) {
-        event.preventDefault();
-        firstElement.focus();
-    }
 }
 
 export function ResourcePill({ label, value }: { label: string; value: string | number }) {
@@ -1012,60 +920,6 @@ export function ResourceMeter({ label, value, max }: { label: string; value: num
             <strong>{value}</strong>
             <div className="resource-meter-track"><i style={{ width: `${percent}%` }} /></div>
         </div>
-    );
-}
-
-export function GoalBoard({ save, onOpenEvents, onOpenSettlement, onOpenTasks }: { save: TownSave; onOpenEvents: () => void; onOpenSettlement: () => void; onOpenTasks: () => void }) {
-    const task = save.worldState.dailyTasks?.find((item) => !item.completed) ?? save.worldState.dailyTasks?.[0] ?? null;
-    const unlock = getNextUnlockGoal(save);
-    return (
-        <aside className="goal-board">
-            <section className="goal-card primary-goal">
-                <div className="goal-card-title"><GameIcon label="任" /><span>今日目标</span></div>
-                {task ? (
-                    <>
-                        <strong>{task.title}</strong>
-                        <p>{task.desc}</p>
-                        <ProgressRow label="进度" progress={task.progress} target={task.target} />
-                        <small>奖励：金币 {task.reward.coins ?? 0} · 体力 {task.reward.stamina ?? 0} · 声望 {task.reward.reputation ?? 0}</small>
-                    </>
-                ) : <p>今天的小镇目标都完成了，适合休息进入明天。</p>}
-            </section>
-            <section className="goal-card unlock-goal">
-                <div className="goal-card-title"><GameIcon label="建" /><span>下一建设</span></div>
-                <strong>{unlock.title}</strong>
-                <p>{unlock.desc}</p>
-                <ProgressRow label={unlock.label} progress={unlock.progress} target={unlock.target} />
-            </section>
-            <div className="goal-shortcuts">
-                <Button type="button" variant="ghost" onClick={onOpenTasks}><GameIcon label="任" /><span>任务</span></Button>
-                <Button type="button" variant="ghost" onClick={onOpenEvents}><GameIcon label="志" /><span>日志</span></Button>
-                <Button type="button" variant="ghost" onClick={onOpenSettlement}><GameIcon label="月" /><span>日结</span></Button>
-            </div>
-            <FestivalGoalCard save={save} />
-        </aside>
-    );
-}
-
-function FestivalGoalCard({ save }: { save: TownSave }) {
-    const festival = save.worldState.activeFestival;
-    if (!festival) {
-        return (
-            <section className="goal-card festival-goal">
-                <div className="goal-card-title"><GameIcon label="庆" /><span>小镇活动</span></div>
-                <strong>探索街区</strong>
-                <p>打开委托册追踪活动线索；升级建筑、提升声望或探索街区后，会出现新的限时活动。</p>
-            </section>
-        );
-    }
-    return (
-        <section className="goal-card festival-goal active">
-            <div className="goal-card-title"><GameIcon label="庆" /><span>{formatFestivalStatus(festival.status)}</span></div>
-            <strong>{festival.title}</strong>
-            <p>{festival.desc}</p>
-            <ProgressRow label={formatFestivalAction(festival.action)} progress={festival.progress} target={festival.target} />
-            <small>剩余 {festival.daysLeft} 天 · 奖励：金币 {festival.reward.coins ?? 0} · 声望 {festival.reward.reputation ?? 0}</small>
-        </section>
     );
 }
 

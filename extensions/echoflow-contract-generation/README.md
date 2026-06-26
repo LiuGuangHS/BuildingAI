@@ -138,7 +138,7 @@ pnpm --filter echoflow-contract-generation build:publish
 
 - Node 测试覆盖 view-model、public/admin 类型边界、AI 推理文案、路由分包、RootLayout 查询上下文、Web 高成本入口 SDK 限流和 CSS/source 边界。
 - Web 构建验证 Tailwind 工具类、BuildingAI UI 组件和 Vite 打包。
-- 2026-06-20 直接运行 `..\..\node_modules\.bin\tsup.cmd` 和 `..\..\node_modules\.bin\vite.cmd build` 均通过；当前 Windows PowerShell 的 `pnpm --filter ... build:*` 被 `sh is not recognized` 阻塞，按根 AGENTS 归类为 shell 环境问题。Web 主入口 JS 约 1.12 MB，仍有 Vite chunk warning。
+- Windows 环境优先使用根目录 `pnpm --filter echoflow-contract-generation ...` 命令；若工具链失败，记录当前命令、错误和是否属于插件代码。
 - 浏览器检查至少覆盖当前嵌入式宽度和一个移动宽度：首屏应为任务条、输入栏、合同正文、上下文 Inspector；不得出现主系统导航/账号/全局统计/Provider/Secret/原始响应。
 - 临时计划和 QA checklist 不作为长期文档保留；有效结论合并回本 README。
 

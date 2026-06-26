@@ -21,6 +21,7 @@ export function ContractInspector(props: {
     exportType: "contract" | "contract_with_report" | "risk_report";
     dirty: boolean;
     canReview: boolean;
+    canRewrite: boolean;
     canExport: boolean;
     onRewriteModeChange: (value: RewriteMode) => void;
     onRewrite: () => void;
@@ -55,7 +56,7 @@ export function ContractInspector(props: {
                     <Button variant="outline" onClick={props.onReview} disabled={!props.canReview || props.reviewPending} loading={props.reviewPending}>重新审查</Button>
                 </TabsContent>
                 <TabsContent value="rewrite" className="grid gap-2.5">
-                    <Select value={props.rewriteMode} onValueChange={(value) => props.onRewriteModeChange(value as RewriteMode)}>
+                    <Select value={props.rewriteMode} onValueChange={(value) => props.onRewriteModeChange(value as RewriteMode)} disabled={!props.canRewrite || props.rewritePending}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="reduce_risk">降低风险</SelectItem>
@@ -66,7 +67,7 @@ export function ContractInspector(props: {
                             <SelectItem value="friendly">更友好</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button variant="outline" onClick={props.onRewrite} disabled={!props.task || !props.selectedSection || props.rewritePending} loading={props.rewritePending}>生成改写</Button>
+                    <Button variant="outline" onClick={props.onRewrite} disabled={!props.canRewrite || props.rewritePending} loading={props.rewritePending}>生成改写</Button>
                     <ContractRewriteCompare original={props.selectedSection?.content} preview={props.rewritePreview} onApply={props.onApplyRewrite} onCancel={props.onCancelRewrite} />
                 </TabsContent>
                 <TabsContent value="versions" className="grid gap-2.5">

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buil
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { SecretReferenceSelect, type SecretReferenceOption } from "@buildingai/ui/components/secret-reference-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
@@ -16,6 +17,7 @@ import { toast } from "sonner";
 
 import {
     useConsoleBillingRulesQuery,
+    useConsoleLlmModelsQuery,
     useConsoleModelConfigsQuery,
     useCreateBillingRuleMutation,
     useTestModelEndpointMutation,
@@ -26,8 +28,8 @@ import type { ImageBillingRule, SaveBillingRuleParams } from "../../services/typ
 import type {
     ImageModelConfig,
     ImageModelEndpoint,
+    PromptEnhancerModelOption,
     SaveModelConfigParams,
-    SaveModelEndpointParams,
 } from "../../services/types/model-config";
 
 const capabilityLabels: Record<string, string> = {
@@ -48,6 +50,7 @@ export default function ConsoleModelsPage() {
     const { data, isLoading, refetch } = useConsoleModelConfigsQuery({ page: 1, pageSize: 100 });
     const { data: billingData, refetch: refetchBilling } = useConsoleBillingRulesQuery({ page: 1, pageSize: 200 });
     const { data: secretsData, isLoading: secretsLoading } = useSecretsListQuery({ page: 1, pageSize: 100, status: 1 });
+    const { data: promptEnhancerModels = [], isLoading: promptEnhancerModelsLoading } = useConsoleLlmModelsQuery();
     const updateMutation = useUpdateModelConfigMutation();
     const createBillingMutation = useCreateBillingRuleMutation();
     const updateBillingMutation = useUpdateBillingRuleMutation();
@@ -160,6 +163,8 @@ export default function ConsoleModelsPage() {
                     testing={testEndpointMutation.isPending}
                     secretsLoading={secretsLoading}
                     secretOptions={secretOptions}
+                    promptEnhancerModels={promptEnhancerModels}
+                    promptEnhancerModelsLoading={promptEnhancerModelsLoading}
                     onSave={handleSave}
                     onTestEndpoint={(id, endpoint) => testEndpointMutation.mutateAsync({ id, data: serializeEndpoint(endpoint, 0) })}
                 />
@@ -175,6 +180,8 @@ function ModelOperationsEditor({
     testing,
     secretsLoading,
     secretOptions,
+    promptEnhancerModels,
+    promptEnhancerModelsLoading,
     onSave,
     onTestEndpoint,
 }: {
@@ -184,6 +191,8 @@ function ModelOperationsEditor({
     testing: boolean;
     secretsLoading: boolean;
     secretOptions: SecretReferenceOption[];
+    promptEnhancerModels: PromptEnhancerModelOption[];
+    promptEnhancerModelsLoading: boolean;
     onSave: (id: string, data: SaveModelConfigParams, billing?: SaveBillingRuleParams) => void;
     onTestEndpoint: (id: string, data: ImageModelEndpoint) => Promise<unknown>;
 }) {
@@ -191,6 +200,7 @@ function ModelOperationsEditor({
     const [description, setDescription] = useState("");
     const [enabled, setEnabled] = useState(true);
     const [visibleToUser, setVisibleToUser] = useState(true);
+    const [promptEnhancerModelId, setPromptEnhancerModelId] = useState("");
     const [sortOrder, setSortOrder] = useState("0");
     const [defaultParamsText, setDefaultParamsText] = useState("{}");
     const [allowedParamsText, setAllowedParamsText] = useState("{}");
@@ -210,6 +220,7 @@ function ModelOperationsEditor({
         setDescription(value?.description ?? "");
         setEnabled(value?.enabled ?? true);
         setVisibleToUser(value?.visibleToUser ?? true);
+        setPromptEnhancerModelId(value?.promptEnhancerModelId ?? "");
         setSortOrder(String(value?.sortOrder ?? 0));
         setDefaultParamsText(JSON.stringify(value?.defaultParams ?? {}, null, 2));
         setAllowedParamsText(JSON.stringify(value?.allowedParams ?? {}, null, 2));
@@ -252,6 +263,7 @@ function ModelOperationsEditor({
     const savePayload = (): SaveModelConfigParams => ({
         displayName,
         description,
+        promptEnhancerModelId: promptEnhancerModelId || null,
         enabled,
         visibleToUser,
         sortOrder: Number(sortOrder || 0),
@@ -290,6 +302,32 @@ function ModelOperationsEditor({
 
                 <Field label="展示名称" value={displayName} onChange={setDisplayName} />
                 <Field label="说明" value={description} onChange={setDescription} />
+                <div className="space-y-2">
+                    <Label>提示词润色模型</Label>
+                    <Select
+                        value={promptEnhancerModelId || "__none__"}
+                        onValueChange={(next) => setPromptEnhancerModelId(next === "__none__" ? "" : next)}
+                        disabled={promptEnhancerModelsLoading}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder={promptEnhancerModelsLoading ? "加载主站 LLM 中..." : "选择主站 LLM"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="__none__">未配置</SelectItem>
+                            {promptEnhancerModels.map((model) => (
+                                <SelectItem key={model.id} value={model.id}>
+                                    <div className="flex min-w-0 flex-col">
+                                        <span className="truncate">{model.providerName} / {model.name}</span>
+                                        <span className="truncate text-xs text-muted-foreground">{model.model}</span>
+                                    </div>
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {!promptEnhancerModelsLoading && promptEnhancerModels.length === 0 ? (
+                        <p className="text-muted-foreground text-xs">请先在主后台启用 LLM 模型。</p>
+                    ) : null}
+                </div>
                 <Field label="排序" type="number" value={sortOrder} onChange={setSortOrder} />
 
                 <div className="space-y-2">
@@ -519,7 +557,7 @@ function makeEndpoint(index = 0): ImageModelEndpoint {
     };
 }
 
-function serializeEndpoint(endpoint: ImageModelEndpoint, index: number): SaveModelEndpointParams {
+function serializeEndpoint(endpoint: ImageModelEndpoint, index: number): ImageModelEndpoint {
     return {
         id: endpoint.id || `endpoint-${index + 1}`,
         name: endpoint.name || `接入点 ${index + 1}`,

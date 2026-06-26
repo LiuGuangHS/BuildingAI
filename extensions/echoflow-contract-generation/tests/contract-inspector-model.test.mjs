@@ -16,7 +16,9 @@ test("deriveRiskReasoning returns structured AI explanation", () => {
     );
 
     assert.equal(reasoning.severityLabel, "高风险");
-    assert.equal(reasoning.confidence, 92);
-    assert.match(reasoning.impact, /履约争议/);
+    assert.equal("confidence" in reasoning, false);
+    assert.equal("impact" in reasoning, false);
+    assert.equal(reasoning.riskPoint, "缺少逾期付款责任");
+    assert.equal(reasoning.suggestion, "补充逾期付款违约金");
     assert.equal(reasoning.canApplyRewrite, true);
 });

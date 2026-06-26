@@ -9,7 +9,7 @@ import { ContractTemplateDrawer } from "../components/contract-workbench/Contrac
 import { ContractWorkbenchShell } from "../components/contract-workbench/ContractWorkbenchShell";
 import { deriveContractWorkbenchState } from "../components/contract-workbench/contract-workbench-view-model";
 import { useContractGenerationConfigQuery, useContractTaskDetailQuery, useContractTasksQuery, useContractTemplatesQuery, useContractVersionsQuery, useExportContractMutation, useGenerateContractMutation, useRestoreContractVersionMutation, useReviewContractMutation, useReviewUploadedContractMutation, useRewriteContractClauseMutation, useUpdateContractContentMutation, useUpdateRiskActionMutation } from "../services/web";
-import type { ContractGenerationConfig, ContractGenerationStatus, ContractGenerationTask, ContractSection, ContractTemplate } from "../services/types";
+import { contractStatusText, contractStatusVariant, isContractBusyStatus, type ContractGenerationConfig, type ContractGenerationStatus, type ContractGenerationTask, type ContractSection, type ContractTemplate } from "../services/types";
 
 type ContractStance = "neutral" | "favor_party_a" | "favor_party_b" | "strict" | "friendly";
 type RewriteMode = "reduce_risk" | "stricter" | "favor_party_a" | "favor_party_b" | "concise" | "friendly";
@@ -72,20 +72,23 @@ export default function ContractGenerationHomePage() {
         if (!keyword) return templates;
         return templates.filter((template) => `${template.name} ${template.industry} ${template.contractType} ${template.description}`.toLowerCase().includes(keyword));
     }, [templateKeyword, templates]);
-    const isBusy = activeTask ? isBusyStatus(activeTask.status) : false;
+    const canGenerate = Boolean(config?.canGenerate);
+    const unavailableReason = config?.unavailableReason || "当前未配置可用模型，暂不能生成合同。请联系管理员在插件后台选择启用模型。";
+    const isBusy = activeTask ? isContractBusyStatus(activeTask.status) : false;
     const canSave = Boolean(activeTask && sections.length > 0 && !isBusy);
-    const canReview = Boolean(activeTask && sections.length > 0 && !isBusy);
+    const canReview = Boolean(canGenerate && activeTask && sections.length > 0 && !isBusy);
+    const canRewrite = Boolean(canGenerate && activeTask && selectedSectionIndex >= 0 && sections[selectedSectionIndex] && !isBusy);
     const canExport = Boolean(activeTask && sections.length > 0 && !isBusy);
     const workbenchState = useMemo(() => deriveContractWorkbenchState({
         mode,
-        configured: Boolean(config?.configured),
+        configured: canGenerate,
         template: selectedTemplate,
         variables,
         prompt,
         reviewFileName: reviewFile?.name ?? "",
         task: activeTask,
         dirty,
-    }), [activeTask, config?.configured, dirty, mode, prompt, reviewFile?.name, selectedTemplate, variables]);
+    }), [activeTask, canGenerate, dirty, mode, prompt, reviewFile?.name, selectedTemplate, variables]);
 
     useEffect(() => {
         if (!selectedTemplateId && templates[0]) {
@@ -126,8 +129,8 @@ export default function ContractGenerationHomePage() {
     }
 
     async function handleGenerate() {
-        if (!config?.configured) {
-            setMessage("当前未配置可用模型，暂不能生成合同。请联系管理员在插件后台选择启用模型。");
+        if (!canGenerate) {
+            setMessage(unavailableReason);
             return;
         }
         if (!selectedTemplate) return;
@@ -147,8 +150,8 @@ export default function ContractGenerationHomePage() {
     }
 
     async function handleReviewUpload() {
-        if (!config?.configured) {
-            setMessage("当前未配置可用模型，暂不能审查合同。请联系管理员在插件后台选择启用模型。");
+        if (!canGenerate) {
+            setMessage(unavailableReason);
             return;
         }
         if (!reviewFile) {
@@ -201,6 +204,10 @@ export default function ContractGenerationHomePage() {
 
     async function handleReview() {
         if (!activeTask) return;
+        if (!canGenerate) {
+            setMessage(unavailableReason);
+            return;
+        }
         setMessage("正在审查合同风险...");
         try {
             const task = await reviewMutation.mutateAsync(activeTask.id);
@@ -213,6 +220,10 @@ export default function ContractGenerationHomePage() {
 
     async function handleRewrite() {
         if (!activeTask || !sections[selectedSectionIndex]) return;
+        if (!canGenerate) {
+            setMessage(unavailableReason);
+            return;
+        }
         const section = sections[selectedSectionIndex];
         setMessage("正在优化条款...");
         try {
@@ -323,6 +334,7 @@ export default function ContractGenerationHomePage() {
                             tasks={taskPage?.items ?? []}
                             keyword={templateKeyword}
                             selectedTemplate={selectedTemplate}
+                            disabled={!canGenerate}
                             onKeywordChange={setTemplateKeyword}
                             onSelectTemplate={selectTemplate}
                             onSelectTask={setTask}
@@ -334,6 +346,7 @@ export default function ContractGenerationHomePage() {
                         <ContractIntakeRail
                             state={workbenchState}
                             mode={mode}
+                            disabled={!canGenerate}
                             onModeChange={setMode}
                         selectedTemplate={selectedTemplate}
                         variables={variables}
@@ -370,7 +383,7 @@ export default function ContractGenerationHomePage() {
                             sections={activeTask ? sections : draftSections}
                             documentRevision={documentRevision}
                             selectedSectionIndex={selectedSectionIndex}
-                            draftEditable={!activeTask}
+                            draftEditable={!activeTask && canGenerate}
                             rewriteMode={rewriteMode}
                             rewritePreview={rewritePreview}
                             rewritePending={rewriteMutation.isPending}
@@ -405,7 +418,8 @@ export default function ContractGenerationHomePage() {
                     reviewPending={reviewMutation.isPending}
                     exportType={exportType}
                     dirty={dirty}
-                    canReview={canReview}
+                            canReview={canReview}
+                            canRewrite={canRewrite}
                     canExport={canExport}
                     onRewriteModeChange={setRewriteMode}
                     onRewrite={handleRewrite}
@@ -424,12 +438,11 @@ export default function ContractGenerationHomePage() {
 }
 
 function ModelStatus({ config }: { config?: ContractGenerationConfig }) {
-    return <Badge variant={config?.configured ? "default" : "destructive"}>{config?.configured && config.model ? `${config.model.providerName} / ${config.model.name}` : "模型未配置"}</Badge>;
+    return <Badge variant={config?.canGenerate ? "default" : "destructive"}>{config?.canGenerate && config.model ? `${config.model.name} / ${formatCredits(config.model.pricePerContract)}` : "模型未配置"}</Badge>;
 }
 
 function TaskStatusBadge({ status }: { status: ContractGenerationStatus | "draft" }) {
-    const variant = ["failed", "export_failed"].includes(status) ? "destructive" : ["pending", "processing", "reviewing", "exporting"].includes(status) ? "secondary" : "outline";
-    return <Badge variant={variant}>{statusText(status)}</Badge>;
+    return <Badge variant={contractStatusVariant(status)}>{contractStatusText(status)}</Badge>;
 }
 
 function validateTemplateFields(template: ContractTemplate, variables: Record<string, string>) {
@@ -493,10 +506,6 @@ function getRiskKey(risk: { sectionTitle: string; issue: string }, index: number
     return `${index}:${risk.sectionTitle}:${risk.issue}`;
 }
 
-function statusText(status: string) {
-    return { pending: "等待中", processing: "生成中", draft: "草稿", reviewing: "审查中", exporting: "导出中", success: "已导出", failed: "失败", export_failed: "导出失败" }[status] ?? status;
-}
-
-function isBusyStatus(status: ContractGenerationStatus | string) {
-    return ["pending", "processing", "reviewing", "exporting"].includes(status);
+function formatCredits(value?: number) {
+    return value ? `${value} 积分` : "0 积分";
 }

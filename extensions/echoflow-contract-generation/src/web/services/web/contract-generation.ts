@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { apiHttpClient } from "../base";
-import type { ContractGenerationConfig, ContractGenerationTask, ContractGenerationVersion, ContractTemplate, ExportContractParams, GenerateContractParams, PaginatedResponse, QueryContractTasksParams, ReviewUploadedContractParams, RewriteContractClauseParams, RewriteContractClauseResult, UpdateContractContentParams, UpdateRiskActionParams } from "../types";
+import { isContractBusyStatus, type ContractGenerationConfig, type ContractGenerationTask, type ContractGenerationVersion, type ContractTemplate, type ExportContractParams, type GenerateContractParams, type PaginatedResponse, type QueryContractTasksParams, type ReviewUploadedContractParams, type RewriteContractClauseParams, type RewriteContractClauseResult, type UpdateContractContentParams, type UpdateRiskActionParams } from "../types";
 
 const CONTRACT_TASKS_QUERY_KEY = ["echoflow-contract-generation", "web", "tasks"] as const;
 const CONTRACT_TEMPLATES_QUERY_KEY = ["echoflow-contract-generation", "web", "templates"] as const;
@@ -71,19 +71,21 @@ export function useContractGenerationConfigQuery() {
     return useQuery({ queryKey: CONTRACT_CONFIG_QUERY_KEY, queryFn: getContractGenerationConfig });
 }
 
-export function useGenerateContractMutation() {
+function useInvalidateOnSuccess(queryKey: QueryKey) {
     const queryClient = useQueryClient();
-    return useMutation({ mutationFn: generateContract, onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TASKS_QUERY_KEY }) });
+    return () => queryClient.invalidateQueries({ queryKey });
+}
+
+export function useGenerateContractMutation() {
+    return useMutation({ mutationFn: generateContract, onSuccess: useInvalidateOnSuccess(CONTRACT_TASKS_QUERY_KEY) });
 }
 
 export function useReviewUploadedContractMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: reviewUploadedContract, onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TASKS_QUERY_KEY }) });
+    return useMutation({ mutationFn: reviewUploadedContract, onSuccess: useInvalidateOnSuccess(CONTRACT_TASKS_QUERY_KEY) });
 }
 
 export function useReviewContractMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: reviewContractTask, onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TASKS_QUERY_KEY }) });
+    return useMutation({ mutationFn: reviewContractTask, onSuccess: useInvalidateOnSuccess(CONTRACT_TASKS_QUERY_KEY) });
 }
 
 export function useRewriteContractClauseMutation() {
@@ -91,13 +93,11 @@ export function useRewriteContractClauseMutation() {
 }
 
 export function useUpdateContractContentMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: ({ taskId, params }: { taskId: string; params: UpdateContractContentParams }) => updateContractContent(taskId, params), onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TASKS_QUERY_KEY }) });
+    return useMutation({ mutationFn: ({ taskId, params }: { taskId: string; params: UpdateContractContentParams }) => updateContractContent(taskId, params), onSuccess: useInvalidateOnSuccess(CONTRACT_TASKS_QUERY_KEY) });
 }
 
 export function useUpdateRiskActionMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: ({ taskId, params }: { taskId: string; params: UpdateRiskActionParams }) => updateRiskAction(taskId, params), onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TASKS_QUERY_KEY }) });
+    return useMutation({ mutationFn: ({ taskId, params }: { taskId: string; params: UpdateRiskActionParams }) => updateRiskAction(taskId, params), onSuccess: useInvalidateOnSuccess(CONTRACT_TASKS_QUERY_KEY) });
 }
 
 export function useContractVersionsQuery(taskId?: string) {
@@ -111,19 +111,17 @@ export function useContractTaskDetailQuery(taskId?: string) {
         enabled: Boolean(taskId),
         refetchInterval: (query) => {
             const task = query.state.data;
-            return task && ["pending", "processing", "reviewing", "exporting"].includes(task.status) ? 3000 : false;
+            return task && isContractBusyStatus(task.status) ? 3000 : false;
         },
     });
 }
 
 export function useRestoreContractVersionMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: ({ taskId, versionId }: { taskId: string; versionId: string }) => restoreContractVersion(taskId, versionId), onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TASKS_QUERY_KEY }) });
+    return useMutation({ mutationFn: ({ taskId, versionId }: { taskId: string; versionId: string }) => restoreContractVersion(taskId, versionId), onSuccess: useInvalidateOnSuccess(CONTRACT_TASKS_QUERY_KEY) });
 }
 
 export function useExportContractMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: ({ taskId, params }: { taskId: string; params?: ExportContractParams }) => exportContractTask(taskId, params), onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TASKS_QUERY_KEY }) });
+    return useMutation({ mutationFn: ({ taskId, params }: { taskId: string; params?: ExportContractParams }) => exportContractTask(taskId, params), onSuccess: useInvalidateOnSuccess(CONTRACT_TASKS_QUERY_KEY) });
 }
 
 export function useContractTasksQuery(params?: QueryContractTasksParams) {
@@ -132,7 +130,7 @@ export function useContractTasksQuery(params?: QueryContractTasksParams) {
         queryFn: () => listContractTasks(params),
         refetchInterval: (query) => {
             const items = query.state.data?.items ?? [];
-            return items.some((task) => ["pending", "processing", "reviewing", "exporting"].includes(task.status)) ? 3000 : false;
+            return items.some((task) => isContractBusyStatus(task.status)) ? 3000 : false;
         },
     });
 }

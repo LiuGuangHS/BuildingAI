@@ -221,53 +221,6 @@ button:disabled {
     line-height: 1.45;
 }
 
-.onboarding-growth-card {
-    display: grid;
-    gap: 10px;
-    width: min(460px, 100%);
-    border: 2px solid rgba(184, 239, 159, 0.42);
-    border-radius: 20px;
-    padding: 13px 14px;
-    color: #f3ffe8;
-    background:
-        radial-gradient(circle at 12% 14%, rgba(255, 224, 133, 0.24), transparent 32%),
-        linear-gradient(145deg, rgba(29, 76, 51, 0.62), rgba(45, 25, 23, 0.68));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 14px 34px rgba(18, 8, 28, 0.24);
-    backdrop-filter: blur(12px);
-}
-
-.onboarding-growth-card > span {
-    color: #dfffd5;
-    font-size: 11px;
-    font-weight: 950;
-    text-transform: uppercase;
-}
-
-.onboarding-growth-lanes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-}
-
-.onboarding-growth-lanes em {
-    border: 1px solid rgba(255, 234, 170, 0.22);
-    border-radius: 999px;
-    padding: 6px 8px;
-    color: #fff0b8;
-    background: rgba(255, 245, 212, 0.12);
-    font-size: 11px;
-    font-style: normal;
-    font-weight: 950;
-}
-
-.onboarding-growth-card p {
-    margin: 0;
-    color: rgba(255, 247, 221, 0.84);
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1.5;
-}
-
 .onboarding-quest-steps {
     counter-reset: onboarding-step;
     display: grid;
@@ -338,8 +291,6 @@ button:disabled {
 
 .game-primary:not(:disabled):hover,
 .game-secondary:not(:disabled):hover,
-.bottom-command-bar button:not(:disabled):hover,
-.quick-menu button:hover,
 .building-hotspot:hover,
 .npc-hotspot:hover {
     transform: translateY(-3px);
@@ -372,7 +323,6 @@ button:disabled {
 .save-list article,
 .save-actions,
 .top-hud,
-.bottom-command-bar,
 .panel-actions,
 .result-bar,
 .settlement-cards {
@@ -998,7 +948,6 @@ button:disabled {
 
 .save-title,
 .resource-pill,
-.bottom-command-bar button,
 .building-hotspot,
 .game-modal,
 .floating-result,
@@ -1049,89 +998,6 @@ button:disabled {
     color: #fffaf0;
     font-size: 15px;
     white-space: nowrap;
-}
-
-.goal-board {
-    position: absolute;
-    top: 18px;
-    right: 18px;
-    z-index: 5;
-    display: grid;
-    gap: 10px;
-    width: min(280px, calc(100% - 36px));
-}
-
-.goal-card,
-.goal-shortcuts button {
-    border: 2px solid rgba(255, 230, 178, 0.58);
-    background: rgba(45, 25, 23, 0.74);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 14px 34px rgba(18, 8, 28, 0.28);
-    backdrop-filter: blur(12px);
-}
-
-.goal-card {
-    display: grid;
-    gap: 8px;
-    border-radius: 20px;
-    padding: 12px;
-    color: #fff8e9;
-}
-
-.goal-card-title {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    color: #ffd796;
-    font-size: 12px;
-    font-weight: 900;
-}
-
-.goal-card strong,
-.goal-card p,
-.goal-card small {
-    margin: 0;
-}
-
-.goal-card p,
-.goal-card small {
-    color: #ffe0a2;
-    font-size: 12px;
-    line-height: 1.4;
-}
-
-.goal-card .progress-row > div:first-child {
-    color: #ffe7b6;
-}
-
-.goal-card .progress-track {
-    height: 8px;
-    background: rgba(255, 232, 180, 0.22);
-}
-
-.festival-goal.active {
-    border-color: rgba(255, 180, 80, 0.9);
-    background: linear-gradient(145deg, rgba(87, 38, 31, 0.86), rgba(119, 57, 35, 0.78));
-}
-
-.goal-shortcuts {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-}
-
-.goal-shortcuts button {
-    display: grid;
-    place-items: center;
-    border-radius: 16px;
-    padding: 9px 6px;
-    color: #fff7e8;
-    cursor: pointer;
-}
-
-.goal-shortcuts span {
-    margin-top: 3px;
-    font-size: 11px;
-    font-weight: 900;
 }
 
 .map-hotspots {
@@ -1375,46 +1241,6 @@ button:disabled {
     bottom: 24%;
 }
 
-.bottom-command-bar {
-    position: absolute;
-    left: 50%;
-    bottom: 18px;
-    z-index: 5;
-    width: min(900px, calc(100% - 36px));
-    justify-content: center;
-    transform: translateX(-50%);
-}
-
-.bottom-command-bar button {
-    position: relative;
-    display: grid;
-    gap: 2px;
-    justify-items: center;
-    min-width: 108px;
-    border-radius: 22px;
-    padding: 13px 13px 11px;
-    color: #fff8e9;
-    cursor: pointer;
-}
-
-.bottom-command-bar button.recommended {
-    border-color: rgba(255, 218, 100, 0.96);
-    background: linear-gradient(180deg, rgba(92, 54, 26, 0.9), rgba(45, 25, 23, 0.78));
-    box-shadow: 0 0 0 8px rgba(255, 218, 100, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 18px 38px rgba(18, 8, 28, 0.32);
-}
-
-.bottom-command-bar button.task-linked::after {
-    content: "";
-    position: absolute;
-    right: 12px;
-    top: 12px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #ffe268;
-    box-shadow: 0 0 14px rgba(255, 226, 104, 0.95);
-}
-
 .action-badge {
     position: absolute;
     top: -10px;
@@ -1426,18 +1252,6 @@ button:disabled {
     font-size: 10px;
     font-weight: 900;
     transform: translateX(-50%);
-}
-
-.bottom-command-bar small {
-    color: #ffe0a2;
-    font-size: 11px;
-}
-
-.bottom-command-bar em {
-    color: #ffd796;
-    font-size: 10px;
-    font-style: normal;
-    font-weight: 900;
 }
 
 .floating-result,
@@ -1717,8 +1531,7 @@ button:disabled {
     background: #ffe0cf;
 }
 
-.game-modal-backdrop,
-.game-drawer-backdrop {
+.game-modal-backdrop {
     position: absolute;
     inset: 0;
     z-index: 10;
@@ -1743,7 +1556,7 @@ button:disabled {
 }
 
 .game-modal header,
-.game-drawer header {
+.game-drawer [data-slot="sheet-header"] {
     position: sticky;
     top: -18px;
     z-index: 2;
@@ -1769,7 +1582,7 @@ button:disabled {
 }
 
 .game-modal header button,
-.game-drawer header button {
+.game-drawer [data-slot="sheet-header"] button {
     display: grid;
     place-items: center;
     border: 0;
@@ -3197,103 +3010,6 @@ button:disabled {
     color: #3f8b32;
 }
 
-.growth-ledger {
-    display: grid;
-    gap: 12px;
-    background:
-        radial-gradient(circle at 16% 10%, rgba(255, 232, 150, 0.5), transparent 28%),
-        radial-gradient(circle at 88% 6%, rgba(142, 210, 166, 0.36), transparent 32%),
-        linear-gradient(135deg, rgba(255, 251, 234, 0.94), rgba(238, 255, 236, 0.82));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78), 0 18px 38px rgba(89, 68, 33, 0.09);
-}
-
-.growth-ledger-copy {
-    margin: 0;
-    color: #6e5432;
-    font-size: 13px;
-    font-weight: 850;
-    line-height: 1.55;
-}
-
-.growth-lane-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-    gap: 10px;
-}
-
-.growth-lane {
-    display: grid;
-    gap: 8px;
-    border: 1px solid rgba(102, 128, 64, 0.15);
-    border-radius: 17px;
-    padding: 12px;
-    background: rgba(255, 254, 244, 0.78);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-}
-
-.growth-lane > div:first-child {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-}
-
-.growth-lane span {
-    color: #5f3a1d;
-    font-size: 12px;
-    font-weight: 950;
-}
-
-.growth-lane strong {
-    color: #315d35;
-    font-size: 18px;
-}
-
-.growth-lane p {
-    margin: 0;
-    color: #71603f;
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1.45;
-}
-
-.growth-lane-action {
-    justify-self: start;
-    min-height: 34px;
-    border-color: rgba(76, 124, 65, 0.24);
-    border-radius: 13px;
-    color: #315d35;
-    background: linear-gradient(180deg, rgba(236, 255, 217, 0.96), rgba(197, 238, 162, 0.82));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 8px 16px rgba(55, 88, 46, 0.12);
-    font-size: 12px;
-    font-weight: 950;
-}
-
-.growth-lane-track {
-    height: 9px;
-    border-radius: 999px;
-    background: rgba(92, 75, 48, 0.12);
-    overflow: hidden;
-}
-
-.growth-lane-track i {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, #78b86a, #f2c66d);
-}
-
-.growth-ledger-note {
-    justify-self: start;
-    border: 1px solid rgba(149, 104, 45, 0.16);
-    border-radius: 999px;
-    padding: 7px 10px;
-    color: #7a562c;
-    background: rgba(255, 244, 206, 0.8);
-    font-size: 12px;
-    font-weight: 900;
-}
-
 .progress-row {
     display: grid;
     gap: 6px;
@@ -3980,15 +3696,6 @@ button:disabled {
     .strategy-avatar {
         width: 62px;
         height: 62px;
-    }
-
-    .game-drawer-backdrop {
-        align-items: flex-end;
-        justify-content: stretch;
-        padding: 10px;
-        background:
-            linear-gradient(180deg, rgba(15, 7, 18, 0.12), rgba(15, 7, 18, 0.56)),
-            rgba(15, 7, 18, 0.2);
     }
 
     .game-drawer {

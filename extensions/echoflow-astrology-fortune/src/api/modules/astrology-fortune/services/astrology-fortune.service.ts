@@ -5,7 +5,6 @@ import { Brackets, EntityManager, In, LessThan, Repository } from "@buildingai/d
 import {
     ExtensionBillingService,
     ExtensionNotificationService,
-    Output,
     PublicAiModelService,
 } from "@buildingai/extension-sdk";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -31,6 +30,7 @@ import {
     ASTROLOGY_REPORT_BUSY_STATUSES,
     ASTROLOGY_REPORT_STALE_PROCESSING_MS,
     canClaimAstrologyReportForProcessing,
+    canRefundAstrologyReportCredits,
     canRecoverAstrologyReport,
     isAstrologyReportBusyStatus,
 } from "./astrology-report-recovery-rules";
@@ -408,7 +408,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
             compatibility: Number(setting.compatibilityPrice ?? 0),
             decision: Number(setting.decisionPrice ?? 0),
         };
-        const modelId = this.getConfiguredModelId(setting);
+        const modelId = setting.defaultModelId ?? null;
         const model = modelId ? await this.getModelInfo(modelId) : null;
         const canGenerate = Boolean(model?.provider?.isActive && model.modelType === "llm");
 
@@ -438,8 +438,12 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
             for (const report of reports) {
                 const claimedReport = await this.claimReportForRecovery(report.id, cutoff);
                 if (!claimedReport?.requestPayload) continue;
-                recoveredCount += 1;
-                await this.enqueueReportJob(claimedReport.id);
+                try {
+                    await this.enqueueReportJob(claimedReport.id);
+                    recoveredCount += 1;
+                } catch (error) {
+                    this.logger.warn(`Recover astrology report ${claimedReport.id} enqueue failed: ${error instanceof Error ? error.message : String(error)}`);
+                }
             }
             if (recoveredCount) this.logger.warn(`Recovered ${recoveredCount} interrupted astrology report(s)`);
             return { affected: recoveredCount };
@@ -643,10 +647,6 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
         return this.loadModel(modelId, "AI星盘运势默认模型不可用，请管理员重新配置");
     }
 
-    private getConfiguredModelId(setting: AstrologyFortuneSetting) {
-        return setting.defaultModelId ?? null;
-    }
-
     private async loadModel(modelId: string, errorMessage = "AI 星盘运势需要可用的 LLM 模型") {
         const model = await this.getModelInfo(modelId);
         if (!model || !model.provider || !model.provider.isActive || model.modelType !== "llm") {
@@ -708,7 +708,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
         try {
             await this.reportRepo.manager.transaction(async (entityManager) => {
                 const report = await entityManager.findOne(AstrologyReport, { where: { id: reportId }, lock: { mode: "pessimistic_write" }, withDeleted: true });
-                if (!report || Number(report.costCredits ?? 0) <= 0) return;
+                if (!canRefundAstrologyReportCredits(report)) return;
                 const metadata = report.providerMetadata ?? {};
                 const wasDeducted = metadata.billingStatus === "deducted" || await this.billingService.hasBillingLog({ associationNo: report.id, action: ACTION.DEC }, entityManager);
                 const alreadyRefunded = Boolean(metadata.refundedAt) || await this.billingService.hasBillingLog({ associationNo: report.id, action: ACTION.INC }, entityManager);
@@ -757,11 +757,19 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
 
     private async notifyReportSucceeded(report: AstrologyReport | null) {
         if (!report) return;
-        await this.notificationService.notifyUser(buildAstrologyReportSucceededNotification(report));
+        try {
+            await this.notificationService.notifyUser(buildAstrologyReportSucceededNotification(report));
+        } catch (error) {
+            this.logger.warn(`Notify astrology report ${report.id} succeeded failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     private async notifyReportFailed(report: AstrologyReport, message: string) {
-        await this.notificationService.notifyUser(buildAstrologyReportFailedNotification(report, message));
+        try {
+            await this.notificationService.notifyUser(buildAstrologyReportFailedNotification(report, message));
+        } catch (error) {
+            this.logger.warn(`Notify astrology report ${report.id} failed failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     async markReportCrashed(reportId: string, error: unknown, metadata?: Record<string, unknown>) {

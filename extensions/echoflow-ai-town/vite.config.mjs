@@ -7,23 +7,6 @@ import packageJson from "./package.json" with { type: "json" };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function townManualChunks(id) {
-    const normalizedId = id.replaceAll("\\", "/");
-
-    if (
-        normalizedId.includes("/node_modules/.pnpm/react@") ||
-        normalizedId.includes("/node_modules/.pnpm/react-dom@") ||
-        normalizedId.includes("/node_modules/.pnpm/scheduler@") ||
-        normalizedId.includes("/node_modules/react/") ||
-        normalizedId.includes("/node_modules/react-dom/") ||
-        normalizedId.includes("/node_modules/scheduler/")
-    ) {
-        return "react-vendor";
-    }
-
-    return undefined;
-}
-
 export default defineExtensionViteConfig(packageJson, {
     build: {
         outDir: ".output/public",
@@ -45,9 +28,6 @@ export default defineExtensionViteConfig(packageJson, {
                 )
                     return;
                 warn(warning);
-            },
-            output: {
-                manualChunks: townManualChunks,
             },
         },
     },
@@ -79,13 +59,6 @@ export default defineExtensionViteConfig(packageJson, {
                 replacement: resolve(
                     __dirname,
                     "../../node_modules/.pnpm/node_modules/radix-ui/dist/index.mjs",
-                ),
-            },
-            {
-                find: /^framer-motion$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/framer-motion/dist/es/index.mjs",
                 ),
             },
             {

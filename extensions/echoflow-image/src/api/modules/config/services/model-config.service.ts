@@ -5,6 +5,7 @@ import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import {
+    PublicAiModelService,
     assertPublicHttpUrl,
     normalizePublicHttpUrl,
     resolveProviderEndpointCredential,
@@ -31,8 +32,8 @@ import {
 } from "./image-model-catalog";
 
 export interface ResolvedImageModelConfig {
-    id?: string;
-    aiModelId?: string | null;
+    id: string;
+    promptEnhancerModelId?: string | null;
     provider: string;
     model: string;
     externalModelId: string;
@@ -62,6 +63,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         @InjectRepository(ImageGeneration)
         private readonly generationRepository: Repository<ImageGeneration>,
         private readonly secretService: SecretService,
+        private readonly publicAiModelService: PublicAiModelService,
     ) {
         super(modelConfigRepository);
     }
@@ -122,16 +124,16 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         };
     }
 
-    async findEnabledByModel(model: string): Promise<ResolvedImageModelConfig> {
+    async findEnabledById(id: string): Promise<ResolvedImageModelConfig> {
         await this.ensureDefaultModelConfigs();
         const config = await this.modelConfigRepository.findOne({
-            where: { model } as FindOptionsWhere<ImageModelConfig>,
+            where: { id } as FindOptionsWhere<ImageModelConfig>,
         });
         if (!config) {
-            throw HttpErrorFactory.badRequest(`不支持的图像模型: ${model}`);
+            throw HttpErrorFactory.badRequest(`不支持的图像模型配置: ${id}`);
         }
         if (!config.enabled || !config.visibleToUser) {
-            throw HttpErrorFactory.badRequest(`图像模型已在管理后台禁用: ${model}`);
+            throw HttpErrorFactory.badRequest(`图像模型配置已在管理后台禁用: ${id}`);
         }
         const resolved = this.toResolvedConfig(config);
         this.pickRuntimeEndpoint(resolved);
@@ -160,6 +162,20 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         Object.assign(config, await this.normalizeOperationalConfig(dto, config));
         const saved = await this.modelConfigRepository.save(config);
         return this.toOperationalView(saved);
+    }
+
+    async listAvailableLlmModels() {
+        const models = await this.publicAiModelService.listActiveLlmModels();
+        return models
+            .filter((model) => model.provider?.isActive)
+            .map((model) => ({
+                id: model.id,
+                name: model.name,
+                model: model.model,
+                modelType: model.modelType,
+                providerName: model.provider.name,
+                provider: model.provider.provider,
+            }));
     }
 
     async testEndpoint(id: string, endpointDto: ImageModelEndpointDto) {
@@ -204,11 +220,9 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
 
     toWebOption(config: ResolvedImageModelConfig | ImageModelConfig) {
         return {
-            id: config.model,
-            modelConfigId: "id" in config ? config.id : undefined,
+            id: config.id,
             name: config.displayName,
             model: config.model,
-            provider: config.provider,
             modelType: "image",
             description: config.description ?? "",
             mediaTypes: ["image"],
@@ -229,7 +243,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
 
         const created = await this.modelConfigRepository.save(
             missing.map((config) => this.modelConfigRepository.create({
-                aiModelId: null,
+                promptEnhancerModelId: null,
                 provider: config.provider,
                 model: config.model,
                 externalModelId: config.externalModelId,
@@ -256,7 +270,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         this.schemaReadyPromise ??= (async () => {
             await this.modelConfigRepository.manager.query(`
                 ALTER TABLE "echoflow_image"."image_model_config"
-                ADD COLUMN IF NOT EXISTS "ai_model_id" uuid,
+                ADD COLUMN IF NOT EXISTS "prompt_enhancer_model_id" uuid,
                 ADD COLUMN IF NOT EXISTS "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
                 ADD COLUMN IF NOT EXISTS "model" varchar(100),
                 ADD COLUMN IF NOT EXISTS "external_model_id" varchar(100) NOT NULL DEFAULT '',
@@ -266,7 +280,12 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             `);
             await this.modelConfigRepository.manager.query(`
                 ALTER TABLE "echoflow_image"."image_model_config"
-                ALTER COLUMN "ai_model_id" DROP NOT NULL
+                ALTER COLUMN "prompt_enhancer_model_id" DROP NOT NULL
+            `);
+            await this.modelConfigRepository.manager.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS "uq_image_model_config_model"
+                ON "echoflow_image"."image_model_config" ("model")
+                WHERE "model" IS NOT NULL
             `);
         })();
         await this.schemaReadyPromise;
@@ -280,8 +299,15 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         if (!existing || !defaultConfig) {
             throw HttpErrorFactory.badRequest("内置图像模型配置不存在");
         }
+        const promptEnhancerModelId = dto.promptEnhancerModelId === null
+            ? null
+            : dto.promptEnhancerModelId?.trim() || existing.promptEnhancerModelId || null;
+        if (promptEnhancerModelId) {
+            await this.assertPromptEnhancerModelUsable(promptEnhancerModelId);
+        }
 
         return {
+            promptEnhancerModelId,
             provider: defaultConfig.provider,
             model: defaultConfig.model,
             externalModelId: defaultConfig.externalModelId,
@@ -379,7 +405,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     private toResolvedConfig(config: ImageModelConfig): ResolvedImageModelConfig {
         return {
             id: config.id,
-            aiModelId: config.aiModelId ?? undefined,
+            promptEnhancerModelId: config.promptEnhancerModelId ?? undefined,
             provider: config.provider,
             model: config.model,
             externalModelId: config.externalModelId,
@@ -400,7 +426,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         const resolved = this.toResolvedConfig(config);
         return {
             id: resolved.id,
-            aiModelId: resolved.aiModelId,
+            promptEnhancerModelId: resolved.promptEnhancerModelId,
             provider: resolved.provider,
             model: resolved.model,
             externalModelId: resolved.externalModelId,
@@ -429,6 +455,21 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             createdAt: config.createdAt,
             updatedAt: config.updatedAt,
         };
+    }
+
+    async assertPromptEnhancerModelUsable(modelId: string) {
+        const model = await this.getPromptEnhancerModel(modelId);
+        if (!model || model.modelType !== "llm" || !model.provider?.isActive) {
+            throw HttpErrorFactory.badRequest("提示词润色模型不可用，请选择主站已启用的 LLM 模型");
+        }
+    }
+
+    private async getPromptEnhancerModel(modelId: string) {
+        try {
+            return await this.publicAiModelService.getModelInfo(modelId);
+        } catch {
+            return null;
+        }
     }
 
 }

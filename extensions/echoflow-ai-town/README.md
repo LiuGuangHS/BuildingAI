@@ -37,10 +37,9 @@
 | 参谋 HUD | ready | 镇务参谋入口在打开今日计划前先展示下一步玩家动作、收益预览和待回应约定数，等待态使用镇务排班中而不是思考中，让 AI 参谋价值直接出现在主场景。 |
 | 成就空态 | ready | 成就徽章无记录时展示第一枚徽章卡、获得路径和规则推导的徽章行动入口，复用行动预算、资源和建筑校验，不让玩家只看到“这里会点亮成就”。 |
 | 成就徽章墙 | ready | 已获得成就展示为徽章墙，每枚徽章保留成就册写入感，并提供下一枚徽章行动入口，让成就区继续驱动经营、拜访和主线推进。 |
-| 成长册 | ready | 玩家端把故事深度、记忆容量、角色章节、季节活动和外观表达呈现为玩法成长预览，并明确当前不是购买入口；成长路线 CTA 只执行经营、拜访、计划、探索或布置等玩法动作，不提供购买按钮。AI 行动计费只覆盖镇务参谋、居民聊天和探索导演，不等同于订阅权益或内容包购买入口。 |
 | 移动端嵌入布局 | ready | 小屏下目标板、命令牌和场景提示进入流式布局，舞台允许纵向滚动并隐藏横向溢出，避免主系统 iframe 内裁切可操作内容。 |
 | 视觉外壳 | ready | 外层舞台色盘使用晨光、草地和木质色，让地图与经营场景成为首屏第一视觉信号；不使用泛 AI 紫色发光外壳，也不通过拉伸字距制造科技感。 |
-| 抽屉可控性 | ready | 游戏抽屉具备 dialog 语义、标题关联、打开后自动聚焦、关闭后恢复触发点焦点、Tab 焦点循环、背景滚动锁定、Escape 关闭、遮罩点击关闭、可聚焦面板入口、带面板标题的关闭按钮和内部点击防冒泡，避免玩家在嵌入式页面里被弹层困住。 |
+| 抽屉可控性 | ready | 游戏抽屉复用系统 Sheet 提供 dialog 语义、焦点管理、背景滚动锁定、Escape 关闭和关闭后焦点恢复；插件只保留业务标题、内容和关闭文案。 |
 | 资源审计 | ready | 行动结果和日结展示金币、体力、声望、关系和等级 delta，并记录行动、选择、建筑、居民目标、预算、规则来源和模型/fallback 状态。 |
 | 行动等待反馈 | ready | 行动或居民交流提交后在主场景边缘展示具体小镇命令状态，例如经营餐馆中、拜访居民中、镇务排班中或和居民交流中，避免玩家从点击到结算之间只看到泛加载。 |
 | 错误反馈 | ready | 用户端行动错误使用小镇语境和可感知 alert 语义，默认错误提示为“小镇行动未完成”，不回退到普通应用式“操作失败”。 |
@@ -61,8 +60,7 @@
 | Catalog | ready | 建筑、区域、初始居民、基础行动、事件选项、日常任务、周目标、主线章节、成就和节日候选已迁入 catalog。 |
 | 内容包 | ready | `launch-core@0.0.1` / `season-0` manifest 已记录内容范围、seed 策略和幂等键；存档 `worldState.contentPack` 会保存当前内容包快照。 |
 | 内容包运营页 | ready | Console 提供只读内容包面板，展示 manifest、存档覆盖、章节分布、活动状态和运营告警；暂不提供后台改内容开关。 |
-| 正式计费 | ready | 已接入 `ExtensionBillingModule` / `ExtensionBillingService`；今日计划、居民聊天和探索导演价格由 Console 配置，默认价格为 0 时不扣费，真实模型成功且未 fallback 时才以事件 ID 作为 `associationNo` 幂等扣费，失败按账务事实退款；成长册仍不是购买入口。 |
-| Phaser 主场景 | reserved | 当前仍是 React 场景化界面；Phaser 可后续评估，但不进入默认发布路径。 |
+| 正式计费 | ready | 已接入 `ExtensionBillingModule` / `ExtensionBillingService`；今日计划、居民聊天和探索导演价格由 Console 配置，默认价格为 0 时不扣费，真实模型成功且未 fallback 时才以事件 ID 作为 `associationNo` 幂等扣费，失败按账务事实退款。 |
 
 ## 入口与页面
 
@@ -102,7 +100,7 @@
 | Rate Limit | Web 行动和居民聊天入口复用 `ExtensionRateLimitService` + 主系统 Redis 做 10 秒/分钟双窗口限流；玩法行动预算和 AI 日额度继续保留业务语义。 |
 | 队列 | 当前 AI 调用为业务请求内编排；如引入长流程记忆压缩或章节生成，应优先接主系统队列。 |
 | 通知 | 当前无异步终态或离线触达事件，暂不接入通知；后续长任务或运营触达应复用 `ExtensionNotificationService`。 |
-| 浏览器持久化 | AI 使用提示确认状态复用 `@buildingai/stores` 的 `getLocalStorage()`；插件不直接手写 `window.localStorage` 访问。 |
+| 额度确认 | 今日计划和居民回复不在浏览器持久化“已确认”状态；每次高成本动作按当前场景展示镇务额度提示。 |
 | UI | 用户端和 Console 优先复用主系统 Button、Card、Input、Select、Tabs、Badge、Label、Alert、Skeleton 等组件；AI 配置页普通字段标签已收敛到系统 `Label`，复合 checkbox/radio 行需要整行点击时才保留原生 `label` 语义。首屏路由延迟加载 Console 外壳，Console 菜单图标走主系统静态白名单。游戏场景、命令牌、地图热点和奖励结算可保留插件业务样式，但不能退回另一套基础控件系统。 |
 | Manifest | `package.json` 声明运行时代码、构建配置和测试路径直接 import/require 的包；当前已移除未使用的 `@buildingai/utils`，并为 eslint 配置声明 `eslint` / `globals`，为规则级 smoke 测试声明 `ts-node`。 |
 | RootLayout | 前端入口直接使用主系统 `RootLayout` 提供的 QueryClientProvider 和扩展布局，不在插件 main.tsx 里再包一层 QueryClientProvider，避免查询默认配置和首屏错误处理分裂。 |
@@ -152,10 +150,10 @@ pnpm --filter echoflow-ai-town build:publish
 | 命令 | 状态 | 说明 |
 |---|---|---|
 | `check-types` | pass | 已在 Node 22.23.0 / pnpm 10.20.0 环境通过。 |
-| `test` | pass | 当前测试覆盖 catalog 守门、内容包 manifest、5 分钟规则级闭环 smoke、行动预算、居民记忆、推荐闭环、可玩首屏、多场景导演、连续开张、回访奖励 CTA、日常任务/长期目标/今日计划推荐行动 CTA、场景热点、活动线索、事件分支行动牌、小镇日志时间线、居民头像兜底、行动错误 alert、回合状态条、首屏命令牌、首屏分包、非泛 AI 紫色视觉外壳、AI 计费 associationNo/默认免费/fallback 不扣费/失败退款边界、Web 行动/聊天 SDK 限流、主系统 Console 图标白名单、插件表单字段 `Label` 复用和用户端动作控件 `Button` 复用边界。 |
-| Console 图标白名单 | covered | `@buildingai/ui` 当前没有独立 `test` script；小镇跨包静态测试覆盖 Console 静态映射、`list-checks` 和未登记图标 fallback，类型层不再引用 `lucide-react/dynamic`。 |
+| `test` | pass | 覆盖规则闭环、内容包边界、前端首屏约束、AI 计费边界、限流和 UI 组件复用。 |
+| Console 图标白名单 | covered | 小镇静态测试覆盖 Console 静态映射和未登记图标 fallback，类型层不再引用 `lucide-react/dynamic`。 |
 | `build:api` | pass | API 产物已包含 catalog、migration 和 `0.0.1` upgrade。 |
-| `build:web` | pass | 首屏入口从约 448KB 降至约 133KB，React 单独进入 `react-vendor`，HTML 首屏不再 preload `lucide` 大块；Console chunk 约 94KB，发布产物 JS 文件数从动态图标碎片级收敛到 15 个，Vite 500KB chunk warning 已消失。 |
+| `build:web` | pass | Vite Web 构建通过，首屏不再预加载 Console 和大图标块。 |
 | `build:publish` | pass | 已重新完成 `clean -> build:web -> build:api` 发布构建链路；Vite Web 构建和 tsup API 构建均通过。 |
 | 真实浏览器 smoke | blocked | 当前只能确认 Vite 用户端可启动到 `http://localhost:5176/extension/echoflow-ai-town`；Codex Browser 连接对象断开，Playwright 缺少 Chromium 二进制，系统 Chrome/Edge 未找到，因此没有新的桌面/移动截图证据。 |
 
@@ -170,7 +168,6 @@ pnpm --filter echoflow-ai-town build:publish
 | 主站公共模块 DI 回归 | 通知/微信/认证链路异常会阻断所有插件真实 E2E，而不只是小镇。 | 根 `AGENTS.md` 已记录主系统服务复用规则；保留 `packages/api/src/common/modules/wechat/wechat-module-boundary.test.mjs`，后续公共模块改动先跑该边界测试和 `@buildingai/api check-types`。 |
 | 浏览器自动化环境缺口 | 无法用当前 Codex Browser 或本机 Playwright 生成新的桌面/移动截图证据，阻断视觉 QA 和真实交互 smoke。 | 先恢复 Playwright Chromium 或可连接浏览器，再按根 `AGENTS.md` 的浏览器 QA 规则确认端口、标题、业务文案和截图状态。 |
 | Console 菜单图标白名单 | 菜单图标已从动态图库收敛为主系统静态白名单，并有 `@buildingai/ui` 包级测试覆盖；新插件若使用未登记图标会回退为帮助图标。 | 新增 Console 菜单图标时同步扩展主系统白名单和测试，避免退回动态图标方案。 |
-| Phaser 仅预留 | 目前还不是 Canvas/Phaser 游戏内核。 | 先保持 React 可发布路径，再做只读场景评估。 |
 
 ## 下一步
 
@@ -178,5 +175,4 @@ pnpm --filter echoflow-ai-town build:publish
 |---|---|---|---|
 | P1 真实浏览器交互 smoke | Web 主场景、`TownService`、浏览器 QA 环境 | 先恢复 Playwright Chromium、系统浏览器或 Codex Browser 连接；确认端口确属 `echoflow-ai-town` 后，在主系统插件容器完成创建存档 -> 2 到 3 次行动 -> 日结 -> 第二天变化；同时检查控制台错误、首屏布局、抽屉焦点和移动端可操作区域。 | 记录真实存档 ID、行动结果、日结资源变化、桌面/移动截图和浏览器状态；没有新截图或浏览器运行证据时保持 blocked，不声明端到端通过。 |
 | P1 真实账务 smoke | `src/api/modules/town/*`、主站余额、真实模型 | 使用测试用户和余额覆盖今日计划、居民聊天、探索导演的免费、扣费、fallback 不扣费和失败退款。 | 记录脱敏事件 ID、`AccountLog` 扣费/退款事实和用户端账务 chip；未跑真实余额前不声明真实闭环。 |
-| P2 Phaser 只读场景评估 | Web TownScene、React HUD/抽屉 bridge | 先做只读 TownScene 技术评估，确认 React HUD、抽屉、行动命令和可访问性不被 Canvas 吞掉。 | 不替换当前 React 可发布路径；若进入实现，先补场景桥接和浏览器 QA 任务。 |
 | P2 规则与记忆测试补强 | `tests/*`、规则服务、记忆压缩、计费幂等 | 补世界规则、关系推进、任务进度、AI fallback、记忆压缩和计费幂等 focused tests。 | 测试覆盖新增规则且不把运营内容内联回 service；失败输出能定位 catalog、规则或计费边界。 |

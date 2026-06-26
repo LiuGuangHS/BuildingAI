@@ -4,8 +4,6 @@ export type TownCharacterCatalogItem = {
     personality: string;
     relationship: number;
     status: string;
-    reserved?: boolean;
-    experimental?: boolean;
 };
 
 export const TOWN_CHARACTER_CATALOG: TownCharacterCatalogItem[] = [

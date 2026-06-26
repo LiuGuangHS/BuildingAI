@@ -17,7 +17,7 @@ import { Input } from "@buildingai/ui/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 
 import { useAdminContractTaskDetailQuery, useAdminContractTasksQuery, useDeleteAdminContractTaskMutation } from "../../services/console";
-import type { AdminContractGenerationTask, ContractGenerationStatus } from "../../services/types";
+import { contractStatusText, contractStatusVariant, isContractBusyStatus, type AdminContractGenerationTask, type ContractGenerationStatus } from "../../services/types";
 
 const PAGE_SIZE = 20;
 const allStatuses: Array<{ value: "all" | ContractGenerationStatus; label: string }> = [
@@ -98,7 +98,7 @@ export default function ContractTasksConsolePage() {
                                     <span className="grid w-full gap-2">
                                         <span className="flex items-center justify-between gap-2">
                                             <strong className="truncate">{task.title}</strong>
-                                            <Badge variant={statusVariant(task.status)}>{statusText(task.status)}</Badge>
+                                            <Badge variant={contractStatusVariant(task.status)}>{contractStatusText(task.status)}</Badge>
                                         </span>
                                         <span className="text-muted-foreground text-xs">{task.industry || "未分类"} / {task.contractType}</span>
                                         <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -126,13 +126,13 @@ export default function ContractTasksConsolePage() {
                         <>
                             <div className="ec-detail-head">
                                 <div>
-                                    <Badge variant={statusVariant(detail.status)}>{statusText(detail.status)}</Badge>
+                                    <Badge variant={contractStatusVariant(detail.status)}>{contractStatusText(detail.status)}</Badge>
                                     <h2>{detail.title}</h2>
                                     <p>用户：<span className="ec-mono">{detail.userId}</span> / 创建：{formatDate(detail.createdAt)}</p>
                                 </div>
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
-                                        <Button variant="destructive" disabled={deleteMutation.isPending || isBusyStatus(detail.status)}>删除任务</Button>
+                                        <Button variant="destructive" disabled={deleteMutation.isPending || isContractBusyStatus(detail.status)}>删除任务</Button>
                                     </AlertDialogTrigger>
                                     <AlertDialogContent>
                                         <AlertDialogHeader>
@@ -204,24 +204,11 @@ export default function ContractTasksConsolePage() {
 
 function Metric({ label, value }: { label: string; value: string | number }) {
     return (
-        <Card size="sm">
-            <CardContent>
-                <strong className="text-2xl">{value}</strong>
-                <span className="block text-sm text-muted-foreground">{label}</span>
-            </CardContent>
-        </Card>
+        <div className="rounded-md border bg-muted/30 p-3">
+            <strong className="text-2xl">{value}</strong>
+            <span className="block text-sm text-muted-foreground">{label}</span>
+        </div>
     );
-}
-
-function statusText(status: string) {
-    return { pending: "等待中", processing: "生成中", draft: "草稿", reviewing: "审查中", exporting: "导出中", success: "已导出", failed: "失败", export_failed: "导出失败" }[status] ?? status;
-}
-
-function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-    if (["failed", "export_failed"].includes(status)) return "destructive";
-    if (["pending", "processing", "reviewing", "exporting"].includes(status)) return "secondary";
-    if (status === "draft") return "outline";
-    return "default";
 }
 
 function riskLevelText(level: string) {
@@ -230,8 +217,4 @@ function riskLevelText(level: string) {
 
 function formatDate(value: string) {
     return new Date(value).toLocaleString();
-}
-
-function isBusyStatus(status: string) {
-    return ["pending", "processing", "reviewing", "exporting"].includes(status);
 }

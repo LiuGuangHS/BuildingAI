@@ -17,12 +17,12 @@ describe("astrology report failure metadata", () => {
         });
     });
 
-    it("keeps ordinary provider errors readable without leaking objects", () => {
+    it("keeps ordinary provider errors user-safe while preserving the operator reason", () => {
         const failure = buildAstrologyReportFailure({ message: "upstream timeout" });
 
-        assert.equal(failure.message, "upstream timeout");
+        assert.equal(failure.message, "星盘报告生成失败，本次生成已按账务事实处理，请稍后重试。");
         assert.deepEqual(failure.metadata, {
-            error: "upstream timeout",
+            error: "星盘报告生成失败，本次生成已按账务事实处理，请稍后重试。",
             failureType: "provider_error",
             failureReason: "upstream timeout",
         });

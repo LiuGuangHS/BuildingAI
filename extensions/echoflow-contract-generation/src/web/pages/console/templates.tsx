@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -20,7 +20,7 @@ import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { safeJsonParse } from "@buildingai/stores";
 
 import { useAdminContractTemplatesQuery, useCreateAdminContractTemplateMutation, useDeleteAdminContractTemplateMutation, useResetBuiltinContractTemplatesMutation, useUpdateAdminContractTemplateMutation } from "../../services/console";
-import type { ContractTemplate, UpsertContractTemplateParams } from "../../services/types";
+import type { AdminContractTemplate, UpsertContractTemplateParams } from "../../services/types";
 
 const emptyTemplate: UpsertContractTemplateParams = {
     name: "",
@@ -40,7 +40,7 @@ export default function ContractTemplatesConsolePage() {
     const updateMutation = useUpdateAdminContractTemplateMutation();
     const deleteMutation = useDeleteAdminContractTemplateMutation();
     const resetMutation = useResetBuiltinContractTemplatesMutation();
-    const [editing, setEditing] = useState<ContractTemplate | null>(null);
+    const [editing, setEditing] = useState<AdminContractTemplate | null>(null);
     const [form, setForm] = useState<UpsertContractTemplateParams>(emptyTemplate);
     const [fieldsText, setFieldsText] = useState(JSON.stringify(emptyTemplate.fields, null, 2));
     const [sectionsText, setSectionsText] = useState(emptyTemplate.defaultSections.join("\n"));
@@ -85,7 +85,7 @@ export default function ContractTemplatesConsolePage() {
         }
     }
 
-    async function handleDelete(template: ContractTemplate) {
+    async function handleDelete(template: AdminContractTemplate) {
         await deleteMutation.mutateAsync(template.id);
         if (editing?.id === template.id) startCreate();
     }
@@ -154,17 +154,14 @@ export default function ContractTemplatesConsolePage() {
                     </CardHeader>
                     <CardContent className="grid gap-6">
 
-                    <div className="ec-form-grid">
-                        <Field label="模板名称" value={form.name} onChange={(name) => setForm({ ...form, name })} />
-                        <Field label="行业" value={form.industry} onChange={(industry) => setForm({ ...form, industry })} />
-                        <Field label="合同类型" value={form.contractType} onChange={(contractType) => setForm({ ...form, contractType })} />
-                        <Field label="排序" type="number" value={String(form.sortOrder ?? 0)} onChange={(value) => setForm({ ...form, sortOrder: Number(value) || 0 })} />
-                    </div>
+                        <div className="ec-form-grid">
+                            <Field label="模板名称" value={form.name} onChange={(name) => setForm({ ...form, name })} />
+                            <Field label="行业" value={form.industry} onChange={(industry) => setForm({ ...form, industry })} />
+                            <Field label="合同类型" value={form.contractType} onChange={(contractType) => setForm({ ...form, contractType })} />
+                            <Field label="排序" type="number" value={String(form.sortOrder ?? 0)} onChange={(value) => setForm({ ...form, sortOrder: Number(value) || 0 })} />
+                        </div>
 
-                    <div className="grid gap-2">
-                        <Label>描述</Label>
-                        <Textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
-                    </div>
+                        <TextareaField label="描述" value={form.description} onChange={(value) => setForm({ ...form, description: value })} />
 
                     <section className="grid gap-3">
                         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -174,18 +171,18 @@ export default function ContractTemplatesConsolePage() {
                             </div>
                             <Button variant="outline" onClick={formatFieldsJson}>格式化</Button>
                         </div>
-                        <Textarea className="min-h-40 font-mono text-xs" value={fieldsText} onChange={(event) => setFieldsText(event.target.value)} />
+                        <Textarea className="min-h-40 font-mono text-xs" value={fieldsText} onChange={(event) => setFieldsText(event.target.value)} aria-label="高级字段 JSON" />
                     </section>
 
                     <section className="grid gap-2">
                         <h3 className="text-base font-medium">默认条款</h3>
-                        <Textarea className="min-h-40" value={sectionsText} onChange={(event) => setSectionsText(event.target.value)} />
+                        <Textarea className="min-h-40" value={sectionsText} onChange={(event) => setSectionsText(event.target.value)} aria-label="默认条款" />
                         <p className="text-sm text-muted-foreground">每行一条，生成合同时作为默认条款结构。</p>
                     </section>
 
                     <section className="grid gap-2">
                         <h3 className="text-base font-medium">AI 提示</h3>
-                        <Textarea className="min-h-40" value={form.promptTemplate ?? ""} onChange={(event) => setForm({ ...form, promptTemplate: event.target.value })} />
+                        <Textarea className="min-h-40" value={form.promptTemplate ?? ""} onChange={(event) => setForm({ ...form, promptTemplate: event.target.value })} aria-label="AI 提示" />
                         <p className="text-sm text-muted-foreground">用于约束生成风格、输出边界和业务注意事项。</p>
                     </section>
 
@@ -233,7 +230,7 @@ export default function ContractTemplatesConsolePage() {
     );
 }
 
-function toForm(template: ContractTemplate): UpsertContractTemplateParams {
+function toForm(template: AdminContractTemplate): UpsertContractTemplateParams {
     return { name: template.name, industry: template.industry, contractType: template.contractType, description: template.description, fields: template.fields, defaultSections: template.defaultSections, promptTemplate: template.promptTemplate ?? "", isActive: template.isActive ?? true, sortOrder: template.sortOrder ?? 0 };
 }
 
@@ -243,10 +240,21 @@ function parseFields(value: string) {
 }
 
 function Field({ label, type = "text", value, onChange }: { label: string; type?: string; value: string; onChange: (value: string) => void }) {
+    const id = useId();
     return (
         <div className="grid gap-2">
-            <Label>{label}</Label>
-            <Input type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+            <Label htmlFor={id}>{label}</Label>
+            <Input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+        </div>
+    );
+}
+
+function TextareaField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+    const id = useId();
+    return (
+        <div className="grid gap-2">
+            <Label htmlFor={id}>{label}</Label>
+            <Textarea id={id} value={value} onChange={(event) => onChange(event.target.value)} />
         </div>
     );
 }

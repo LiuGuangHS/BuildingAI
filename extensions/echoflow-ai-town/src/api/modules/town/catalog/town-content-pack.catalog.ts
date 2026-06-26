@@ -1,3 +1,10 @@
+import { TOWN_ACTION_CATALOG } from "./town-actions.catalog";
+import { TOWN_BUILDING_CATALOG } from "./town-buildings.catalog";
+import { TOWN_CHARACTER_CATALOG } from "./town-characters.catalog";
+import { TOWN_CHOICE_CATALOG } from "./town-choices.catalog";
+import { TOWN_FESTIVAL_CATALOG } from "./town-festivals.catalog";
+import { TOWN_ACHIEVEMENT_CATALOG, TOWN_DAILY_TASK_ROTATION, TOWN_MAIN_QUEST_CATALOG, TOWN_WEEKLY_GOAL_ROTATION } from "./town-progress.catalog";
+
 export type TownContentPackId = "launch-core";
 export type TownContentSeasonId = "season-0";
 
@@ -32,9 +39,9 @@ export type TownContentPackManifest = {
 export type TownContentPackState = {
     packId: TownContentPackId;
     version: string;
-    seasonId: TownContentSeasonId;
     seededAt: string;
-    seedStrategy: TownContentPackManifest["seedStrategy"];
+    seasonId?: TownContentSeasonId;
+    seedStrategy?: TownContentPackManifest["seedStrategy"];
 };
 
 export const TOWN_CONTENT_PACK_MANIFEST: TownContentPackManifest = {
@@ -51,16 +58,16 @@ export const TOWN_CONTENT_PACK_MANIFEST: TownContentPackManifest = {
         idempotencyKey: "echoflow-ai-town:launch-core:0.0.1",
     },
     includes: {
-        buildings: ["restaurant", "florist", "square"],
+        buildings: TOWN_BUILDING_CATALOG.map((building) => building.id),
         areas: ["中央广场", "暖光餐馆", "花店街角", "夜市街角", "二层露台", "温室小径", "旧喷泉", "庆典会场"],
-        characters: ["小满", "阿泽", "花音", "旅人洛"],
-        actions: ["operate", "visit", "decorate", "explore", "rest", "advice"],
-        choices: ["operate", "visit", "explore", "rest"],
-        dailyTaskRotations: 4,
-        weeklyGoals: 3,
-        mainQuestChapters: [1, 2, 3, 4],
-        achievements: ["第一桶金", "人气初现", "建筑师", "探索者", "庆典小镇"],
-        festivals: ["festival-lantern", "restaurant-new-menu", "florist-show", "fountain-repair"],
+        characters: TOWN_CHARACTER_CATALOG.map((character) => character.name),
+        actions: Object.keys(TOWN_ACTION_CATALOG),
+        choices: Object.keys(TOWN_CHOICE_CATALOG),
+        dailyTaskRotations: TOWN_DAILY_TASK_ROTATION.length,
+        weeklyGoals: TOWN_WEEKLY_GOAL_ROTATION.length,
+        mainQuestChapters: Object.keys(TOWN_MAIN_QUEST_CATALOG).map(Number),
+        achievements: TOWN_ACHIEVEMENT_CATALOG.map((achievement) => achievement.id),
+        festivals: TOWN_FESTIVAL_CATALOG.map((festival) => festival.key),
     },
 };
 
@@ -68,9 +75,7 @@ export function createTownContentPackState(seededAt = new Date().toISOString()):
     return {
         packId: TOWN_CONTENT_PACK_MANIFEST.id,
         version: TOWN_CONTENT_PACK_MANIFEST.version,
-        seasonId: TOWN_CONTENT_PACK_MANIFEST.season.id,
         seededAt,
-        seedStrategy: { ...TOWN_CONTENT_PACK_MANIFEST.seedStrategy },
     };
 }
 
@@ -81,11 +86,6 @@ export function normalizeTownContentPackState(state: unknown): TownContentPackSt
     return {
         packId: source.packId === TOWN_CONTENT_PACK_MANIFEST.id ? source.packId : fallback.packId,
         version: typeof source.version === "string" && source.version.trim() ? source.version : fallback.version,
-        seasonId: source.seasonId === TOWN_CONTENT_PACK_MANIFEST.season.id ? source.seasonId : fallback.seasonId,
         seededAt: typeof source.seededAt === "string" && source.seededAt.trim() ? source.seededAt : fallback.seededAt,
-        seedStrategy: {
-            ...fallback.seedStrategy,
-            ...(source.seedStrategy && typeof source.seedStrategy === "object" ? source.seedStrategy : {}),
-        },
     };
 }

@@ -17,6 +17,11 @@ export class ModelConfigController extends BaseController {
         return this.modelConfigService.list(query);
     }
 
+    @Get("llm-models")
+    async listLlmModels() {
+        return this.modelConfigService.listAvailableLlmModels();
+    }
+
     @Post()
     async create(@Body() dto: CreateModelConfigDto) {
         return this.modelConfigService.createConfig(dto);

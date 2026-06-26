@@ -72,6 +72,8 @@ describe("astrology console report detail diagnostics", () => {
 
         assert.match(body, /report\.result\?\.actions/);
         assert.match(body, /report\.result\?\.warnings/);
+        assert.match(body, /\.map\(formatActionItem\)/);
+        assert.match(body, /\.map\(formatWarningItem\)/);
         assert.match(body, /report\.result\?\.followUps/);
         assert.match(body, /行动建议/);
         assert.match(body, /风险提醒/);

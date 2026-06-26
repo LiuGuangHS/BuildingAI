@@ -3,6 +3,7 @@ import { User } from "@buildingai/db/entities";
 import {
     Column,
     CreateDateColumn,
+    DeleteDateColumn,
     Index,
     JoinColumn,
     ManyToOne,
@@ -71,9 +72,6 @@ export class ImageGeneration {
     @Column({ type: "varchar", length: 100, nullable: true, comment: "Idempotency key from client" })
     requestKey?: string;
 
-    @Column({ type: "uuid", nullable: true, comment: "Image model config ID" })
-    modelConfigId?: string;
-
     @Column({ type: "text", comment: "Prompt" })
     prompt: string;
 
@@ -86,7 +84,7 @@ export class ImageGeneration {
     @Column({ type: "varchar", length: 100, nullable: true, comment: "Reference image file ID" })
     referenceImageFileId?: string;
 
-    @Column({ type: "varchar", length: 100, comment: "AI model ID" })
+    @Column({ type: "varchar", length: 100, comment: "Image model config ID" })
     modelId: string;
 
     @Column({ type: "varchar", length: 100, nullable: true, comment: "AI model name" })
@@ -190,6 +188,9 @@ export class ImageGeneration {
 
     @UpdateDateColumn({ comment: "Updated time" })
     updatedAt: Date;
+
+    @DeleteDateColumn({ nullable: true, comment: "Deleted time" })
+    deletedAt?: Date;
 
     @ManyToOne(() => User, { nullable: false })
     @JoinColumn({ name: "user_id" })

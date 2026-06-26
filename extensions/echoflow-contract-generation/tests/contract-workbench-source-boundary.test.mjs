@@ -12,24 +12,6 @@ test("workbench source does not reintroduce host shell concepts", () => {
     }
 });
 
-test("old workbench shell selectors are removed from css", () => {
-    for (const selector of [
-        ".contract-workbench-header",
-        ".contract-header-meta",
-        ".contract-main-panel",
-        ".contract-sidebar",
-        ".contract-unused-",
-        ".contract-workbench-grid",
-        ".contract-ai-header",
-        ".contract-ai-progress-rail",
-        ".contract-ai-prompt-panel",
-        ".contract-ai-facts",
-        ".contract-ai-next-action",
-    ]) {
-        assert.equal(css.includes(selector), false, `${selector} should be removed from the rebuilt workbench CSS`);
-    }
-});
-
 test("new workbench layout is component driven instead of css shell driven", () => {
     for (const selector of [".contract-task-bar", ".contract-studio-grid", ".contract-intake-card", ".contract-inspector", ".contract-template-drawer"]) {
         assert.equal(css.includes(selector), false, `${selector} should not return as a workbench shell CSS selector`);

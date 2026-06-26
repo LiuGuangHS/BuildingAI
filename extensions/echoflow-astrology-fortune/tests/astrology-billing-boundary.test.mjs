@@ -37,6 +37,7 @@ describe("astrology billing and refund boundary", () => {
         const body = methodBody("refundReportCreditsIfNeeded");
 
         assert.match(body, /lock: \{ mode: "pessimistic_write" \}, withDeleted: true/);
+        assert.match(body, /canRefundAstrologyReportCredits\(report\)/);
         assert.match(body, /metadata\.billingStatus === "deducted"/);
         assert.match(body, /billingService\.hasBillingLog\(\{ associationNo: report\.id, action: ACTION\.DEC \}, entityManager\)/);
         assert.match(body, /Boolean\(metadata\.refundedAt\)/);

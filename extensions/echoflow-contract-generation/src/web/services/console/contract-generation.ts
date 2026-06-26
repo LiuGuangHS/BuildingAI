@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { consoleHttpClient } from "../base";
-import type { AdminContractGenerationConfig, AdminContractGenerationTask, AiModelOption, ContractTemplate, PaginatedResponse, QueryContractTasksParams, UpsertContractTemplateParams } from "../types";
+import type { AdminContractGenerationConfig, AdminContractGenerationTask, AdminContractTemplate, AiModelOption, PaginatedResponse, QueryContractTasksParams, UpsertContractTemplateParams } from "../types";
 
 const CONTRACT_CONFIG_QUERY_KEY = ["echoflow-contract-generation", "console", "config"] as const;
 const AI_MODELS_QUERY_KEY = ["echoflow-contract-generation", "console", "models"] as const;
@@ -21,15 +21,15 @@ export function listAdminLlmModels() {
 }
 
 export function listAdminContractTemplates() {
-    return consoleHttpClient.get<ContractTemplate[]>("/contract-generation/templates");
+    return consoleHttpClient.get<AdminContractTemplate[]>("/contract-generation/templates");
 }
 
 export function createAdminContractTemplate(params: UpsertContractTemplateParams) {
-    return consoleHttpClient.post<ContractTemplate>("/contract-generation/templates", params);
+    return consoleHttpClient.post<AdminContractTemplate>("/contract-generation/templates", params);
 }
 
 export function updateAdminContractTemplate(id: string, params: UpsertContractTemplateParams) {
-    return consoleHttpClient.patch<ContractTemplate>(`/contract-generation/templates/${id}`, params);
+    return consoleHttpClient.patch<AdminContractTemplate>(`/contract-generation/templates/${id}`, params);
 }
 
 export function deleteAdminContractTemplate(id: string) {
@@ -37,7 +37,7 @@ export function deleteAdminContractTemplate(id: string) {
 }
 
 export function resetBuiltinContractTemplates() {
-    return consoleHttpClient.post<ContractTemplate[]>("/contract-generation/templates/reset-builtin");
+    return consoleHttpClient.post<AdminContractTemplate[]>("/contract-generation/templates/reset-builtin");
 }
 
 export function listAdminContractTasks(params?: QueryContractTasksParams) {
@@ -60,9 +60,13 @@ export function useAdminLlmModelsQuery() {
     return useQuery({ queryKey: AI_MODELS_QUERY_KEY, queryFn: listAdminLlmModels });
 }
 
-export function useUpdateAdminContractGenerationConfigMutation() {
+function useInvalidateOnSuccess(queryKey: QueryKey) {
     const queryClient = useQueryClient();
-    return useMutation({ mutationFn: updateAdminContractGenerationConfig, onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_CONFIG_QUERY_KEY }) });
+    return () => queryClient.invalidateQueries({ queryKey });
+}
+
+export function useUpdateAdminContractGenerationConfigMutation() {
+    return useMutation({ mutationFn: updateAdminContractGenerationConfig, onSuccess: useInvalidateOnSuccess(CONTRACT_CONFIG_QUERY_KEY) });
 }
 
 export function useAdminContractTemplatesQuery() {
@@ -70,23 +74,19 @@ export function useAdminContractTemplatesQuery() {
 }
 
 export function useCreateAdminContractTemplateMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: createAdminContractTemplate, onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TEMPLATES_QUERY_KEY }) });
+    return useMutation({ mutationFn: createAdminContractTemplate, onSuccess: useInvalidateOnSuccess(CONTRACT_TEMPLATES_QUERY_KEY) });
 }
 
 export function useUpdateAdminContractTemplateMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: ({ id, params }: { id: string; params: UpsertContractTemplateParams }) => updateAdminContractTemplate(id, params), onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TEMPLATES_QUERY_KEY }) });
+    return useMutation({ mutationFn: ({ id, params }: { id: string; params: UpsertContractTemplateParams }) => updateAdminContractTemplate(id, params), onSuccess: useInvalidateOnSuccess(CONTRACT_TEMPLATES_QUERY_KEY) });
 }
 
 export function useDeleteAdminContractTemplateMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: deleteAdminContractTemplate, onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TEMPLATES_QUERY_KEY }) });
+    return useMutation({ mutationFn: deleteAdminContractTemplate, onSuccess: useInvalidateOnSuccess(CONTRACT_TEMPLATES_QUERY_KEY) });
 }
 
 export function useResetBuiltinContractTemplatesMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: resetBuiltinContractTemplates, onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TEMPLATES_QUERY_KEY }) });
+    return useMutation({ mutationFn: resetBuiltinContractTemplates, onSuccess: useInvalidateOnSuccess(CONTRACT_TEMPLATES_QUERY_KEY) });
 }
 
 export function useAdminContractTasksQuery(params?: QueryContractTasksParams) {
@@ -98,6 +98,5 @@ export function useAdminContractTaskDetailQuery(taskId?: string) {
 }
 
 export function useDeleteAdminContractTaskMutation() {
-    const queryClient = useQueryClient();
-    return useMutation({ mutationFn: deleteAdminContractTask, onSuccess: () => queryClient.invalidateQueries({ queryKey: CONTRACT_TASKS_QUERY_KEY }) });
+    return useMutation({ mutationFn: deleteAdminContractTask, onSuccess: useInvalidateOnSuccess(CONTRACT_TASKS_QUERY_KEY) });
 }

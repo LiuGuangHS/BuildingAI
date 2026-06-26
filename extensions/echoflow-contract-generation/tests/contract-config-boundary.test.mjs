@@ -14,3 +14,14 @@ test("contract admin config uses a whitelist view instead of spreading the store
     assert.doesNotMatch(serviceSource, /return \{\n\s+\.\.\.config,/);
     assert.doesNotMatch(serviceSource, /\.\.\.config,/);
 });
+
+test("contract web config exposes generation availability without provider internals", () => {
+    const match = serviceSource.match(/async getPublicConfig\(\) \{([\s\S]*?)\n    async getAdminConfig/);
+    assert.ok(match, "getPublicConfig should exist before getAdminConfig");
+    const block = match[1];
+    assert.match(block, /canGenerate: Boolean\(model\)/);
+    assert.match(block, /unavailableReason/);
+    assert.match(block, /pricePerContract/);
+    assert.doesNotMatch(block, /\bid: model\.id\b/);
+    assert.doesNotMatch(block, /providerName: model\.provider\.name/);
+});

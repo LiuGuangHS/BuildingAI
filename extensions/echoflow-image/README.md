@@ -25,6 +25,7 @@
 | 多协议 capability | ready | Responses 不暴露 mask；Images 不暴露图生图、mask、多参考图；OpenAI-compatible Images 的参考图和 mask 走 edits 能力。 |
 | 模型接入点 | ready | 每个固定模型可绑定多组主站 Secret，支持优先级、超时、重试和 Base URL 覆盖。 |
 | 模型级计费 | ready | 生成前预估和预扣，失败按模型规则退款。 |
+| 提示词润色 | ready | 用户端传当前绘画模型 ID；插件读取该绘画模型绑定的主站 LLM，再通过 `PublicAiModelService.generateText()` 润色。 |
 | 风控策略 | ready | prompt 长度、张数、参考图、并发、每日额度等策略由 Console 维护。 |
 | 模板预设 | ready | Web 可读取模板，Console 可管理模板。 |
 | 无限画布 | ready | 白板草稿保存在本地浏览器，生成结果可整理到画布。 |
@@ -64,7 +65,7 @@
 | 服务 | 说明 |
 |---|---|
 | `GenerationService` | 请求幂等、余额预检、预扣、协议分发、状态写回、失败退款和结果序列化。 |
-| `ModelConfigService` | 固定模型 catalog、接入点、用户可见性、默认参数和 capability 收敛。 |
+| `ModelConfigService` | 固定模型 catalog、接入点、用户可见性、默认参数、提示词润色 LLM 绑定和 capability 收敛。 |
 | `image-model-catalog.ts` | 模型协议、能力、默认配置和默认模型网关 Base URL 的唯一来源。 |
 | `openai-image-client.ts` | Responses / Images / compatible Images 协议组装；默认 Base URL 只引用 catalog 常量，不在协议 client 内重复硬编码。 |
 | `image-http-client.ts` | 复用 `@buildingai/extension-sdk` provider HTTP client 发起模型请求，并复用 `downloadPublicHttpUrl()` 完成参考图 DNS 绑定下载、重定向、超时和大小截断；插件内只保留图片 MIME、文件名和图像业务错误文案。 |
@@ -78,6 +79,7 @@
 | Base URL | 接入点保存、测试和运行时复用 `@buildingai/extension-sdk` 的 `normalizePublicHttpUrl` / `assertPublicHttpUrl` / `normalizeProviderBaseUrl`；provider 默认值只维护在 `image-model-catalog.ts`。 |
 | 配置输出 | Console / Web 对外返回模型、接入点或管理配置时必须白名单组装字段，不要直接展开 `config` / `resolved` / `endpoint`，避免历史字段如 `apiKeyMasked`、旧兼容键或内部排障字段泄漏。 |
 | Billing | 使用 `ExtensionBillingModule` / `ExtensionBillingService` 做余额预检、预扣和失败退款；退款执行异常会写入 `rawResponse.metadata.refundError` / `refundFailedAt`，用户端只展示账务事实文案。 |
+| Prompt 润色 | 每个绘画模型可绑定一个主站已启用 LLM 作为 `promptEnhancerModelId`；Web 入口不直接传 LLM ID，不调用图片 provider 做文本润色，也不在失败时伪造本地润色成功。 |
 | Upload / Storage | 参考图优先使用平台 `fileId`；带 `fileId` 的平台上传路径以后端平台文件记录为准，不持久化客户端同时提交的参考图 URL；外部参考图/遮罩图 URL 保存或交给 provider 前使用 `assertPublicHttpUrl()` 做 DNS 公网校验；provider 返回的远程结果 URL 写入前同样走 DNS 公网校验，base64 结果通过主系统 `FileStorageService.saveBuffer()` 写入本插件 `storage/uploads`。 |
 | Notification | 通过 `ExtensionNotificationService` 注册图片生成成功、失败和超时失败场景；通知失败不回滚生成任务状态。 |
 | Rate Limit | Web 生成和提示词润色入口复用 `ExtensionRateLimitService` + 主系统 Redis 做 10 秒/分钟双窗口限流；Console 策略中的并发和每日额度继续负责业务资格控制。 |
@@ -106,9 +108,10 @@
 
 1. 在主站密钥管理创建图像服务 Secret，字段包含 `apiKey` 或 `api_key`，可选 `baseURL` / `baseUrl` / `base_url`。
 2. 在 Console `/models` 选择固定模型，绑定一组或多组 Secret 接入点。
-3. 配置展示名、用户可见性、默认参数、允许参数、模型级计费、优先级、超时和重试。
-4. 在 `/policies` 配置参考图、外部 URL、并发、prompt、每日额度等风控。
-5. 在 `/templates` 维护用户端可选模板。
+3. 在主站启用可用于文本生成的 LLM，并在 Console `/models` 为需要润色的绘画模型选择“提示词润色模型”。
+4. 配置展示名、用户可见性、默认参数、允许参数、模型级计费、优先级、超时和重试。
+5. 在 `/policies` 配置参考图、外部 URL、并发、prompt、每日额度等风控。
+6. 在 `/templates` 维护用户端可选模板。
 
 ## 用户端设计优化计划
 
@@ -187,7 +190,7 @@ corepack pnpm -v
 
 | 项目 | 状态 |
 |---|---|
-| 单测 | 已覆盖提示词润色 SDK 边界、public serializer、请求 ID、计费 SDK、URL 安全、插件依赖清单、媒体插件共享边界、RootLayout 查询上下文、Web 入口 SDK 限流、Console JSON 安全解析、常驻错误态不静态引入 `lucide-react`、外部参考图/遮罩图与 provider 结果 URL DNS 校验、平台上传 fileId 不持久化客户端 URL、批量下载无人工 timer 和退款异常元数据；`node --test extensions\echoflow-image\tests\image-public-api-boundary.test.mjs` 当前 18/18 通过，`node --test extensions\echoflow-image\tests\image-manifest-boundary.test.mjs` 当前 2/2 通过。 |
+| 单测 | 已覆盖提示词润色主站 LLM 边界、public serializer、请求 ID、计费 SDK、URL 安全、插件依赖清单、媒体插件共享边界、RootLayout 查询上下文、Web 入口 SDK 限流、Console JSON 安全解析、常驻错误态不静态引入 `lucide-react`、外部参考图/遮罩图与 provider 结果 URL DNS 校验、平台上传 fileId 不持久化客户端 URL、批量下载无人工 timer 和退款异常元数据；`node --test extensions\echoflow-image\tests` 是主要静态边界检查入口。 |
 | 类型与构建 | 当前 PowerShell 下 `pnpm --filter ...` 被仓库 `.npmrc` 的 `shell-emulator=true` 触发 `sh` 缺失阻塞；已使用同等 Node/CLI 入口完成类型检查、Web 构建、API 构建和 publish 等价链路。 |
 | 浏览器视觉 QA | 已用 Browser/IAB 覆盖桌面 1440px、移动 390px、提示词输入、生成/画布切换和返回生成；无乱码、无框架错误覆盖层、无横向滚动。 |
 | 真实模型 smoke | 仍需真实 Secret、余额和存储环境覆盖 Responses、Images、compatible Images 的成功、失败、退款和结果转存。 |

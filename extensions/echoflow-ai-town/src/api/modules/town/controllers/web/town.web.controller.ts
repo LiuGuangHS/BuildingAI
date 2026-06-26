@@ -15,13 +15,10 @@ const TOWN_RATE_LIMIT_WINDOWS: ExtensionRateLimitWindow[] = [
 
 @ExtensionWebController("ai-town")
 export class TownWebController {
-    private readonly townService: TownService;
-    private readonly rateLimitService: ExtensionRateLimitService;
-
-    constructor(townService: TownService, rateLimitService: ExtensionRateLimitService) {
-        this.townService = townService;
-        this.rateLimitService = rateLimitService;
-    }
+    constructor(
+        private readonly townService: TownService,
+        private readonly rateLimitService: ExtensionRateLimitService,
+    ) {}
 
     @Post("saves")
     createSave(@Playground() user: UserPlayground, @Body() dto: CreateTownSaveDto) {

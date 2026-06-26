@@ -131,9 +131,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             }
         }
 
-        const effectiveConfig = await this.modelConfigService.findEnabledByModel(dto.modelId);
+        const effectiveConfig = await this.modelConfigService.findEnabledById(dto.modelId);
         const runtime = await this.modelConfigService.resolveRuntimeEndpoint(effectiveConfig);
-        const normalizedRequest = await this.normalizeGenerationRequest(dto, effectiveConfig);
+        const normalizedRequest = await this.normalizeGenerationRequest(dto, effectiveConfig, userId);
         const normalizedDto = {
             ...dto,
             referenceImageUrl: normalizedRequest.referenceImageUrl,
@@ -152,7 +152,14 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         const usage = await this.getUserPolicyUsage(userId);
         const modelConfigId = effectiveConfig.id;
         const policy = await this.policyService.validateGeneration(modelConfigId, normalizedDto, usage.activeCount, usage.todayCount);
-        void policy;
+        await this.assertUploadFilesWithinLimit(
+            [
+                ...normalizedRequest.sourceImages.map((source, index) => ({ fileId: source.fileId, label: `参考图 ${index + 1}` })),
+                normalizedRequest.hasMaskImage ? { fileId: dto.maskImageFileId, label: "遮罩图" } : undefined,
+            ],
+            userId,
+            policy.maxReferenceImageSizeMb,
+        );
 
         const billingAmount = await this.billingRuleService.calculateAmount({
             modelConfigId,
@@ -178,7 +185,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         const record = this.generationRepository.create({
             userId,
             requestKey: dto.requestKey,
-            modelConfigId,
             mode: normalizedRequest.mode,
             status: ImageGenerationStatus.PENDING,
             billingStatus: ImageGenerationBillingStatus.PENDING,
@@ -186,7 +192,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             negativePrompt: dto.negativePrompt ? this.sanitizeText(dto.negativePrompt, 2000) : undefined,
             referenceImageUrl: normalizedRequest.referenceImageUrl,
             referenceImageFileId: normalizedRequest.primarySourceImage?.fileId,
-            modelId: effectiveConfig.model,
+            modelId: effectiveConfig.id,
             modelName: effectiveConfig.displayName,
             provider: effectiveConfig.provider,
             baseURL: baseURLSummary,
@@ -305,9 +311,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             return this.findById(id);
         }
 
-        const modelConfig = await this.modelConfigService.findEnabledByModel(saved.modelId);
+        const modelConfig = await this.modelConfigService.findEnabledById(saved.modelId);
         const runtime = await this.modelConfigService.resolveRuntimeEndpoint(modelConfig);
-        const modelConfigId = modelConfig.id ?? saved.modelConfigId;
+        const modelConfigId = modelConfig.id;
         const policy = await this.policyService.resolvePolicy(modelConfigId);
         const billingRule = await this.billingRuleService.resolveRule(modelConfigId);
 
@@ -464,7 +470,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         saved.failureCategory = this.classifyFailure(error);
         saved.completedAt = new Date();
 
-        const billingRule = await this.billingRuleService.resolveRule(saved.modelConfigId);
+        const billingRule = await this.billingRuleService.resolveRule(saved.modelId);
         if (billingRule.refundOnFailure !== false) {
             try {
                 await this.refundGenerationBilling(saved, `Refund for crashed generation ${saved.id}`);
@@ -515,23 +521,27 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             return;
         }
         const succeeded = record.status === ImageGenerationStatus.SUCCEEDED;
-        await this.notificationService.notifyUser({
-            userId: record.userId,
-            sceneCode: succeeded
-                ? `${EXTENSION_ID}.generation.succeeded`
-                : `${EXTENSION_ID}.generation.failed`,
-            level: succeeded ? "success" : "error",
-            linkUrl: `/extension/${EXTENSION_ID}/`,
-            sourceType: "generation",
-            sourceId: record.id,
-            data: {
-                taskName: record.modelName || record.modelId || "图片任务",
-                modelName: record.modelName || record.modelId,
-                reason: record.errorMessage || "请稍后重试或联系管理员",
-                billingStatus: record.billingStatus,
-                completedAt: record.completedAt?.toISOString(),
-            },
-        });
+        try {
+            await this.notificationService.notifyUser({
+                userId: record.userId,
+                sceneCode: succeeded
+                    ? `${EXTENSION_ID}.generation.succeeded`
+                    : `${EXTENSION_ID}.generation.failed`,
+                level: succeeded ? "success" : "error",
+                linkUrl: `/extension/${EXTENSION_ID}/`,
+                sourceType: "generation",
+                sourceId: record.id,
+                data: {
+                    taskName: record.modelName || record.modelId || "图片任务",
+                    modelName: record.modelName || record.modelId,
+                    reason: record.errorMessage || "请稍后重试或联系管理员",
+                    billingStatus: record.billingStatus,
+                    completedAt: record.completedAt?.toISOString(),
+                },
+            });
+        } catch (error) {
+            this.logger.warn(`Notify image generation ${record.id} ${record.status} failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     async list(query: QueryGenerationDto, userId: string) {
@@ -539,7 +549,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             userId,
             prompt: query.keyword ? Like(`%${query.keyword}%`) : undefined,
             status: query.status,
-            modelConfigId: query.modelId,
+            modelId: query.modelId,
             mode: query.mode,
         });
 
@@ -561,7 +571,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         const where = buildDefinedWhere<FindOptionsWhere<ImageGeneration>>({
             prompt: query.keyword ? Like(`%${query.keyword}%`) : undefined,
             status: query.status,
-            modelConfigId: query.modelId,
+            modelId: query.modelId,
             mode: query.mode,
         });
 
@@ -628,7 +638,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     }
 
     private async retryFromSource(source: ImageGeneration, userId: string) {
-        await this.modelConfigService.findEnabledByModel(source.modelId);
+        await this.modelConfigService.findEnabledById(source.modelId);
         const hasReferenceImage = Boolean(
             source.sourceImages?.length || source.referenceImageUrl || source.referenceImageFileId,
         );
@@ -642,7 +652,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
                 sourceImages: source.sourceImages,
                 maskImageUrl: source.maskImage?.url,
                 maskImageFileId: source.maskImage?.fileId,
-                modelId: source.modelConfigId || source.modelId,
+                modelId: source.modelId,
                 size: source.size,
                 n: source.n,
                 quality: source.quality,
@@ -668,6 +678,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             rawResponse: _rawResponse,
             rawEvents: _rawEvents,
             baseURL: _baseURL,
+            provider: _provider,
             deletedAt: _deletedAt,
             ...publicRecord
         } = recordWithSoftDelete;
@@ -685,35 +696,33 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     }
 
     async enhancePrompt(dto: PromptEnhanceDto) {
-        if (dto.modelId) {
-            try {
-                const result = await this.aiModelService.generateText(dto.modelId, {
-                    system: [
-                        "You are a professional AI image prompt director.",
-                        "Rewrite the user's idea into a concise, production-ready image generation prompt.",
-                        "Return only the optimized prompt, no markdown, no JSON, no explanation.",
-                        "Prefer clear English visual language even when the user input is Chinese.",
-                        "Include subject, scene, composition, lighting, color, mood, camera angle, and material detail.",
-                    ].join("\n"),
-                    prompt: [
-                        `Original prompt: ${this.sanitizeText(dto.prompt, 4000)}`,
-                        dto.style ? `Style: ${dto.style}` : "",
-                        "Optimized image prompt:",
-                    ].filter(Boolean).join("\n"),
-                    temperature: 0.7,
-                });
-                return {
-                    prompt: this.normalizeOptimizedPrompt(result.text, dto.prompt),
-                    source: "ai",
-                };
-            } catch (error) {
-                this.logger.warn(`AI prompt enhancement fallback: ${error instanceof Error ? error.message : String(error)}`);
-            }
+        if (!dto.modelId) {
+            throw HttpErrorFactory.badRequest("请选择绘画模型后再润色提示词");
         }
-
+        const modelConfig = await this.modelConfigService.findEnabledById(dto.modelId);
+        const promptEnhancerModelId = modelConfig.promptEnhancerModelId;
+        if (!promptEnhancerModelId) {
+            throw HttpErrorFactory.badRequest("提示词润色模型未配置，请联系管理员");
+        }
+        await this.modelConfigService.assertPromptEnhancerModelUsable(promptEnhancerModelId);
+        const result = await this.aiModelService.generateText(promptEnhancerModelId, {
+            system: [
+                "You are a professional AI image prompt director.",
+                "Rewrite the user's idea into a concise, production-ready image generation prompt.",
+                "Return only the optimized prompt, no markdown, no JSON, no explanation.",
+                "Prefer clear English visual language even when the user input is Chinese.",
+                "Include subject, scene, composition, lighting, color, mood, camera angle, and material detail.",
+            ].join("\n"),
+            prompt: [
+                `Original prompt: ${this.sanitizeText(dto.prompt, 4000)}`,
+                dto.style ? `Style: ${dto.style}` : "",
+                "Optimized image prompt:",
+            ].filter(Boolean).join("\n"),
+            temperature: 0.7,
+        });
         return {
-            prompt: this.buildLocalEnhancedPrompt(dto.prompt, dto.style),
-            source: "local",
+            prompt: this.normalizeOptimizedPrompt(result.text),
+            source: "ai",
         };
     }
 
@@ -872,14 +881,12 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         return `${record.prompt}\n\nAvoid: ${record.negativePrompt.trim()}`;
     }
 
-    private buildLocalEnhancedPrompt(prompt: string, style?: string): string {
-        const value = this.sanitizeText(prompt.trim(), 3800);
-        const styleHint = style === "natural" ? "自然色彩，真实光影" : style === "vivid" ? "鲜明色彩，强视觉冲击" : "风格统一";
-        return `${value}，${styleHint}，主体明确，构图完整，层次丰富，光影细腻，高细节，画面干净，背景协调`;
-    }
-
-    private normalizeOptimizedPrompt(value: string, fallback: string): string {
-        return this.sanitizeText(value.trim().replace(/^["'`]+|["'`]+$/g, ""), 4000) || this.buildLocalEnhancedPrompt(fallback);
+    private normalizeOptimizedPrompt(value: string): string {
+        const prompt = this.sanitizeText(value.trim().replace(/^["'`]+|["'`]+$/g, ""), 4000);
+        if (!prompt) {
+            throw HttpErrorFactory.badRequest("提示词润色模型未返回有效结果");
+        }
+        return prompt;
     }
 
     private async resolveReferenceImages(record: ImageGeneration, maxReferenceImageSizeMb: number) {
@@ -949,11 +956,18 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
     }
 
-    private async normalizeGenerationRequest(dto: CreateGenerationDto, modelConfig: Pick<ImageModelConfig, "capabilities" | "defaultParams" | "requestContract">) {
-        const sourceImages = await this.normalizeSourceImages(dto);
+    private async normalizeGenerationRequest(
+        dto: CreateGenerationDto,
+        modelConfig: Pick<ImageModelConfig, "capabilities" | "defaultParams" | "requestContract">,
+        userId: string,
+    ) {
+        const sourceImages = await this.normalizeSourceImages(dto, userId);
         const primarySourceImage = sourceImages[0];
         const referenceImageUrl = primarySourceImage?.url;
         const maskImageUrl = await this.normalizeReferenceImageUrl(dto.maskImageUrl, Boolean(dto.maskImageFileId));
+        if (dto.maskImageFileId) {
+            await this.assertUploadFileUsable(dto.maskImageFileId, userId, "遮罩图");
+        }
         const hasReferenceImage = sourceImages.length > 0;
         const hasMaskImage = Boolean(maskImageUrl || dto.maskImageFileId);
         const mode =
@@ -1230,7 +1244,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
     }
 
-    private async normalizeSourceImages(dto: CreateGenerationDto): Promise<ImageSourceRecord[]> {
+    private async normalizeSourceImages(dto: CreateGenerationDto, userId: string): Promise<ImageSourceRecord[]> {
         const images = [
             ...(dto.sourceImages ?? []),
             ...(dto.referenceImageUrl || dto.referenceImageFileId
@@ -1242,6 +1256,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
         for (const item of images) {
             const fileId = item.fileId;
+            if (fileId) {
+                await this.assertUploadFileUsable(fileId, userId, `参考图 ${normalized.length + 1}`);
+            }
             const url = fileId ? undefined : await this.normalizeReferenceImageUrl(item.url);
             const key = fileId || url;
             if (!key || seen.has(key)) continue;
@@ -1254,6 +1271,31 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
 
         return normalized;
+    }
+
+    private async assertUploadFileUsable(fileId: string, userId: string, label: string) {
+        const file = await this.fileUploadService.findOneById(fileId);
+        this.assertPluginUploadOwnedByUser(file, userId, label);
+        this.normalizeReferenceImageMimeType(file?.mimeType, file?.originalName);
+    }
+
+    private async assertUploadFilesWithinLimit(
+        sources: Array<{ fileId?: string; label: string } | undefined>,
+        userId: string,
+        maxReferenceImageSizeMb: number,
+    ) {
+        const seen = new Set<string>();
+        const maxBytes = maxReferenceImageSizeMb * 1024 * 1024;
+
+        for (const source of sources) {
+            if (!source?.fileId || seen.has(source.fileId)) continue;
+            seen.add(source.fileId);
+            const file = await this.fileUploadService.findOneById(source.fileId);
+            this.assertPluginUploadOwnedByUser(file, userId, source.label);
+            if (Number(file?.size ?? 0) > maxBytes) {
+                throw HttpErrorFactory.badRequest(`${source.label}不能超过 ${maxReferenceImageSizeMb}MB`);
+            }
+        }
     }
 
     private normalizeGeneratedImageMimeType(raw?: string): string {
