@@ -14,7 +14,7 @@
                 }
             },
             "isLocal": true,
-            "enabled": false,
+            "enabled": true,
             "installedAt": "2026-06-12T08:09:37.480Z"
         },
         "echoflow-image": {
@@ -31,7 +31,7 @@
                 }
             },
             "isLocal": true,
-            "enabled": false,
+            "enabled": true,
             "installedAt": "2026-06-12T08:09:37.488Z"
         },
         "simple-blog": {
@@ -47,7 +47,7 @@
                 }
             },
             "isLocal": true,
-            "enabled": false,
+            "enabled": true,
             "installedAt": "2026-06-12T08:09:37.497Z"
         },
         "echoflow-contract-generation": {
@@ -64,7 +64,7 @@
                 }
             },
             "isLocal": true,
-            "enabled": false,
+            "enabled": true,
             "installedAt": "2026-06-14T00:00:00.000Z"
         },
         "echoflow-astrology-fortune": {
@@ -81,7 +81,7 @@
                 }
             },
             "isLocal": true,
-            "enabled": false,
+            "enabled": true,
             "installedAt": "2026-06-14T00:00:00.000Z"
         },
         "echoflow-ai-town": {
@@ -98,7 +98,7 @@
                 }
             },
             "isLocal": true,
-            "enabled": false,
+            "enabled": true,
             "installedAt": "2026-06-14T00:00:00.000Z"
         }
     },
