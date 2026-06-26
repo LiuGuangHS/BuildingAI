@@ -1,7 +1,7 @@
 {
     "name": "buildingai-monorepo",
     "title": "BuildingAI",
-    "version": "26.1.1+echoflow.1",
+    "version": "26.1.2-rc.2",
     "description": "BuildingAI Monorepo",
     "author": {
         "name": "BuildingAI Teams",
@@ -191,36 +191,6 @@
         "body-parser": "2.2.0"
     },
     "packageManager": "pnpm@10.20.0",
-    "pnpm": {
-        "overrides": {
-            "@nestjs/common": "catalog:api",
-            "@nestjs/core": "catalog:api",
-            "@nestjs/platform-express": "catalog:api",
-            "cron": "catalog:api",
-            "vite": "8.0.0",
-            "buildingai": "link:packages/cli",
-            "glob": "^11.0.3",
-            "source-map": "^0.7.4",
-            "superagent": "^10.2.3",
-            "zod": "^4.3.6"
-        },
-        "peerDependencyRules": {
-            "allowedVersions": {
-                "magicast": "0.5.1"
-            }
-        },
-        "onlyBuiltDependencies": [
-            "@nestjs/core",
-            "@parcel/watcher",
-            "@swc/core",
-            "@tailwindcss/oxide",
-            "esbuild",
-            "msgpackr-extract",
-            "msw",
-            "unrs-resolver",
-            "vue-demi"
-        ]
-    },
     "engines": {
         "node": ">=22.20.x <23"
     }

@@ -45,15 +45,20 @@ catalogs:
     pg: ^8.16.3
     typeorm: 0.3.27
     typeorm-naming-strategies: ^4.1.0
+    zod: ^4.3.6
   dev:
     '@playwright/test': ^1.61.0
     '@tsconfig/node22': ^22.0.2
     '@types/node': ^24.12.0
+    concurrently: ^9.2.1
+    cross-env: ^10.1.0
     eslint: ^9.39.4
     eslint-plugin-format: ^1.5.0
     eslint-plugin-vue: ^10.8.0
     prettier: ^3.8.1
     prettier-plugin-tailwindcss: ^0.6.14
+    rimraf: ^6.1.3
+    tsup: ^8.5.1
     typescript: ^5.9.3
     typescript-eslint: ^8.57.0
     vite: ^7.1.6
@@ -99,6 +104,7 @@ catalogs:
     tailwindcss: ^4.2.1
     tailwindcss-animate: ^1.0.7
     tiptap-markdown: ^0.8.10
+    vite: ^7.1.6
     vite-tsconfig-paths: ^5.1.4
     vue: ^3.5.30
     vue-dompurify-html: ^5.3.0
@@ -108,6 +114,24 @@ catalogs:
     vuedraggable: ^4.1.0
     yup: ^1.7.1
 
+overrides:
+  '@nestjs/common': catalog:api
+  '@nestjs/core': catalog:api
+  '@nestjs/platform-express': catalog:api
+  cron: catalog:api
+  # Vite 8 强制版本：覆盖 catalog:web/dev 的 ^7.1.6，主系统前端构建链路依赖 Vite 8 的 Rolldown 构建与 @rolldown/plugin-babel；
+  # 若 Vite 8 出现兼容性问题需回退，同步更新 catalogs.dev.vite 与 catalogs.web.vite 版本并验证主系统 + 全部插件构建。
+  vite: 8.0.0
+  buildingai: link:packages/cli
+  glob: ^11.0.3
+  source-map: ^0.7.4
+  superagent: ^10.2.3
+  zod: ^4.3.6
+
+peerDependencyRules:
+  allowedVersions:
+    magicast: 0.5.1
+
 onlyBuiltDependencies:
   - '@nestjs/core'
   - '@parcel/watcher'
@@ -115,5 +139,6 @@ onlyBuiltDependencies:
   - '@tailwindcss/oxide'
   - esbuild
   - msgpackr-extract
+  - msw
   - unrs-resolver
   - vue-demi
