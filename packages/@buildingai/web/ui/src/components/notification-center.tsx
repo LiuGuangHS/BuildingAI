@@ -105,13 +105,15 @@ export function NotificationCenter({
   const { websiteConfig } = useConfigStore((state) => state.config);
   const [open, setOpen] = useState(false);
   const siteName = websiteConfig?.webinfo?.name || "清云AI";
+  const isLoggedIn = isLogin();
 
   const unreadCountQuery = useNotificationUnreadCountQuery({
+    enabled: isLoggedIn,
     refetchInterval: 15_000,
   });
   const notificationsQuery = useNotificationsQuery(
     { page: 1, pageSize: 8, readStatus: "all" },
-    { enabled: open },
+    { enabled: isLoggedIn && open },
   );
   const markReadMutation = useMarkNotificationReadMutation();
   const markAllReadMutation = useMarkAllNotificationsReadMutation({
@@ -146,7 +148,7 @@ export function NotificationCenter({
     return () => window.removeEventListener("focus", handleFocus);
   }, [queryClient]);
 
-  if (!isLogin()) return null;
+  if (!isLoggedIn) return null;
 
   const unreadCount = unreadCountQuery.data?.count ?? 0;
   const notifications = notificationsQuery.data?.items ?? [];
@@ -205,7 +207,7 @@ export function NotificationCenter({
         align="end"
         side={sidebar ? "right" : "bottom"}
         sideOffset={sidebar ? 12 : placement === "inline" ? 10 : 6}
-        className="pointer-events-auto flex max-h-[min(640px,calc(100vh-96px))] w-[calc(100vw-24px)] max-w-[380px] flex-col gap-0 overflow-hidden p-0"
+        className="pointer-events-auto flex max-h-[calc(100vh-6rem)] w-[calc(100vw-24px)] max-w-[380px] flex-col gap-0 overflow-hidden p-0 md:max-h-[40rem]"
       >
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div>
@@ -226,7 +228,7 @@ export function NotificationCenter({
             全部已读
           </Button>
         </div>
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea className="h-[min(28rem,calc(100vh-12rem))]">
           <div className="p-2">
             {notificationsQuery.isLoading ? (
               <div className="space-y-2 p-2">

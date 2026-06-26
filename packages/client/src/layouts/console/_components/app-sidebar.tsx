@@ -6,7 +6,7 @@ import {
   SidebarFooter,
   SidebarHeader,
 } from "@buildingai/ui/components/ui/sidebar";
-import { Book, type LucideIcon, Send } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import * as React from "react";
 
 import { ConsoleLogo } from "./console-logo";

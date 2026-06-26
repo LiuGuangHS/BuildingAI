@@ -29,28 +29,20 @@ export function ConsoleLogo() {
           asChild
         >
           <Link to="/" aria-label={siteName}>
-            <>
-              {websiteConfig?.webinfo.logo ? (
-                <Avatar className="size-8 shrink-0 rounded-md after:hidden">
-                  <AvatarImage
-                    className="rounded-md"
-                    src={websiteConfig?.webinfo.logo}
-                    alt={siteName}
-                  />
-                  <AvatarFallback className="rounded-md">
-                    {siteName.slice(0, 1).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-              ) : (
-                <img className="size-8 shrink-0 rounded-md object-contain" src="/logo.png" alt={siteName} />
-              )}
-              <div className="flex min-w-0 flex-1 flex-col justify-center text-left text-sm group-data-[collapsible=icon]:hidden">
-                <span className="truncate font-medium">{siteName}</span>
-                <span className="text-muted-foreground truncate text-xs">
-                  工作台 · v{siteVersion}
-                </span>
-              </div>
-            </>
+            {websiteConfig?.webinfo.logo ? (
+              <Avatar className="size-8 shrink-0 rounded-md after:hidden">
+                <AvatarImage className="rounded-md" src={websiteConfig.webinfo.logo} alt={siteName} />
+                <AvatarFallback className="rounded-md">
+                  {siteName.slice(0, 1).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            ) : (
+              <img className="size-8 shrink-0 rounded-md object-contain" src="/logo.png" alt={siteName} />
+            )}
+            <div className="flex min-w-0 flex-1 flex-col justify-center text-left text-sm group-data-[collapsible=icon]:hidden">
+              <span className="truncate font-medium">{siteName}</span>
+              <span className="text-muted-foreground truncate text-xs">工作台 · v{siteVersion}</span>
+            </div>
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>

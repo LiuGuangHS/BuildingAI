@@ -17,10 +17,14 @@ export function DefaultLogo() {
 
   return (
     <SidebarMenu>
-      <SidebarMenuItem className="flex justify-center">
-        <SidebarMenuButton size="lg" className="justify-center" asChild>
-          <div className="group/default-logo-button relative flex items-center justify-center">
-            <div className="relative flex size-8 items-center justify-center">
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          size="lg"
+          className={cn("justify-start", state === "collapsed" && "justify-center")}
+          asChild
+        >
+          <div className="group/default-logo-button relative flex items-center gap-2">
+            <div className="relative flex size-8 shrink-0 items-center justify-center">
               <SidebarTrigger
                 className={cn("absolute inset-0 z-2 hidden opacity-0 transition-opacity md:flex", {
                   "flex md:group-hover/default-logo-button:opacity-100": state === "collapsed",
@@ -29,29 +33,30 @@ export function DefaultLogo() {
               />
               <Link
                 to="/"
+                aria-label={siteName}
                 className={cn("transition-opacity duration-200", {
-                  "relative z-1 md:group-hover/default-logo-button:opacity-0":
-                    state === "collapsed",
+                  "relative z-1 md:group-hover/default-logo-button:opacity-0": state === "collapsed",
                 })}
               >
-                <>
-                  {websiteConfig?.webinfo.logo ? (
-                    <Avatar className="size-8 shrink-0 rounded-md after:hidden">
-                      <AvatarImage
-                        className="rounded-md"
-                        src={websiteConfig?.webinfo.logo}
-                        alt={siteName}
-                      />
-                      <AvatarFallback className="rounded-md">
-                        {siteName.slice(0, 1).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  ) : (
-                    <img className="size-8 rounded-md object-contain" src="/logo.png" alt={siteName} />
-                  )}
-                </>
+                {websiteConfig?.webinfo.logo ? (
+                  <Avatar className="size-8 shrink-0 rounded-md after:hidden">
+                    <AvatarImage
+                      className="rounded-md"
+                      src={websiteConfig.webinfo.logo}
+                      alt={siteName}
+                    />
+                    <AvatarFallback className="rounded-md">
+                      {siteName.slice(0, 1).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <img className="size-8 rounded-md object-contain" src="/logo.png" alt={siteName} />
+                )}
               </Link>
             </div>
+            <Link to="/" className="min-w-0 flex-1 pr-10 group-data-[collapsible=icon]:hidden">
+              <span className="block truncate font-medium">{siteName}</span>
+            </Link>
             {state === "expanded" && (
               <SidebarTrigger className="hover:bg-accent-foreground/5 absolute top-1/2 right-2 -translate-y-1/2" />
             )}

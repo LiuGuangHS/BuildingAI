@@ -42,12 +42,12 @@ export function NavUser() {
 
   return (
     <SidebarMenu>
-      <SidebarMenuItem className="relative">
+      <SidebarMenuItem className="flex items-center gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground overflow-visible pr-20"
+              className="min-w-0 flex-1 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg after:rounded-lg">
                 {isLogin() && (
@@ -71,12 +71,9 @@ export function NavUser() {
                     : "请先登录后使用"}
                 </span>
               </div>
+              <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
-          <div className="absolute top-1/2 right-9 z-10 -translate-y-1/2 group-data-[collapsible=icon]/sidebar-wrapper:hidden">
-            <NotificationCenter placement="sidebar" />
-          </div>
-          <ChevronsUpDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 group-data-[collapsible=icon]/sidebar-wrapper:hidden" />
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
             side={isMobile ? "bottom" : "right"}
@@ -109,6 +106,9 @@ export function NavUser() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <div className="shrink-0 group-data-[collapsible=icon]/sidebar-wrapper:hidden">
+          <NotificationCenter placement="sidebar" />
+        </div>
       </SidebarMenuItem>
       <Dialog open={versionInfoOpen} onOpenChange={setVersionInfoOpen}>
         <DialogContent className="sm:max-w-xs">

@@ -97,20 +97,16 @@ export function DefaultNavUser() {
 
   return (
     <SidebarMenu>
-      <SidebarMenuItem className="relative">
+      <SidebarMenuItem className="flex items-center gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground overflow-visible pr-20"
+              className="min-w-0 flex-1 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <UserButton isLoggedIn={true} showChevron={false} userInfo={userInfo} />
+              <UserButton isLoggedIn={true} userInfo={userInfo} />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
-          <div className="absolute top-1/2 right-9 z-10 -translate-y-1/2 group-data-[collapsible=icon]/sidebar-wrapper:hidden">
-            <NotificationCenter placement="sidebar" />
-          </div>
-          <ChevronsUpDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 group-data-[collapsible=icon]/sidebar-wrapper:hidden" />
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
             side={isMobile ? "bottom" : "right"}
@@ -210,6 +206,9 @@ export function DefaultNavUser() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <div className="shrink-0 group-data-[collapsible=icon]/sidebar-wrapper:hidden">
+          <NotificationCenter placement="sidebar" />
+        </div>
         {membershipEnabled && (
           <UpgradeDialog open={upgradeDialogOpen} onOpenChange={setUpgradeDialogOpen} />
         )}
