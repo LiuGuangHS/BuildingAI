@@ -1,13 +1,10 @@
 import SplitText from "@buildingai/ui/components/effects/split-text";
 import { Button } from "@buildingai/ui/components/ui/button";
-import { useAlertDialog } from "@buildingai/ui/hooks/use-alert-dialog";
 import { cn } from "@buildingai/ui/lib/utils";
 import { ArrowRight, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const WelcomeAnimate = ({ step, setStep }: { step: number; setStep: (step: number) => void }) => {
-  const { confirm } = useAlertDialog();
-
   return (
     <div
       className={cn("flex h-full flex-col items-center justify-center gap-8", {
@@ -72,30 +69,7 @@ const WelcomeAnimate = ({ step, setStep }: { step: number; setStep: (step: numbe
           </Link>
         </Button>
         <Button
-          onClick={async () => {
-            await confirm({
-              title: "政策协议",
-              description: (
-                <span>
-                  我已认真阅读并同意{" "}
-                  <a
-                    className="text-primary hover:underline"
-                    href="https://github.com/BidingCC/BuildingAI/blob/master/PRIVACY_NOTICE.md"
-                    target="_blank"
-                  >
-                    《隐私协议》
-                  </a>
-                  和
-                  <a
-                    className="text-primary hover:underline"
-                    href="https://github.com/BidingCC/BuildingAI/blob/master/LICENSE"
-                    target="_blank"
-                  >
-                    《开源协议》
-                  </a>
-                </span>
-              ),
-            });
+          onClick={() => {
             setStep(1);
           }}
         >

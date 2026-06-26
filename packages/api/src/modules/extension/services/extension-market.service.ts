@@ -1,4 +1,3 @@
-import { AppConfig } from "@buildingai/config";
 import { ExtensionStatus } from "@buildingai/constants";
 import { DICT_GROUP_KEYS, DICT_KEYS } from "@buildingai/constants/server/dict-key.constant";
 import {
@@ -10,7 +9,6 @@ import { ExtensionDetailType, ExtensionsService, PlatformInfo } from "@buildinga
 import { DictService } from "@buildingai/dict";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { createHttpClient, HttpClientInstance } from "@buildingai/utils";
-import { getOrCreateSystemId } from "@common/utils/system-id";
 import { Injectable, Logger } from "@nestjs/common";
 import * as semver from "semver";
 
@@ -42,7 +40,6 @@ export class ExtensionMarketService {
             },
             headers: {
                 Domain: process.env.APP_DOMAIN,
-                "platform-version": AppConfig.version,
             },
         });
 
@@ -59,7 +56,6 @@ export class ExtensionMarketService {
             },
             headers: {
                 Domain: process.env.APP_DOMAIN,
-                "platform-version": AppConfig.version,
             },
         });
 
@@ -134,12 +130,7 @@ export class ExtensionMarketService {
      */
     async getApplicationDetail(identifier: string): Promise<ExtensionDetailType> {
         try {
-            const systemKey = await this.getSystemKey();
-            const response = await this.httpClient.get(`/detail/${identifier}`, {
-                headers: {
-                    "system-key": systemKey,
-                },
-            });
+            const response = await this.httpClient.get(`/detail/${identifier}`);
             return response.data;
         } catch (error) {
             throw HttpErrorFactory.badRequest(error.response?.data?.message);
@@ -173,15 +164,9 @@ export class ExtensionMarketService {
         url: string;
     }> {
         try {
-            const systemKey = await this.getSystemKey();
             const response = await this.appsMarketHttpClient.post(
                 `/upgrade/${identifier}`,
                 {},
-                {
-                    headers: {
-                        "system-key": systemKey,
-                    },
-                },
             );
             return response.data;
         } catch (error) {
@@ -245,30 +230,15 @@ export class ExtensionMarketService {
     }
 
     /**
-     * Get system key from dictionary or environment
-     * @returns System key or null
-     */
-    private async getSystemKey(): Promise<string | null> {
-        return getOrCreateSystemId(this.dictService);
-    }
-
-    /**
      * Install application by activation code
      * @param activationCode Activation code
      * @returns Installation response with extension info and download URL
      */
     async installApplicationByActivationCode(activationCode: string) {
         try {
-            const systemKey = await this.getSystemKey();
-
             const response = await this.appsMarketHttpClient.post(
                 `/install/${activationCode}`,
                 {},
-                {
-                    headers: {
-                        "system-key": systemKey,
-                    },
-                },
             );
 
             return response.data;
@@ -282,28 +252,21 @@ export class ExtensionMarketService {
      * Only returns installed extensions, checks for updates if platform secret is configured
      */
     async getMixedApplicationList() {
-        const systemKey = await this.getSystemKey();
         const installedExtensions = await this.extensionsService.findAll();
 
         // Fetch market list only for update checking (if platform secret is configured)
         const marketVersionMap = new Map<string, string>();
-        if (systemKey) {
-            try {
-                const response = await this.appsMarketHttpClient.get("/appsLists", {
-                    headers: {
-                        "system-key": systemKey,
-                    },
-                });
-                const extensionList = Array.isArray(response.data) ? response.data : [];
+        try {
+            const response = await this.appsMarketHttpClient.get("/appsLists");
+            const extensionList = Array.isArray(response.data) ? response.data : [];
 
-                // Create a map for quick lookup of market versions
-                extensionList.forEach((item: ApplicationListItem) => {
-                    marketVersionMap.set(item.key, item.newVersion);
-                });
-            } catch (error) {
-                // 静默处理更新检查失败，不影响已安装扩展列表的返回
-                this.logger.error("更新检查失败", error);
-            }
+            // Create a map for quick lookup of market versions
+            extensionList.forEach((item: ApplicationListItem) => {
+                marketVersionMap.set(item.key, item.newVersion);
+            });
+        } catch (error) {
+            // 静默处理更新检查失败，不影响已安装扩展列表的返回
+            this.logger.error("更新检查失败", error);
         }
 
         // Map installed extensions with update check and compatibility check
