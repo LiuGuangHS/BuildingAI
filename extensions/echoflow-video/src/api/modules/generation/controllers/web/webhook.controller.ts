@@ -1,14 +1,38 @@
 import { ExtensionWebController } from "@buildingai/core/decorators";
 import { Public } from "@buildingai/decorators/public.decorator";
-import { Body, Headers, HttpCode, Logger, Post } from "@nestjs/common";
+import { Body, Headers, HttpCode, HttpException, HttpStatus, Logger, Post } from "@nestjs/common";
+import { IsNotEmpty, IsObject, IsOptional, IsString } from "class-validator";
 
 import { GenerationService } from "../../services/generation.service";
 import { ProviderConfigService } from "../../services/provider-config.service";
 
-/**
- * Webhook endpoint for HappyHorse async task status callbacks.
- * Mounted at /echoflow-video/api/webhook/happyhorse
- */
+class HappyHorseWebhookDto {
+    @IsString()
+    @IsOptional()
+    task_id?: string;
+
+    @IsString()
+    @IsOptional()
+    taskId?: string;
+
+    @IsString()
+    @IsNotEmpty()
+    status?: string;
+
+    @IsString()
+    @IsOptional()
+    state?: string;
+
+    @IsObject()
+    @IsOptional()
+    output?: {
+        task_id?: string;
+        task_status?: string;
+        video_url?: string;
+        videoUrl?: string;
+    };
+}
+
 @ExtensionWebController("webhook")
 export class WebhookController {
     private readonly logger = new Logger(WebhookController.name);
@@ -22,19 +46,13 @@ export class WebhookController {
     @Post("happyhorse")
     @HttpCode(200)
     async handleWebhook(
-        @Body() body: {
-            task_id?: string;
-            taskId?: string;
-            status?: string;
-            state?: string;
-            output?: { task_id?: string; task_status?: string; video_url?: string; videoUrl?: string };
-        },
+        @Body() body: HappyHorseWebhookDto,
         @Headers("x-webhook-secret") secret?: string,
     ) {
         const verified = await this.providerConfigService.verifyHappyHorseWebhookSecret(secret);
         if (!verified) {
             this.logger.warn("Webhook received with invalid or missing signature");
-            return { received: true };
+            throw new HttpException("Invalid webhook secret", HttpStatus.UNAUTHORIZED);
         }
 
         const taskId = body.task_id ?? body.taskId ?? body.output?.task_id;
@@ -50,6 +68,7 @@ export class WebhookController {
             );
         } catch (error) {
             this.logger.error(`Webhook handler failed for task ${taskId}`, error);
+            throw new HttpException("Webhook processing failed", HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
         return { received: true };

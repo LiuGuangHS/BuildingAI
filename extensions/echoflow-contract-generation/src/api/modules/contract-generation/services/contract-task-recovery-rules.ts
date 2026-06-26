@@ -1,4 +1,5 @@
 export const CONTRACT_TASK_RECOVERY_LOCK_MS = 5 * 60 * 1000;
+export const CONTRACT_TASK_PROCESSING_LOCK_MS = 30 * 60 * 1000;
 export const CONTRACT_TASK_RECOVERABLE_JOB = {
     GENERATE: "generate_contract",
     REVIEW_UPLOAD: "review_upload",
@@ -61,5 +62,8 @@ export function canClaimContractTaskForProcessing<T extends ContractTaskRecovery
     if (!task || task.deletedAt) return false;
     if (!isContractTaskBusyStatus(task.status)) return false;
     if (task.status !== "processing") return true;
-    return !isContractTaskRecoveryLockActive(task.providerMetadata?.processingLockedAt, nowMs);
+    const lockedAtMs = typeof task.providerMetadata?.processingLockedAt === "string"
+        ? Date.parse(task.providerMetadata.processingLockedAt)
+        : 0;
+    return !(lockedAtMs && nowMs - lockedAtMs < CONTRACT_TASK_PROCESSING_LOCK_MS);
 }

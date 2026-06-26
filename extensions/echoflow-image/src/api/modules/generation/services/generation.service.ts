@@ -16,6 +16,7 @@ import {
 } from "@buildingai/extension-sdk";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Cron } from "@buildingai/core/@nestjs/schedule";
 import type { Queue } from "bullmq";
 import path from "node:path";
 import type { Readable } from "node:stream";
@@ -49,6 +50,8 @@ import {
 } from "./image-generation-recovery-rules";
 import { OpenAIImageClient } from "./openai-image-client";
 
+const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
+
 const EXTENSION_ID = "echoflow-image";
 
 @Injectable()
@@ -79,6 +82,11 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         } catch (error) {
             this.logger.error("Recover generation jobs failed", error);
         }
+    }
+
+    @Cron("*/5 * * * *")
+    async scheduledRecoverJobs() {
+        await this.recoverJobs();
     }
 
     private async registerNotificationScenes() {
@@ -271,17 +279,41 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
         let resumed = 0;
         for (const item of resumable) {
-            item.status = ImageGenerationStatus.PENDING;
-            item.progress = getResumedImageProgress(item.progress);
-            await this.generationRepository.save(item);
-            await this.enqueueGenerationJob(item.id);
-            resumed += 1;
+            const claimed = await this.claimGenerationForRecovery(item.id);
+            if (claimed) {
+                await this.enqueueGenerationJob(item.id);
+                resumed += 1;
+            }
         }
 
         return {
             resumed,
             timedOut: staleProcessing.length,
         };
+    }
+
+    private async claimGenerationForRecovery(generationId: string) {
+        return this.generationRepository.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
+            const generation = await entityManager.findOne(ImageGeneration, {
+                where: { id: generationId } as FindOptionsWhere<ImageGeneration>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!generation || generation.status !== ImageGenerationStatus.PENDING) {
+                return null;
+            }
+            const now = Date.now();
+            const resumableDate = new Date(now - IMAGE_PENDING_RESUME_AFTER_MS);
+            if (generation.updatedAt && generation.updatedAt > resumableDate) {
+                return null;
+            }
+            await entityManager.update(ImageGeneration, generation.id, {
+                status: ImageGenerationStatus.PENDING,
+                progress: getResumedImageProgress(generation.progress),
+                updatedAt: new Date(),
+            });
+            return generation;
+        });
     }
 
     async executeGenerationJob(id: string) {
@@ -311,7 +343,15 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             return this.findById(id);
         }
 
-        const modelConfig = await this.modelConfigService.findEnabledById(saved.modelId);
+        if (!saved.modelId) {
+            saved.status = ImageGenerationStatus.FAILED;
+            saved.errorMessage = "生成记录缺少模型配置，无法执行";
+            saved.completedAt = new Date();
+            await this.generationRepository.save(saved);
+            throw HttpErrorFactory.badRequest("生成记录缺少模型配置");
+        }
+
+        const modelConfig = await this.modelConfigService.findEnabledById(saved.modelId, true);
         const runtime = await this.modelConfigService.resolveRuntimeEndpoint(modelConfig);
         const modelConfigId = modelConfig.id;
         const policy = await this.policyService.resolvePolicy(modelConfigId);
@@ -459,6 +499,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     async markGenerationCrashed(id: string, error: unknown) {
         const saved = await this.generationRepository.findOne({
             where: { id } as FindOptionsWhere<ImageGeneration>,
+            lock: { mode: "pessimistic_write" },
         });
         if (!saved || [ImageGenerationStatus.SUCCEEDED, ImageGenerationStatus.FAILED].includes(saved.status)) {
             return;
@@ -625,7 +666,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
     async retry(id: string, userId: string) {
         const source = await this.findOwnedById(id, userId);
-        return this.retryFromSource(source, userId);
+        return this.retryFromSource(source, userId, false);
     }
 
     async retryForWeb(id: string, userId: string) {
@@ -634,11 +675,11 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
     async retryAsOwner(id: string) {
         const source = await this.findById(id);
-        return this.retryFromSource(source, source.userId);
+        return this.retryFromSource(source, source.userId, true);
     }
 
-    private async retryFromSource(source: ImageGeneration, userId: string) {
-        await this.modelConfigService.findEnabledById(source.modelId);
+    private async retryFromSource(source: ImageGeneration, userId: string, includeHidden = false) {
+        await this.modelConfigService.findEnabledById(source.modelId, includeHidden);
         const hasReferenceImage = Boolean(
             source.sourceImages?.length || source.referenceImageUrl || source.referenceImageFileId,
         );
@@ -753,6 +794,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
     private async deductGenerationBilling(record: ImageGeneration, remark: string) {
         return this.withTransaction(async (manager) => {
+            await manager.query(LOCK_TIMEOUT);
             const locked = await manager.findOne(ImageGeneration, {
                 where: { id: record.id } as FindOptionsWhere<ImageGeneration>,
                 lock: { mode: "pessimistic_write" },
@@ -790,6 +832,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
     private async refundGenerationBilling(record: ImageGeneration, remark: string) {
         await this.withTransaction(async (manager) => {
+            await manager.query(LOCK_TIMEOUT);
             const locked = await manager.findOne(ImageGeneration, {
                 where: { id: record.id } as FindOptionsWhere<ImageGeneration>,
                 lock: { mode: "pessimistic_write" },
@@ -863,12 +906,19 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
         return client.generate({
             model: modelConfig.externalModelId,
-            prompt: this.buildProviderPrompt(record),
+            prompt: record.prompt,
+            negativePrompt: record.negativePrompt,
             n: record.n,
             size: record.size,
             quality: record.quality,
             style: record.style,
             responseFormat: record.responseFormat,
+            outputFormat: record.outputFormat,
+            background: record.background,
+            outputCompression: record.outputCompression,
+            inputFidelity: record.inputFidelity,
+            moderation: record.moderation,
+            seed: record.seed,
             referenceImages,
             maskImage,
             maxReferenceImageBytes: maxReferenceImageSizeMb * 1024 * 1024,
@@ -877,8 +927,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     }
 
     private buildProviderPrompt(record: ImageGeneration): string {
-        if (!record.negativePrompt?.trim()) return record.prompt;
-        return `${record.prompt}\n\nAvoid: ${record.negativePrompt.trim()}`;
+        return record.prompt;
     }
 
     private normalizeOptimizedPrompt(value: string): string {
@@ -911,9 +960,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
         const file = await this.fileUploadService.findOneById(source.fileId);
         this.assertPluginUploadOwnedByUser(file, userId, label);
-        if (!file) {
-            throw HttpErrorFactory.badRequest(`${label}文件不存在或无权访问`);
-        }
         const mimeType = this.normalizeReferenceImageMimeType(file.mimeType, file.originalName);
         const maxBytes = maxReferenceImageSizeMb * 1024 * 1024;
 
@@ -944,7 +990,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         file: { uploaderId?: string; extensionIdentifier?: string } | null | undefined,
         userId: string,
         label: string,
-    ) {
+    ): asserts file is { uploaderId?: string; extensionIdentifier?: string; mimeType?: string; originalName?: string; size: number } {
         if (!file) {
             throw HttpErrorFactory.badRequest(`${label}文件不存在或无法读取`);
         }
@@ -1276,7 +1322,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     private async assertUploadFileUsable(fileId: string, userId: string, label: string) {
         const file = await this.fileUploadService.findOneById(fileId);
         this.assertPluginUploadOwnedByUser(file, userId, label);
-        this.normalizeReferenceImageMimeType(file?.mimeType, file?.originalName);
+        this.normalizeReferenceImageMimeType(file.mimeType, file.originalName);
     }
 
     private async assertUploadFilesWithinLimit(

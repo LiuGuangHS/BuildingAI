@@ -1,12 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiHttpClient } from "../base";
-import type { AstrologyGenerationStatus, AstrologyProfile, AstrologyProfileInput, AstrologyReport, GenerateAstrologyReportParams, PaginatedResponse, QueryAstrologyReportsParams, UpdateReportFeedbackParams } from "../types";
+import type { AstrologyGenerationStatus, AstrologyProfile, AstrologyProfileInput, AstrologyReport, AstrologyReportStatus, GenerateAstrologyReportParams, PaginatedResponse, QueryAstrologyReportsParams, UpdateReportFeedbackParams } from "../types";
 
 const GENERATION_STATUS_QUERY_KEY = ["echoflow-astrology-fortune", "generation-status"] as const;
 const PROFILE_QUERY_KEY = ["echoflow-astrology-fortune", "profiles"] as const;
 const REPORT_QUERY_KEY = ["echoflow-astrology-fortune", "reports"] as const;
 const quietQueryOptions = { retry: false, staleTime: 30_000 } as const;
+
+const ASTROLOGY_BUSY_STATUSES: AstrologyReportStatus[] = ["pending", "processing"];
+
+function isAstrologyBusyStatus(status: AstrologyReportStatus) {
+    return ASTROLOGY_BUSY_STATUSES.includes(status);
+}
 
 export function getAstrologyGenerationStatus() {
     return apiHttpClient.get<AstrologyGenerationStatus>("/astrology-fortune/generation-status", { silent: true });
@@ -34,6 +40,10 @@ export function generateAstrologyReport(params: GenerateAstrologyReportParams) {
 
 export function listAstrologyReports(params?: QueryAstrologyReportsParams) {
     return apiHttpClient.get<PaginatedResponse<AstrologyReport>>("/astrology-fortune/reports", { query: params, silent: true });
+}
+
+export function getAstrologyReportDetail(reportId: string) {
+    return apiHttpClient.get<AstrologyReport>(`/astrology-fortune/reports/${reportId}`, { silent: true });
 }
 
 export function updateReportFavorite(reportId: string, isFavorite: boolean) {
@@ -90,7 +100,20 @@ export function useAstrologyReportsQuery(params?: QueryAstrologyReportsParams) {
         queryKey: [...REPORT_QUERY_KEY, params],
         queryFn: () => listAstrologyReports(params),
         ...quietQueryOptions,
-        refetchInterval: (query) => (query.state.data?.items.some((report) => report.status === "pending" || report.status === "processing") ? 3000 : false),
+        refetchInterval: (query) => (query.state.data?.items.some((report) => isAstrologyBusyStatus(report.status)) ? 3000 : false),
+    });
+}
+
+export function useAstrologyReportDetailQuery(reportId?: string) {
+    return useQuery({
+        queryKey: [...REPORT_QUERY_KEY, "detail", reportId],
+        queryFn: () => getAstrologyReportDetail(reportId!),
+        enabled: Boolean(reportId),
+        ...quietQueryOptions,
+        refetchInterval: (query) => {
+            const report = query.state.data;
+            return report && isAstrologyBusyStatus(report.status) ? 3000 : false;
+        },
     });
 }
 

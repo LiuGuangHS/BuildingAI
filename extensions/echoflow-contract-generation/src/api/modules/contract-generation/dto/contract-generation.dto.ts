@@ -1,7 +1,28 @@
 import { Transform, Type } from "class-transformer";
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from "class-validator";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from "class-validator";
 
-import { ContractGenerationStatus, type ContractSection } from "../../../db/entities";
+import { ContractGenerationStatus } from "../../../db/entities";
+
+export class ContractSectionDto {
+    @IsString()
+    @IsOptional()
+    id?: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(500)
+    title: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(50000)
+    content: string;
+
+    @IsString()
+    @IsOptional()
+    @IsIn(["normal", "important", "critical"])
+    importance?: "normal" | "important" | "critical";
+}
 
 export class GenerateContractDto {
     @IsString()
@@ -89,6 +110,36 @@ export class UpdateContractConfigDto {
     modelId: string;
 }
 
+export class ContractTemplateFieldDto {
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(50)
+    key: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(50)
+    label: string;
+
+    @IsString()
+    @IsIn(["text", "textarea", "number", "date", "select"])
+    type: "text" | "textarea" | "number" | "date" | "select";
+
+    @IsBoolean()
+    @IsOptional()
+    required?: boolean;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(200)
+    placeholder?: string;
+
+    @IsArray()
+    @IsString({ each: true })
+    @IsOptional()
+    options?: string[];
+}
+
 export class UpsertContractTemplateDto {
     @IsString()
     @IsNotEmpty()
@@ -112,14 +163,9 @@ export class UpsertContractTemplateDto {
 
     @IsArray()
     @ArrayMaxSize(40)
-    fields: Array<{
-        key: string;
-        label: string;
-        type: "text" | "textarea" | "number" | "date" | "select";
-        required?: boolean;
-        placeholder?: string;
-        options?: string[];
-    }>;
+    @ValidateNested({ each: true })
+    @Type(() => ContractTemplateFieldDto)
+    fields: ContractTemplateFieldDto[];
 
     @IsArray()
     @ArrayMaxSize(40)
@@ -154,7 +200,9 @@ export class UpdateContractContentDto {
     @IsArray()
     @ArrayMinSize(1)
     @ArrayMaxSize(80)
-    sections: ContractSection[];
+    @ValidateNested({ each: true })
+    @Type(() => ContractSectionDto)
+    sections: ContractSectionDto[];
 }
 
 export class UpdateRiskActionDto {
@@ -170,7 +218,9 @@ export class UpdateRiskActionDto {
     @IsArray()
     @IsOptional()
     @ArrayMaxSize(80)
-    sections?: ContractSection[];
+    @ValidateNested({ each: true })
+    @Type(() => ContractSectionDto)
+    sections?: ContractSectionDto[];
 }
 
 export class RewriteContractClauseDto {

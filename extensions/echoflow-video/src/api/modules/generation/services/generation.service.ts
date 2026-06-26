@@ -14,6 +14,7 @@ import { Between, In, LessThanOrEqual, Like, MoreThanOrEqual, Repository } from 
 import { HttpErrorFactory } from "@buildingai/errors";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Cron } from "@buildingai/core/@nestjs/schedule";
 import type { Queue } from "bullmq";
 
 import {
@@ -39,6 +40,8 @@ import { TemplateService } from "./template.service";
 import { VideoGatewayClient } from "./video-gateway-client";
 import { VIDEO_POLL_JOB, VIDEO_POLL_QUEUE } from "./video-poll-queue.constants";
 
+const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
+
 const VIDEO_POLL_DELAY_MS = 15_000;
 const VIDEO_POLL_JOB_PREFIX = "video-poll";
 const EXTENSION_ID = "echoflow-video";
@@ -63,6 +66,8 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         super(generationRepository);
     }
 
+    private scanningStale = false;
+
     async onModuleInit() {
         await this.notificationService.registerScenes(EXTENSION_ID, [
             {
@@ -86,6 +91,60 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
                 linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
             },
         ]);
+        await this.recoverProcessingTasks();
+        await this.scanStaleProcessing();
+    }
+
+    private async recoverProcessingTasks() {
+        const recoveryCutoff = new Date(Date.now() - 5 * 60_000);
+        const records = await this.generationRepository.find({
+            where: {
+                status: VideoGenerationStatus.PROCESSING,
+                updatedAt: LessThanOrEqual(recoveryCutoff),
+            } as FindOptionsWhere<VideoGeneration>,
+            take: 50,
+        });
+        let recovered = 0;
+        for (const record of records) {
+            if (!record.taskId) continue;
+            try {
+                const claimed = await this.claimPollForRecovery(record.id, recoveryCutoff);
+                if (claimed) {
+                    await this.schedulePollJob(record.id, 0);
+                    recovered += 1;
+                }
+            } catch (error) {
+                this.logger.warn(`Failed to recover poll job for ${record.id}`, error);
+            }
+        }
+        if (recovered) {
+            this.logger.warn(`Recovered ${recovered} lost poll job(s) on startup`);
+        }
+    }
+
+    private async claimPollForRecovery(generationId: string, cutoff: Date) {
+        return this.generationRepository.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
+            const generation = await entityManager.findOne(VideoGeneration, {
+                where: { id: generationId } as FindOptionsWhere<VideoGeneration>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!generation || generation.status !== VideoGenerationStatus.PROCESSING || !generation.taskId) {
+                return null;
+            }
+            if (generation.updatedAt && generation.updatedAt > cutoff) {
+                return null;
+            }
+            await entityManager.update(VideoGeneration, generation.id, {
+                updatedAt: new Date(),
+            });
+            return generation;
+        });
+    }
+
+    @Cron("*/5 * * * *")
+    async scheduledStaleScan() {
+        await this.scanStaleProcessing();
     }
 
     /** Return admin-enabled model options for web/console selectors. */
@@ -159,7 +218,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             modelConfigId: modelConfig.id,
             provider: modelConfig.provider,
             modelName: modelConfig.displayName,
-            status: VideoGenerationStatus.PROCESSING,
+            status: VideoGenerationStatus.PENDING,
             billingStatus: VideoGenerationBillingStatus.PENDING,
             prompt,
             originalPrompt: dto.originalPrompt ? this.sanitizeText(dto.originalPrompt, 4000) : undefined,
@@ -178,11 +237,11 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
                 minimumCost: billingRule.minimumCost,
                 refundOnFailure: billingRule.refundOnFailure,
             }),
-            progress: 5,
+            progress: 0,
             startedAt: new Date(),
             statusEvents: [
                 this.makeStatusEvent(
-                    VideoGenerationStatus.PROCESSING,
+                    VideoGenerationStatus.PENDING,
                     "任务已创建，等待提交到视频接口",
                     "web",
                 ),
@@ -209,6 +268,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
 
         try {
             saved = await this.withTransaction(async (manager) => {
+                await manager.query(LOCK_TIMEOUT);
                 const locked = await manager.findOne(VideoGeneration, {
                     where: { id: saved.id } as FindOptionsWhere<VideoGeneration>,
                     lock: { mode: "pessimistic_write" },
@@ -251,6 +311,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             });
 
             saved.taskId = result.taskId;
+            saved.status = VideoGenerationStatus.PROCESSING;
             saved.rawRequest = this.compactRawPayload(result.rawRequest);
             saved.rawResponse = this.compactRawPayload(result.rawResponse);
             saved.progress = 20;
@@ -551,6 +612,9 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
     }
 
     async scanStaleProcessing(maxAgeMinutes = 30) {
+        if (this.scanningStale) return;
+        this.scanningStale = true;
+        try {
         const cutoff = new Date(Date.now() - maxAgeMinutes * 60_000);
         const records = await this.generationRepository.find({
             where: {
@@ -572,6 +636,9 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             updated.push(saved);
         }
         return { total: records.length, updated };
+        } finally {
+            this.scanningStale = false;
+        }
     }
 
     async cancelRecord(id: string, message = "管理员取消任务") {
@@ -948,6 +1015,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
 
         try {
             await this.withTransaction(async (manager) => {
+                await manager.query(LOCK_TIMEOUT);
                 const locked = await manager.findOne(VideoGeneration, {
                     where: { id: record.id } as FindOptionsWhere<VideoGeneration>,
                     lock: { mode: "pessimistic_write" },

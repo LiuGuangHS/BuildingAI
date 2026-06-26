@@ -42,6 +42,8 @@ import {
     resolveContractTaskJobName,
 } from "./contract-task-recovery-rules";
 
+const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
+
 const EXTENSION_ID = "echoflow-contract-generation";
 const DEFAULT_PAGE_SIZE = 20;
 const UPLOAD_REVIEW_MAX_BYTES = 20 * 1024 * 1024;
@@ -385,6 +387,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             if (sections.length === 0) throw new Error("AI contract generation returned no sections");
 
             const savedTask = await this.taskRepo.manager.transaction(async (entityManager) => {
+                await entityManager.query(LOCK_TIMEOUT);
                 const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
                 if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
                 if (!isContractTaskBusyStatus(currentTask.status)) return currentTask;
@@ -434,23 +437,19 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             await this.reserveTaskCreditsOnce(task, model.name);
             const content = await llmFileParser.parseAndFormat(fileUrl, { maxFileSize: UPLOAD_REVIEW_MAX_BYTES, timeout: UPLOAD_REVIEW_PARSE_TIMEOUT_MS });
             const result = await this.publicAiModelService.generateText(model.id, {
-                output: Output.object({ schema: contractSchema }),
+                output: Output.object({ schema: reviewSchema }),
                 prompt: this.buildUploadReviewPrompt(dto, content.slice(0, UPLOAD_REVIEW_MAX_CHARS)),
                 temperature: 0.12,
             });
             const output = result.output;
-            const sections = this.normalizeSections(output.sections);
-            if (sections.length === 0) throw new Error("Uploaded contract review returned no sections");
 
             const savedTask = await this.taskRepo.manager.transaction(async (entityManager) => {
+                await entityManager.query(LOCK_TIMEOUT);
                 const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
                 if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
                 if (!isContractTaskBusyStatus(currentTask.status)) return currentTask;
                 await entityManager.update(ContractGenerationTask, task.id, {
                     status: ContractGenerationStatus.DRAFT,
-                    title: output.title?.trim() || task.title,
-                    summary: output.summary?.trim() || null,
-                    sections,
                     riskFindings: this.normalizeRisks(output.riskFindings),
                     legalTerms: this.normalizeTerms(output.legalTerms),
                     score: this.normalizeScore(output.score),
@@ -480,7 +479,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
                     updatedAt: LessThan(cutoff),
                 },
                 order: { updatedAt: "ASC" },
-                take: 50,
+                take: 100,
             });
             let recoveredCount = 0;
             for (const task of tasks) {
@@ -510,12 +509,17 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
                 take: 100,
             });
             const recoverableTasks = staleTasks.filter((task) => resolveContractTaskJobName(task));
+            const unrecoverableTasks = staleTasks.filter((task) => !resolveContractTaskJobName(task));
             for (const task of recoverableTasks) {
                 await this.refundTaskCreditsIfNeeded(task.id, message);
                 await this.markTaskFailedIfActive(task.id, ContractGenerationStatus.FAILED, message, "timeoutError");
             }
+            for (const task of unrecoverableTasks) {
+                await this.markTaskFailedIfActive(task.id, ContractGenerationStatus.FAILED, message, "timeoutError");
+            }
             if (recoverableTasks.length) this.logger.warn(`Marked ${recoverableTasks.length} stale contract generation task(s) as failed`);
-            return { affected: recoverableTasks.length };
+            if (unrecoverableTasks.length) this.logger.warn(`Marked ${unrecoverableTasks.length} unrecoverable stale task(s) as failed`);
+            return { affected: recoverableTasks.length + unrecoverableTasks.length };
         } catch (error) {
             if ((error as { code?: string }).code === "42P01") {
                 this.logger.warn("Contract generation task table does not exist yet, skipping stale task cleanup");
@@ -527,6 +531,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
 
     private async claimTaskForRecovery(taskId: string, cutoff: Date) {
         return this.taskRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
             const task = await entityManager.findOne(ContractGenerationTask, {
                 where: { id: taskId },
                 lock: { mode: "pessimistic_write" },
@@ -543,6 +548,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             await entityManager.update(ContractGenerationTask, task.id, {
                 status: ContractGenerationStatus.PENDING,
                 providerMetadata,
+                updatedAt: new Date(),
             });
             return {
                 ...task,
@@ -554,6 +560,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
 
     private async claimTaskForProcessing(taskId: string) {
         return this.taskRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
             const task = await entityManager.findOne(ContractGenerationTask, {
                 where: { id: taskId },
                 lock: { mode: "pessimistic_write" },
@@ -621,6 +628,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
                 temperature: 0.1,
             });
             return await this.taskRepo.manager.transaction(async (entityManager) => {
+                await entityManager.query(LOCK_TIMEOUT);
                 const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
                 if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
                 if (currentTask.status !== ContractGenerationStatus.REVIEWING) return currentTask;
@@ -672,14 +680,15 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         if (sections.length === 0) throw HttpErrorFactory.badRequest("请至少保留一条有效条款");
 
         return await this.taskRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
             const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
             if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
             await entityManager.update(ContractGenerationTask, task.id, {
                 title: dto.title?.trim() || currentTask.title,
                 summary: dto.summary?.trim() || currentTask.summary,
                 sections,
-                status: currentTask.status === ContractGenerationStatus.SUCCESS ? ContractGenerationStatus.DRAFT : currentTask.status,
-                resultUrl: currentTask.status === ContractGenerationStatus.SUCCESS ? null : currentTask.resultUrl,
+                status: [ContractGenerationStatus.SUCCESS, ContractGenerationStatus.EXPORT_FAILED].includes(currentTask.status) ? ContractGenerationStatus.DRAFT : currentTask.status,
+                resultUrl: [ContractGenerationStatus.SUCCESS, ContractGenerationStatus.EXPORT_FAILED].includes(currentTask.status) ? null : currentTask.resultUrl,
                 providerMetadata: { ...(currentTask.providerMetadata ?? {}), editedAt: new Date().toISOString(), sectionCount: sections.length },
             });
             const saved = await this.findActiveTaskForWrite(task.id, entityManager);
@@ -696,6 +705,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         const nextSections = dto.status === "accepted" && dto.sections ? this.normalizeSections(dto.sections) : task.sections;
         if (dto.status === "accepted" && dto.sections && nextSections.length === 0) throw HttpErrorFactory.badRequest("采纳风险建议后请至少保留一条有效条款");
         return await this.taskRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
             const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
             if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
             await entityManager.update(ContractGenerationTask, task.id, { riskActions: nextActions, sections: nextSections, status: ContractGenerationStatus.DRAFT, resultUrl: null, providerMetadata: { ...(currentTask.providerMetadata ?? task.providerMetadata ?? {}), riskActionUpdatedAt: new Date().toISOString() } });
@@ -717,6 +727,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         const version = await this.versionRepo.findOne({ where: { id: versionId, taskId } });
         if (!version) throw HttpErrorFactory.notFound("版本不存在");
         return await this.taskRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
             const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
             if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
             await entityManager.update(ContractGenerationTask, task.id, {
@@ -755,6 +766,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             const buffer = await buildContractDocx(task, { exportType });
             const upload = await this.fileUploadService.uploadFile(this.createMulterFile(buffer, `${task.id}.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"), request, undefined, { extensionId: EXTENSION_ID });
             await this.taskRepo.manager.transaction(async (entityManager) => {
+                await entityManager.query(LOCK_TIMEOUT);
                 const currentTask = await this.findActiveTaskForWrite(task.id, entityManager);
                 if (!currentTask) throw HttpErrorFactory.notFound("任务不存在或已删除");
                 if (currentTask.status !== ContractGenerationStatus.EXPORTING) return;
@@ -822,7 +834,10 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
 
     private async createVersion(task: ContractGenerationTask, changeType: string, changeSummary: string, entityManager?: EntityManager) {
         if (!entityManager) {
-            return this.versionRepo.manager.transaction((manager) => this.createVersion(task, changeType, changeSummary, manager));
+            return this.versionRepo.manager.transaction(async (manager) => {
+                await manager.query(LOCK_TIMEOUT);
+                return this.createVersion(task, changeType, changeSummary, manager);
+            });
         }
         const repo = entityManager.getRepository(ContractGenerationVersion);
         for (let attempt = 1; attempt <= VERSION_CREATE_MAX_ATTEMPTS; attempt += 1) {
@@ -876,6 +891,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
 
     private async claimTaskForInteractiveAction(taskId: string, status: ContractGenerationStatus.REVIEWING | ContractGenerationStatus.EXPORTING) {
         return this.taskRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
             const task = await entityManager.findOne(ContractGenerationTask, {
                 where: { id: taskId },
                 lock: { mode: "pessimistic_write" },
@@ -891,6 +907,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     private async markTaskFailedIfActive(taskId: string, status: ContractGenerationStatus, message: string, errorKey = "error") {
         let failedTask: ContractGenerationTask | null = null;
         await this.taskRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
             const task = await this.findActiveTaskForWrite(taskId, entityManager);
             if (!task) return;
             if (status === ContractGenerationStatus.FAILED && !isContractTaskBusyStatus(task.status)) return;
@@ -1047,7 +1064,10 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         const cost = Number(task.costCredits ?? 0);
         if (cost <= 0) return;
         if (!entityManager) {
-            return this.taskRepo.manager.transaction((manager) => this.reserveTaskCreditsOnce(task, modelName, manager));
+            return this.taskRepo.manager.transaction(async (manager) => {
+                await manager.query(LOCK_TIMEOUT);
+                return this.reserveTaskCreditsOnce(task, modelName, manager);
+            });
         }
         const currentTask = await entityManager.findOne(ContractGenerationTask, { where: { id: task.id }, lock: { mode: "pessimistic_write" }, withDeleted: true });
         if (!currentTask || currentTask.deletedAt) return;
@@ -1068,6 +1088,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     private async refundTaskCreditsIfNeeded(taskId: string, remark: string) {
         try {
             await this.taskRepo.manager.transaction(async (entityManager) => {
+                await entityManager.query(LOCK_TIMEOUT);
                 const task = await entityManager.findOne(ContractGenerationTask, { where: { id: taskId }, lock: { mode: "pessimistic_write" }, withDeleted: true });
                 if (!task || Number(task.costCredits ?? 0) <= 0) return;
                 const metadata = task.providerMetadata ?? {};
@@ -1281,7 +1302,7 @@ ${content}`;
         const mimeType = String(file.mimeType || "").toLowerCase().split(";")[0]?.trim();
         const extensionAllowed = UPLOAD_REVIEW_ALLOWED_EXTENSIONS.has(extension);
         const mimeAllowed = Boolean(mimeType && UPLOAD_REVIEW_ALLOWED_MIME_TYPES.has(mimeType));
-        if (!extensionAllowed && !mimeAllowed) {
+        if (!extensionAllowed || !mimeAllowed) {
             throw HttpErrorFactory.badRequest("仅支持 PDF、Word、RTF、TXT 或 Markdown 合同文件");
         }
     }

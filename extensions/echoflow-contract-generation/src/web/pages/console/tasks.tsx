@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -44,8 +45,12 @@ export default function ContractTasksConsolePage() {
     const tasks = taskPage?.items ?? [];
 
     async function handleDelete(task: AdminContractGenerationTask) {
-        await deleteMutation.mutateAsync(task.id);
-        if (selectedTaskId === task.id) setSelectedTaskId("");
+        try {
+            await deleteMutation.mutateAsync(task.id);
+            if (selectedTaskId === task.id) setSelectedTaskId("");
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "删除失败");
+        }
     }
 
     function updateKeyword(value: string) {

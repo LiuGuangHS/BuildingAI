@@ -98,6 +98,7 @@ export class VideoGatewayClient {
                 prompt: input.prompt,
                 mode: "std",
                 duration: String(input.parameters?.duration ?? 5),
+                aspect_ratio: input.parameters?.ratio,
                 sound: "off",
                 watermark_info: { enabled: Boolean(input.parameters?.watermark) },
             };

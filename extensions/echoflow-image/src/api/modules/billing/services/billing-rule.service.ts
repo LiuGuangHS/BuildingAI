@@ -60,21 +60,22 @@ export class BillingRuleService extends BaseService<ImageBillingRule> {
 
     async calculateAmount(dto: EstimateBillingDto): Promise<number> {
         const rule = await this.resolveRule(dto.modelConfigId);
-        const count = Math.max(1, Number(dto.n ?? 1));
-        const modeMultiplier =
-            dto.mode === ImageGenerationMode.IMAGE_TO_IMAGE
-                ? Number(rule.imageToImageMultiplier || 1)
-                : Number(rule.textToImageMultiplier || 1);
-        const qualityMultiplier = Number(rule.qualityMultipliers?.[dto.quality || "standard"] ?? 1);
-        const sizeMultiplier = Number(rule.sizeMultipliers?.[dto.size || "1024x1024"] ?? this.defaultSizeMultiplier(dto.size));
+        const rawCount = Number(dto.n ?? 1);
+        const count = Number.isFinite(rawCount) && rawCount > 0 ? Math.max(1, Math.floor(rawCount)) : 1;
+        const rawModeMultiplier = dto.mode === ImageGenerationMode.IMAGE_TO_IMAGE
+            ? Number(rule.imageToImageMultiplier || 1)
+            : Number(rule.textToImageMultiplier || 1);
+        const modeMultiplier = Number.isFinite(rawModeMultiplier) && rawModeMultiplier > 0 ? rawModeMultiplier : 1;
+        const rawQualityMultiplier = Number(rule.qualityMultipliers?.[dto.quality || "standard"] ?? 1);
+        const qualityMultiplier = Number.isFinite(rawQualityMultiplier) && rawQualityMultiplier > 0 ? rawQualityMultiplier : 1;
+        const rawSizeMultiplier = Number(rule.sizeMultipliers?.[dto.size || "1024x1024"] ?? this.defaultSizeMultiplier(dto.size));
+        const sizeMultiplier = Number.isFinite(rawSizeMultiplier) && rawSizeMultiplier > 0 ? rawSizeMultiplier : this.defaultSizeMultiplier(dto.size);
         const countMultiplier = rule.countMultiplierEnabled ? count : 1;
+        const rawBaseCost = Number(rule.baseCost || 1);
+        const baseCost = Number.isFinite(rawBaseCost) && rawBaseCost > 0 ? rawBaseCost : 1;
 
         return normalizePowerAmount(
-            Number(rule.baseCost || 1) *
-                modeMultiplier *
-                qualityMultiplier *
-                sizeMultiplier *
-                countMultiplier,
+            baseCost * modeMultiplier * qualityMultiplier * sizeMultiplier * countMultiplier,
         );
     }
 

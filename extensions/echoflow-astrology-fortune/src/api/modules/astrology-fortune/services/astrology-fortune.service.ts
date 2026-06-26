@@ -43,6 +43,8 @@ import {
     buildAstrologyReportSucceededNotification,
 } from "./astrology-report-notification-rules";
 
+const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
+
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_TARGET_PROFILE_KEYS = 20;
 const MAX_TARGET_PROFILE_CHARS = 2000;
@@ -252,6 +254,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
             const score = this.extractOverallScore(normalized);
 
             const savedReport = await this.reportRepo.manager.transaction(async (entityManager) => {
+                await entityManager.query(LOCK_TIMEOUT);
                 const currentReport = await this.findActiveReportForWrite(report.id, entityManager);
                 if (!currentReport) return null;
                 if (!isAstrologyReportBusyStatus(currentReport.status)) return currentReport;
@@ -432,7 +435,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
                     updatedAt: LessThan(cutoff),
                 },
                 order: { updatedAt: "ASC" },
-                take: 50,
+                take: 100,
             });
             let recoveredCount = 0;
             for (const report of reports) {
@@ -458,6 +461,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
 
     private async claimReportForRecovery(reportId: string, cutoff: Date) {
         return this.reportRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
             const report = await entityManager.findOne(AstrologyReport, { where: { id: reportId }, lock: { mode: "pessimistic_write" }, withDeleted: true });
             if (!canRecoverAstrologyReport(report, cutoff, Date.now())) return null;
             const metadata = report.providerMetadata ?? {};
@@ -470,6 +474,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
             await entityManager.update(AstrologyReport, report.id, {
                 status: AstrologyReportStatus.PENDING,
                 providerMetadata,
+                updatedAt: new Date(),
             });
             return {
                 ...report,
@@ -481,6 +486,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
 
     private async claimReportForProcessing(reportId: string) {
         return this.reportRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
             const report = await entityManager.findOne(AstrologyReport, {
                 where: { id: reportId },
                 lock: { mode: "pessimistic_write" },
@@ -686,7 +692,10 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
         const cost = Number(report.costCredits ?? 0);
         if (cost <= 0) return;
         if (!entityManager) {
-            return this.reportRepo.manager.transaction((manager) => this.reserveReportCreditsOnce(report, modelName, manager));
+            return this.reportRepo.manager.transaction(async (manager) => {
+                await manager.query(LOCK_TIMEOUT);
+                return this.reserveReportCreditsOnce(report, modelName, manager);
+            });
         }
         const currentReport = await this.findActiveReportForWrite(report.id, entityManager, true);
         if (!currentReport) return;
@@ -707,6 +716,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
     private async refundReportCreditsIfNeeded(reportId: string, remark: string) {
         try {
             await this.reportRepo.manager.transaction(async (entityManager) => {
+                await entityManager.query(LOCK_TIMEOUT);
                 const report = await entityManager.findOne(AstrologyReport, { where: { id: reportId }, lock: { mode: "pessimistic_write" }, withDeleted: true });
                 if (!canRefundAstrologyReportCredits(report)) return;
                 const metadata = report.providerMetadata ?? {};
@@ -735,6 +745,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
     private async markReportFailedIfActive(reportId: string, message: string, metadata?: Record<string, unknown>) {
         let failedReport: AstrologyReport | null = null;
         await this.reportRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
             const report = await this.findActiveReportForWrite(reportId, entityManager, true);
             if (!report || !isAstrologyReportBusyStatus(report.status)) return;
             const providerMetadata = { ...(report.providerMetadata ?? {}), error: message, ...(metadata ?? {}) };
@@ -930,9 +941,10 @@ ${questionQualityText}
     }
 
     private getZodiacSign(date: string) {
-        const [, monthText, dayText] = date.slice(0, 10).split("-");
-        const month = Number(monthText);
-        const day = Number(dayText);
+        const parsed = new Date(date);
+        if (isNaN(parsed.getTime())) return "未知";
+        const month = parsed.getMonth() + 1;
+        const day = parsed.getDate();
         const signs = ["摩羯座", "水瓶座", "双鱼座", "白羊座", "金牛座", "双子座", "巨蟹座", "狮子座", "处女座", "天秤座", "天蝎座", "射手座", "摩羯座"];
         const edgeDays = [20, 19, 21, 20, 21, 22, 23, 23, 23, 24, 23, 22];
         return day < (edgeDays[month - 1] ?? 20) ? (signs[month - 1] ?? "摩羯座") : (signs[month] ?? "摩羯座");
@@ -940,6 +952,7 @@ ${questionQualityText}
 
     private getChineseZodiac(date: string) {
         const year = Number(date.slice(0, 4));
+        if (!Number.isFinite(year) || year < 1900) return "猴";
         return CHINESE_ZODIACS[year % 12] ?? "猴";
     }
 }

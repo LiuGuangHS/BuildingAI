@@ -47,7 +47,7 @@ export class UpdateAstrologyProfileDto {
     @IsString()
     @IsOptional()
     @MaxLength(120)
-    name: string;
+    name?: string;
 
     @IsString()
     @IsOptional()
@@ -56,7 +56,7 @@ export class UpdateAstrologyProfileDto {
 
     @IsDateString()
     @IsOptional()
-    birthDate: string;
+    birthDate?: string;
 
     @IsString()
     @IsOptional()
@@ -106,6 +106,8 @@ export class GenerateAstrologyReportDto {
 
     @IsObject()
     @IsOptional()
+    @ValidateNested()
+    @Type(() => CreateAstrologyProfileDto)
     targetProfile?: Record<string, unknown>;
 
     @IsString()

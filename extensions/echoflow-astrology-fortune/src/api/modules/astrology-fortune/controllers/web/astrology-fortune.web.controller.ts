@@ -104,12 +104,14 @@ export class AstrologyFortuneWebController extends BaseController {
             modelId: _modelId,
             providerId: _providerId,
             requestPayload: _requestPayload,
-            providerMetadata,
             deletedAt: _deletedAt,
+            errorMessage,
+            providerMetadata,
             ...publicReport
         } = report;
         return {
             ...publicReport,
+            errorMessage: errorMessage ? "报告生成失败，请稍后重试" : undefined,
             providerMetadata: {
                 feedback: providerMetadata?.feedback,
                 sourceReport: providerMetadata?.sourceReport,

@@ -63,6 +63,7 @@ import {
 import {
     useAstrologyGenerationStatusQuery,
     useAstrologyProfilesQuery,
+    useAstrologyReportDetailQuery,
     useAstrologyReportsQuery,
     useCreateAstrologyProfileMutation,
     useDeleteAstrologyProfileMutation,
@@ -212,22 +213,22 @@ const viewOptions: Array<{
 ];
 
 const defaultProfile: AstrologyProfileInput = {
-    name: "我的星盘",
-    birthDate: "1996-08-18",
-    birthTime: "09:30",
-    birthPlace: "上海",
+    name: "",
+    birthDate: "",
+    birthTime: "",
+    birthPlace: "",
     gender: "",
     moonSign: "",
     risingSign: "",
 };
 
 const defaultPartner: PartnerInput = {
-    name: "TA",
-    birthDate: "1997-02-14",
+    name: "",
+    birthDate: "",
     birthTime: "",
     birthPlace: "",
     zodiacSign: "",
-    relationshipStatus: "暧昧",
+    relationshipStatus: "",
 };
 
 const HISTORY_PAGE_SIZE = 12;
@@ -246,12 +247,14 @@ export default function AstrologyFortuneHomePage() {
     const [partner, setPartner] = useState<PartnerInput>(defaultPartner);
     const [activeReport, setActiveReport] = useState<AstrologyReport | null>(null);
     const [detailReport, setDetailReport] = useState<AstrologyReport | null>(null);
+    const [pendingReportId, setPendingReportId] = useState<string | null>(null);
     const [followUpSourceReportId, setFollowUpSourceReportId] = useState<string | null>(null);
     const [historyType, setHistoryType] = useState<AstrologyReportType | "all" | "favorite">("all");
     const [historyPage, setHistoryPage] = useState(1);
 
     const profilesQuery = useAstrologyProfilesQuery();
     const generationStatus = useAstrologyGenerationStatusQuery();
+    const pendingReportQuery = useAstrologyReportDetailQuery(pendingReportId ?? undefined);
     const reportsQuery = useAstrologyReportsQuery({
         page: historyPage,
         pageSize: HISTORY_PAGE_SIZE,
@@ -326,6 +329,22 @@ export default function AstrologyFortuneHomePage() {
         if (freshReport && freshReport.updatedAt !== detailReport.updatedAt)
             setDetailReport(freshReport);
     }, [detailReport, reports]);
+
+    useEffect(() => {
+        const pendingReport = pendingReportQuery.data;
+        if (!pendingReport) return;
+        setActiveReport(pendingReport);
+        setDetailReport(pendingReport);
+        if (pendingReport.status === "success" || pendingReport.status === "failed") {
+            setPendingReportId(null);
+            reportsQuery.refetch();
+            if (pendingReport.status === "success") {
+                toast.success("报告生成完成！");
+            } else {
+                toast.error(pendingReport.errorMessage || "报告生成失败");
+            }
+        }
+    }, [pendingReportQuery.data?.id, pendingReportQuery.data?.updatedAt]);
 
     function selectIntent(intent: ReportIntent) {
         setReportType(intent.value);
@@ -411,6 +430,7 @@ export default function AstrologyFortuneHomePage() {
             setReportType(intent.value);
             setActiveReport(report);
             setDetailReport(report);
+            setPendingReportId(report.id);
             setFollowUpSourceReportId(null);
             toast.success("报告任务已提交，生成完成后会自动刷新。");
         } catch (error) {
@@ -437,6 +457,7 @@ export default function AstrologyFortuneHomePage() {
             });
             setActiveReport(regenerated);
             setDetailReport(regenerated);
+            setPendingReportId(regenerated.id);
             toast.success("报告任务已提交，生成完成后会自动刷新。");
         } catch (error) {
             toast.error(getErrorMessage(error, "重新生成失败"));
@@ -448,6 +469,7 @@ export default function AstrologyFortuneHomePage() {
             await deleteReportMutation.mutateAsync(reportId);
             if (activeReport?.id === reportId) setActiveReport(null);
             if (detailReport?.id === reportId) setDetailReport(null);
+            if (pendingReportId === reportId) setPendingReportId(null);
             toast.success("报告已删除");
         } catch (error) {
             toast.error(getErrorMessage(error, "报告删除失败"));

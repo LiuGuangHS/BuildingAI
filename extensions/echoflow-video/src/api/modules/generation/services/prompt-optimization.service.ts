@@ -16,6 +16,8 @@ import type {
 } from "../dto/prompt-optimization.dto";
 import { ProviderConfigService } from "./provider-config.service";
 
+const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
+
 export interface PromptOptimizationResult {
     originalPrompt: string;
     optimizedPrompt: string;
@@ -516,6 +518,7 @@ export class PromptOptimizationService {
 
     private async deductOptimizationBilling(recordId: string, userId: string, amount: number, modelId: string) {
         await this.optimizationRepository.manager.transaction(async (manager) => {
+            await manager.query(LOCK_TIMEOUT);
             const locked = await manager.findOne(VideoPromptOptimization, {
                 where: { id: recordId } as FindOptionsWhere<VideoPromptOptimization>,
                 lock: { mode: "pessimistic_write" },
@@ -546,6 +549,7 @@ export class PromptOptimizationService {
     private async refundOptimizationBilling(recordId: string | undefined, userId: string | undefined, remark: string) {
         if (!recordId || !userId) return false;
         return this.optimizationRepository.manager.transaction(async (manager) => {
+            await manager.query(LOCK_TIMEOUT);
             const locked = await manager.findOne(VideoPromptOptimization, {
                 where: { id: recordId } as FindOptionsWhere<VideoPromptOptimization>,
                 lock: { mode: "pessimistic_write" },

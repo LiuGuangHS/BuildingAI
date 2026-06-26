@@ -41,5 +41,5 @@ function isAstrologyReportFormatError(error: unknown) {
 }
 
 function sanitizeRepairReason(reason: string) {
-    return reason.replace(/(api[_-]?key|secret|provider|baseURL|baseUrl|base_url)\s*[:=]\s*\\S+/gi, "$1=[redacted]").slice(0, 300);
+    return reason.replace(/(api[_-]?key|secret|provider|baseURL|baseUrl|base_url)\s*[:=]\s*\S+/gi, "$1=[redacted]").slice(0, 300);
 }

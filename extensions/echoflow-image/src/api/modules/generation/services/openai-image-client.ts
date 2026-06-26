@@ -27,7 +27,11 @@ export interface GenerateOpenAIImageOptions {
     responseFormat?: string;
     outputFormat?: string;
     background?: string;
+    outputCompression?: number;
+    inputFidelity?: string;
     moderation?: string;
+    seed?: string | number;
+    negativePrompt?: string;
     referenceImages?: ReferenceImageInput[];
     maskImage?: ReferenceImageInput;
     maxReferenceImageBytes?: number;
@@ -116,7 +120,10 @@ export class OpenAIImageClient {
                     quality: options.quality,
                     output_format: options.outputFormat,
                     background: options.background,
+                    output_compression: options.outputCompression,
+                    input_fidelity: options.inputFidelity,
                     moderation: options.moderation,
+                    seed: options.seed,
                 }),
             ],
         });
@@ -140,11 +147,16 @@ export class OpenAIImageClient {
         const body = buildDefinedWhere<Record<string, unknown>>({
             model: options.model,
             prompt: options.prompt,
-            n: 1,
+            negative_prompt: options.negativePrompt,
+            n: Math.max(1, Math.min(4, options.n ?? 1)),
             size: options.size,
             quality: options.quality,
             response_format: "b64_json",
             style: options.style,
+            output_format: options.outputFormat,
+            background: options.background,
+            moderation: options.moderation,
+            seed: options.seed,
         });
 
         return this.executeImagesRequest(body);
@@ -175,6 +187,11 @@ export class OpenAIImageClient {
         if (options.size) form.set("size", options.size);
         if (options.quality) form.set("quality", options.quality);
         if (options.responseFormat) form.set("response_format", options.responseFormat);
+        if (options.negativePrompt) form.set("negative_prompt", options.negativePrompt);
+        if (options.outputFormat) form.set("output_format", options.outputFormat);
+        if (options.background) form.set("background", options.background);
+        if (options.moderation) form.set("moderation", options.moderation);
+        if (options.seed !== undefined) form.set("seed", String(options.seed));
         if (mask) form.set("mask", mask.blob, mask.filename);
 
         references.forEach((reference) => {

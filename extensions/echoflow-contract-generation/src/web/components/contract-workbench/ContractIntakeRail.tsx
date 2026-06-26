@@ -49,7 +49,7 @@ export function ContractIntakeRail(props: {
     onExportTypeChange: (value: "contract" | "contract_with_report" | "risk_report") => void;
     onFillExample: () => void;
 }) {
-    const requiredFields = props.selectedTemplate?.fields.filter((field) => field.required).slice(0, 5) ?? [];
+    const requiredFields = props.selectedTemplate?.fields.filter((field) => field.required) ?? [];
     const promptId = useId();
     const uploadId = useId();
     const inputDisabled = Boolean(props.disabled || props.isBusy || props.primaryActionPending);
@@ -86,7 +86,7 @@ export function ContractIntakeRail(props: {
             </div>
 
             {props.mode === "draft" && (
-                <div className="grid gap-2">
+                <div className="grid gap-2 max-h-[400px] overflow-y-auto pr-1">
                     {requiredFields.map((field) => (
                         <TemplateCompactField
                             key={field.key}

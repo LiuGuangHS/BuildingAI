@@ -40,8 +40,25 @@ const defaultVideoPromptTemplates = [
 
 export class Upgrade {
     private readonly logger = new Logger(Upgrade.name);
+    private static readonly ALLOWED_TABLES = new Set([
+        "video_provider_config",
+        "video_model_config",
+        "video_prompt_template",
+        "video_policy_config",
+        "video_generation",
+        "video_billing_rule",
+        "video_prompt_optimization",
+        "video_config_audit",
+    ]);
+    private static readonly ALLOWED_SCHEMAS = new Set(["echoflow_video"]);
 
     constructor(private readonly dataSource: DataSource) {}
+
+    private validateIdentifier(value: string, allowed: Set<string>, label: string): void {
+        if (!allowed.has(value)) {
+            throw new Error(`Invalid ${label}: ${value}`);
+        }
+    }
 
     async execute(): Promise<void> {
         await this.ensureSchema();
@@ -346,6 +363,8 @@ export class Upgrade {
     }
 
     private async ensureUniqueIndex(schema: string, table: string, indexName: string): Promise<void> {
+        this.validateIdentifier(schema, Upgrade.ALLOWED_SCHEMAS, "schema");
+        this.validateIdentifier(table, Upgrade.ALLOWED_TABLES, "table");
         const duplicateRows = await this.dataSource.query(`
             SELECT "user_id", "request_key", COUNT(*)::int AS count
             FROM "${schema}"."${table}"
@@ -368,6 +387,7 @@ export class Upgrade {
     }
 
     private async ensureColumn(table: string, column: string, definition: string): Promise<void> {
+        this.validateIdentifier(table, Upgrade.ALLOWED_TABLES, "table");
         await this.dataSource.query(`
             ALTER TABLE "echoflow_video"."${table}"
             ADD COLUMN IF NOT EXISTS "${column}" ${definition}
@@ -375,6 +395,7 @@ export class Upgrade {
     }
 
     private async dropColumnIfExists(table: string, column: string): Promise<void> {
+        this.validateIdentifier(table, Upgrade.ALLOWED_TABLES, "table");
         await this.dataSource.query(`
             ALTER TABLE "echoflow_video"."${table}"
             DROP COLUMN IF EXISTS "${column}"
@@ -382,6 +403,7 @@ export class Upgrade {
     }
 
     private async copyColumnIfExists(table: string, source: string, target: string, targetDefaultText: string): Promise<void> {
+        this.validateIdentifier(table, Upgrade.ALLOWED_TABLES, "table");
         const rows = await this.dataSource.query(
             `
                 SELECT 1

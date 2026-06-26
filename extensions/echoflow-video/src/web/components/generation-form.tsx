@@ -69,7 +69,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
     const [prompt, setPrompt] = useState("");
     const [originalPrompt, setOriginalPrompt] = useState<string>();
     const [promptOptimizationSource, setPromptOptimizationSource] = useState<"ai" | "local">();
-    const [promptOptimizerModelId, setPromptOptimizerModelId] = useState<string>();
+    const [promptOptimizerModelId, setPromptOptimizerModelId] = useState<string | undefined>(undefined);
     const [modelId, setModelId] = useState("");
     const [media, setMedia] = useState<VideoMediaItem[]>([]);
     const [resolution, setResolution] = useState("720P");
@@ -77,7 +77,6 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
     const [ratio, setRatio] = useState("16:9");
     const [watermark, setWatermark] = useState(true);
     const [promptStyle, setPromptStyle] = useState<PromptOptimizationStyle>("cinematic");
-    const [optimizerModelId, setOptimizerModelId] = useState("");
     const [uploadingSlotId, setUploadingSlotId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string>();
     const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
@@ -303,7 +302,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             prompt: prompt.trim(),
             model: selectedModel?.model ?? selectedModel?.id,
             style: promptStyle,
-            modelId: optimizerModelId || undefined,
+            modelId: promptOptimizerModelId,
             ratio: supportsRatio ? ratio : undefined,
             resolution,
         });
@@ -425,7 +424,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
                         <p className="text-sm font-medium">画面描述</p>
                         <div className="flex flex-wrap gap-2">
                             {optimizerOptions?.models?.length ? (
-                                <Select value={optimizerModelId} onValueChange={setOptimizerModelId} disabled={controlsDisabled}>
+                                <Select value={promptOptimizerModelId ?? ""} onValueChange={(v) => setPromptOptimizerModelId(v || undefined)} disabled={controlsDisabled}>
                                     <SelectTrigger className="w-40">
                                         <SelectValue placeholder="优化模型" />
                                     </SelectTrigger>

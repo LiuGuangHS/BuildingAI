@@ -60,13 +60,23 @@ export class BillingRuleService extends BaseService<VideoBillingRule> {
 
     async calculateAmount(dto: EstimateVideoBillingDto): Promise<number> {
         const rule = await this.resolveRule(dto.modelConfigId, dto.model);
-        const duration = Math.max(1, Number(dto.duration ?? 5));
-        const resolutionMultiplier = Number(
-            rule.resolutionMultipliers?.[dto.resolution || "720P"] ??
-            (dto.resolution === "1080P" ? 2 : 1),
+        const rawDuration = Number(dto.duration ?? 5);
+        const duration = Number.isFinite(rawDuration) && rawDuration > 0 ? Math.ceil(rawDuration) : 5;
+        const resolutionKey = dto.resolution || "720P";
+        const rawMultiplier = Number(
+            rule.resolutionMultipliers?.[resolutionKey] ??
+            (resolutionKey === "1080P" ? 2 : 1),
         );
-        const amount = Number(rule.baseCost || 0) + Number(rule.perSecondCost || 1) * duration * resolutionMultiplier;
-        return Math.max(Number(rule.minimumCost || 0), roundPower(amount));
+        const resolutionMultiplier = Number.isFinite(rawMultiplier) && rawMultiplier > 0 ? rawMultiplier : 1;
+        const baseCost = Number.isFinite(Number(rule.baseCost)) ? Number(rule.baseCost) : 0;
+        const perSecondCost = Number.isFinite(Number(rule.perSecondCost)) && Number(rule.perSecondCost) > 0
+            ? Number(rule.perSecondCost)
+            : this.defaultPerSecondCost(dto.model);
+        const minimumCost = Number.isFinite(Number(rule.minimumCost)) && Number(rule.minimumCost) > 0
+            ? Number(rule.minimumCost)
+            : 1;
+        const amount = baseCost + perSecondCost * duration * resolutionMultiplier;
+        return Math.max(minimumCost, roundPower(amount));
     }
 
     async resolveRule(modelConfigId?: string, model?: string) {

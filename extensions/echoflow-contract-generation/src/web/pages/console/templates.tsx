@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -86,13 +87,21 @@ export default function ContractTemplatesConsolePage() {
     }
 
     async function handleDelete(template: AdminContractTemplate) {
-        await deleteMutation.mutateAsync(template.id);
-        if (editing?.id === template.id) startCreate();
+        try {
+            await deleteMutation.mutateAsync(template.id);
+            if (editing?.id === template.id) startCreate();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "删除失败");
+        }
     }
 
     async function handleResetBuiltin() {
-        await resetMutation.mutateAsync();
-        setMessage("内置模板已同步");
+        try {
+            await resetMutation.mutateAsync();
+            setMessage("内置模板已同步");
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "同步失败");
+        }
     }
 
     function formatFieldsJson() {

@@ -124,7 +124,7 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         };
     }
 
-    async findEnabledById(id: string): Promise<ResolvedImageModelConfig> {
+    async findEnabledById(id: string, includeHidden = false): Promise<ResolvedImageModelConfig> {
         await this.ensureDefaultModelConfigs();
         const config = await this.modelConfigRepository.findOne({
             where: { id } as FindOptionsWhere<ImageModelConfig>,
@@ -132,12 +132,16 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         if (!config) {
             throw HttpErrorFactory.badRequest(`不支持的图像模型配置: ${id}`);
         }
-        if (!config.enabled || !config.visibleToUser) {
+        if (!config.enabled || (!includeHidden && !config.visibleToUser)) {
             throw HttpErrorFactory.badRequest(`图像模型配置已在管理后台禁用: ${id}`);
         }
         const resolved = this.toResolvedConfig(config);
         this.pickRuntimeEndpoint(resolved);
         return resolved;
+    }
+
+    async findEnabledByIdForAdmin(id: string): Promise<ResolvedImageModelConfig> {
+        return this.findEnabledById(id, true);
     }
 
     async findByIdOrFail(id: string) {
@@ -181,6 +185,9 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     async testEndpoint(id: string, endpointDto: ImageModelEndpointDto) {
         const config = await this.findByIdOrFail(id);
         this.assertSupportedModelConfig(config.model);
+        if (!config.enabled) {
+            throw HttpErrorFactory.badRequest("图像模型配置已禁用，请先启用后再测试接入点");
+        }
         const resolved = this.toResolvedConfig(config);
         const [endpoint] = await this.normalizeEndpointConfigsForSave([endpointDto], config.endpoints ?? []);
         const credential = await this.resolveEndpointCredential(endpoint);

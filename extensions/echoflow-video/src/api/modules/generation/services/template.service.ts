@@ -34,14 +34,30 @@ export class TemplateService extends BaseService<VideoPromptTemplate> {
     }
 
     async listPublicTemplates(query: QueryVideoTemplateDto) {
-        const result = await this.list(query, true);
-        if (!query.abilityType) return result;
+        if (!query.abilityType) return this.list(query, true);
 
-        result.items = result.items.filter((item) =>
+        const allResult = await this.templateRepository.findAndCount({
+            where: buildDefinedWhere<FindOptionsWhere<VideoPromptTemplate>>({
+                title: query.keyword ? Like(`%${query.keyword}%`) : undefined,
+                category: query.category,
+                modelConfigId: query.modelConfigId,
+                enabled: true,
+            }),
+            relations: ["modelConfig"],
+            order: { sortOrder: "DESC", createdAt: "DESC" },
+        });
+        const filtered = allResult[0].filter((item) =>
             !item.abilityTypes?.length || item.abilityTypes.includes(query.abilityType!),
         );
-        result.total = result.items.length;
-        return result;
+        const page = Math.max(1, Number(query.page ?? 1));
+        const pageSize = Math.max(1, Math.min(100, Number(query.pageSize ?? 20)));
+        const start = (page - 1) * pageSize;
+        return {
+            items: filtered.slice(start, start + pageSize),
+            total: filtered.length,
+            page,
+            pageSize,
+        };
     }
 
     async createTemplate(dto: CreateVideoTemplateDto) {
