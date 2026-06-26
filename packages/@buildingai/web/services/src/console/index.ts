@@ -4,6 +4,7 @@ export * from "./agents";
 export * from "./analyse";
 export * from "./apps-decorate";
 export * from "./award";
+export * from "./backup";
 export * from "./cdk";
 export * from "./chat";
 export * from "./datasets";

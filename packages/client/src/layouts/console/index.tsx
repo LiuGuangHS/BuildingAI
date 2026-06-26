@@ -48,6 +48,7 @@ import UserRechargeIndexPage from "@/pages/console/operation/recharge";
 import OrderMembershipIndexPage from "@/pages/console/order/membership";
 import OrderRechargeIndexPage from "@/pages/console/order/recharge";
 import SystemAgreementIndexPage from "@/pages/console/system/agreement";
+import SystemDbBackupIndexPage from "@/pages/console/system/db-backup";
 import SystemLoginConfigIndexPage from "@/pages/console/system/login-config";
 import SystemPayConfigIndexPage from "@/pages/console/system/pay-config";
 import SystemPm2LogRotateIndexPage from "@/pages/console/system/pm2-log-rotate";
@@ -271,6 +272,10 @@ function ConsoleRoutes() {
           {
             path: "pm2-log-rotate",
             element: <SystemPm2LogRotateIndexPage />,
+          },
+          {
+            path: "db-backup",
+            element: <SystemDbBackupIndexPage />,
           },
         ],
       },

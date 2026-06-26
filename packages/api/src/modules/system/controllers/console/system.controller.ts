@@ -2,11 +2,12 @@ import { BuildFileUrl } from "@buildingai/decorators/file-url.decorator";
 import { Public } from "@buildingai/decorators/public.decorator";
 import { ConsoleController } from "@common/decorators";
 import { initializeDto } from "@modules/system/dto/system.dto";
-import { Body, Get, Ip, Logger, Post, Req } from "@nestjs/common";
+import { Body, Delete, Get, Ip, Logger, Param, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
 import { Permissions } from "src/common/decorators/permissions.decorator";
 
 import { SystemService } from "../../services/system.service";
+import { BackupService } from "../../services/backup.service";
 
 /**
  * 系统控制器
@@ -17,7 +18,10 @@ import { SystemService } from "../../services/system.service";
 export class SystemConsoleController {
     private readonly logger = new Logger(SystemConsoleController.name);
 
-    constructor(private readonly systemService: SystemService) {}
+    constructor(
+        private readonly systemService: SystemService,
+        private readonly backupService: BackupService,
+    ) {}
 
     @Public()
     @Get("initialize")
@@ -60,5 +64,51 @@ export class SystemConsoleController {
     })
     async restartApplication() {
         return this.systemService.restartApplication();
+    }
+
+    @Get("backup/config")
+    @Permissions({
+        code: "backup:list",
+        name: "查看备份配置",
+    })
+    async getBackupConfig() {
+        return this.backupService.getConfig();
+    }
+
+    @Post("backup/config")
+    @Permissions({
+        code: "backup:config",
+        name: "更新备份配置",
+    })
+    async updateBackupConfig(@Body() dto: { enabled?: boolean; retentionDays?: number }) {
+        return this.backupService.updateConfig(dto);
+    }
+
+    @Get("backups")
+    @Permissions({
+        code: "backup:list",
+        name: "查看备份列表",
+    })
+    async listBackups() {
+        return this.backupService.listBackups();
+    }
+
+    @Post("backups")
+    @Permissions({
+        code: "backup:create",
+        name: "创建备份",
+    })
+    async createBackup() {
+        return this.backupService.createBackup();
+    }
+
+    @Delete("backups/:filename")
+    @Permissions({
+        code: "backup:delete",
+        name: "删除备份",
+    })
+    async deleteBackup(@Param("filename") filename: string) {
+        await this.backupService.deleteBackup(filename);
+        return { success: true };
     }
 }

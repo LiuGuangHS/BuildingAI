@@ -20,6 +20,7 @@ import { StorageConfigController } from "./controllers/console/storage-config.co
 import { SystemConsoleController } from "./controllers/console/system.controller";
 import { WebsiteConsoleController } from "./controllers/console/website.controller";
 import { StorageConfigWebController } from "./controllers/web/storage-config.controller";
+import { BackupService } from "./services/backup.service";
 import { PayconfigService } from "./services/payconfig.service";
 import { StorageConfigService } from "./services/storage-config.service";
 import { SystemService } from "./services/system.service";
@@ -63,6 +64,7 @@ import { WebsiteService } from "./services/website.service";
         PayconfigService,
         UserService,
         StorageConfigService,
+        BackupService,
     ],
     exports: [WebsiteService, SystemService, PayconfigService, StorageConfigService],
 })
