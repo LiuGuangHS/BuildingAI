@@ -38,8 +38,8 @@
     "scripts": {
         "build": "cross-env NODE_OPTIONS=--max-old-space-size=3072 turbo run build",
         "dev": "turbo run dev",
-        "start": "node scripts/patch-legacy-extensions.mjs && pnpm i && pnpm sync-env && cd packages/cli && pnpm run start",
-        "predeploy": "pnpm i && pnpm sync-env && cd packages/cli && pnpm run predeploy",
+        "start": "pnpm i && cd packages/cli && pnpm run start",
+        "predeploy": "pnpm i && cd packages/cli && pnpm run predeploy",
         "stop": "node packages/cli/bin/cli.js pm2:stop",
         "restart": "node packages/cli/bin/cli.js pm2:restart",
         "delete": "node packages/cli/bin/cli.js pm2:delete",
@@ -48,7 +48,6 @@
         "format": "prettier --write \"**/*.{ts,tsx,md}\"",
         "typecheck": "turbo run check-types",
         "clean": "rimraf ./.turbo && turbo run clean",
-        "sync-env": "node scripts/sync-env.mjs",
         "skills": "node scripts/sync-skills.mjs",
         "buildingai": "node packages/cli/bin/cli.js",
         "pm2:start": "node packages/cli/bin/cli.js pm2:start",
