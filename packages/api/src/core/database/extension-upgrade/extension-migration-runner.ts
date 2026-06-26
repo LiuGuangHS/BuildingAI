@@ -19,6 +19,22 @@ interface MigrationConstructor {
     };
 }
 
+function parseMigrationName(file: string) {
+    const match = file.match(/^(\d+)-(.+)\.js$/);
+    if (!match) return null;
+
+    const [, timestamp, rest] = match;
+    const parts = rest.split("-");
+    for (let i = parts.length; i > 0; i--) {
+        const version = parts.slice(0, i).join("-");
+        if (semver.valid(version)) {
+            return { timestamp: parseInt(timestamp, 10), version };
+        }
+    }
+
+    return null;
+}
+
 /**
  * Extension migration runner
  *
@@ -113,14 +129,13 @@ export class ExtensionMigrationRunner {
                     continue;
                 }
 
-                const match = file.match(/^(\d+)-([^-]+)-(.+)\.js$/);
-                if (match) {
-                    const [, timestamp, version] = match;
+                const parsed = parseMigrationName(file);
+                if (parsed) {
                     migrationFiles.push({
                         name: file,
                         path: path.join(this.migrationsDir, file),
-                        version: version,
-                        timestamp: parseInt(timestamp, 10),
+                        version: parsed.version,
+                        timestamp: parsed.timestamp,
                     });
                 }
             }

@@ -1,4 +1,5 @@
 import { useAuthStore } from "@buildingai/stores";
+import { NotificationCenter } from "@buildingai/ui/components/notification-center";
 import { ReloadWindow } from "@buildingai/ui/components/reload-windows";
 import {
   Breadcrumb,
@@ -16,8 +17,6 @@ import type { MenuItem } from "@buildingai/web-types";
 import { RotateCcw } from "lucide-react";
 import { Fragment, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
-
-import { NotificationCenter } from "@/components/notification-center";
 
 interface BreadcrumbTrailItem {
   name: string;

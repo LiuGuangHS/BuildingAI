@@ -5,6 +5,7 @@ import {
   useNotificationsQuery,
   useNotificationUnreadCountQuery,
 } from "@buildingai/services";
+import { useSettingsDialog } from "@buildingai/hooks";
 import { useAuthStore, useConfigStore } from "@buildingai/stores";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
@@ -19,8 +20,6 @@ import { Bell, CheckCheck, ExternalLink, Inbox } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-
-import { useSettingsDialog } from "./settings-dialog";
 
 const NOTIFICATION_PUSH_MESSAGE = "buildingai:notification-push";
 
@@ -97,7 +96,7 @@ function NotificationRow({
 export function NotificationCenter({
   placement = "floating",
 }: {
-  placement?: "floating" | "inline";
+  placement?: "floating" | "inline" | "sidebar";
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -151,6 +150,7 @@ export function NotificationCenter({
 
   const unreadCount = unreadCountQuery.data?.count ?? 0;
   const notifications = notificationsQuery.data?.items ?? [];
+  const sidebar = placement === "sidebar";
 
   const handleOpenNotification = async (item: NotificationItem) => {
     try {
@@ -178,14 +178,22 @@ export function NotificationCenter({
         <Button
           type="button"
           size="icon"
-          variant="outline"
-          className="bg-background/90 pointer-events-auto relative shadow-sm backdrop-blur"
+          variant={sidebar ? "ghost" : "outline"}
+          className={cn(
+            "pointer-events-auto relative",
+            sidebar
+              ? "size-7 rounded-full bg-transparent shadow-none hover:bg-sidebar-accent-foreground/10"
+              : "bg-background/90 shadow-sm backdrop-blur",
+          )}
           aria-label="通知中心"
         >
           <Bell className="size-4" />
           {unreadCount > 0 && (
             <Badge
-              className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 text-[10px]"
+              className={cn(
+                "absolute h-4 min-w-4 px-1 text-[10px]",
+                sidebar ? "-top-1 -right-1" : "-top-1.5 -right-1.5",
+              )}
               variant="default"
             >
               {unreadCount > 99 ? "99+" : unreadCount}
@@ -195,7 +203,8 @@ export function NotificationCenter({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        sideOffset={placement === "inline" ? 10 : 6}
+        side={sidebar ? "right" : "bottom"}
+        sideOffset={sidebar ? 12 : placement === "inline" ? 10 : 6}
         className="pointer-events-auto flex max-h-[min(640px,calc(100vh-96px))] w-[calc(100vw-24px)] max-w-[380px] flex-col gap-0 overflow-hidden p-0"
       >
         <div className="flex items-center justify-between border-b px-4 py-3">
@@ -266,7 +275,7 @@ export function NotificationCenter({
     </Popover>
   );
 
-  if (placement === "inline") {
+  if (placement === "inline" || placement === "sidebar") {
     return <div className="pointer-events-auto">{content}</div>;
   }
 

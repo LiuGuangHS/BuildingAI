@@ -8,15 +8,14 @@ type UseRefreshUserOptions = {
     silent?: boolean;
 };
 
-export const useRefreshUser = (options: UseRefreshUserOptions | boolean = {}) => {
-    const resolvedOptions = typeof options === "boolean" ? { manualOnly: options } : options;
+export const useRefreshUser = (options: UseRefreshUserOptions = {}) => {
     const token = useAuthStore((state) => state.auth.token);
     const setUserInfo = useAuthStore((state) => state.authActions.setUserInfo);
     const queryClient = useQueryClient();
 
     const { data, refetch, isFetching } = useUserInfoQuery({
-        enabled: Boolean(token) && !resolvedOptions.manualOnly,
-        requestConfig: { silent: resolvedOptions.silent },
+        enabled: Boolean(token) && !options.manualOnly,
+        requestConfig: { silent: options.silent },
     });
 
     // Clear query cache and userInfo when token is removed (logout)

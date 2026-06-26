@@ -6,7 +6,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
 
 import { DataSource } from "./../typeorm";
 
-const distDir = __dirname.replace("/src", "/dist");
+const distDir = path.join(__dirname, "..");
 const entitiesPattern = path.join(distDir, "..", "entities", "**", "*.entity.js");
 const entityFiles = globSync(entitiesPattern);
 

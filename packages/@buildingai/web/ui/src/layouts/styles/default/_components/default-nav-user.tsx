@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@buildingai/ui/components/ui/dropdown-menu";
+import { NotificationCenter } from "@buildingai/ui/components/notification-center";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -24,7 +25,15 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { UpgradeDialog } from "./upgrade-dialog";
 
-export function UserButton({ isLoggedIn, userInfo }: { isLoggedIn: boolean; userInfo?: any }) {
+export function UserButton({
+  isLoggedIn,
+  showChevron = true,
+  userInfo,
+}: {
+  isLoggedIn: boolean;
+  showChevron?: boolean;
+  userInfo?: any;
+}) {
   return (
     <>
       <Avatar className="h-8 w-8 rounded-lg after:rounded-lg">
@@ -48,7 +57,7 @@ export function UserButton({ isLoggedIn, userInfo }: { isLoggedIn: boolean; user
           )}
         </span>
       </div>
-      <ChevronsUpDown className="ml-auto size-4" />
+      {showChevron && <ChevronsUpDown className="ml-auto size-4" />}
     </>
   );
 }
@@ -88,16 +97,20 @@ export function DefaultNavUser() {
 
   return (
     <SidebarMenu>
-      <SidebarMenuItem>
+      <SidebarMenuItem className="relative">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground overflow-visible"
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground overflow-visible pr-20"
             >
-              <UserButton isLoggedIn={true} userInfo={userInfo} />
+              <UserButton isLoggedIn={true} showChevron={false} userInfo={userInfo} />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
+          <div className="absolute top-1/2 right-9 z-10 -translate-y-1/2 group-data-[collapsible=icon]/sidebar-wrapper:hidden">
+            <NotificationCenter placement="sidebar" />
+          </div>
+          <ChevronsUpDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 group-data-[collapsible=icon]/sidebar-wrapper:hidden" />
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
             side={isMobile ? "bottom" : "right"}

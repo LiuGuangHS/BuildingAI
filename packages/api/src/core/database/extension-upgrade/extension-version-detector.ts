@@ -19,6 +19,19 @@ export interface ExtensionVersionInfo {
     upgradeVersions: string[];
 }
 
+function parseMigrationVersion(file: string) {
+    const match = file.match(/^\d+-(.+)\.js$/);
+    if (!match) return null;
+
+    const parts = match[1].split("-");
+    for (let i = parts.length; i > 0; i--) {
+        const version = parts.slice(0, i).join("-");
+        if (semver.valid(version)) return version;
+    }
+
+    return null;
+}
+
 /**
  * Extension version detector
  *
@@ -129,14 +142,8 @@ export class ExtensionVersionDetector {
                 const migrationFiles = await fse.readdir(migrationsDir);
                 migrationFiles.forEach((file) => {
                     if (file.endsWith(".js")) {
-                        // Migration file format: timestamp-version-description.js
-                        const parts = file.replace(".js", "").split("-");
-                        if (parts.length >= 2) {
-                            const version = parts[1];
-                            if (semver.valid(version)) {
-                                allVersions.add(version);
-                            }
-                        }
+                        const version = parseMigrationVersion(file);
+                        if (version) allVersions.add(version);
                     }
                 });
             }
