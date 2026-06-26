@@ -572,6 +572,18 @@
                         "isHidden": 0,
                         "type": 2,
                         "sourceType": 1
+                    },
+                    {
+                        "name": "数据库备份",
+                        "code": "system-db-backup",
+                        "path": "db-backup",
+                        "icon": "",
+                        "component": "/console/system/db-backup/index",
+                        "permissionCode": "system:backup:list",
+                        "sort": 120,
+                        "isHidden": 0,
+                        "type": 2,
+                        "sourceType": 1
                     }
                 ]
             }

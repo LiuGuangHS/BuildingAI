@@ -6,7 +6,7 @@ import { BaseEntity } from "./base";
 @Index("IDX_notification_delivery_notification", ["notificationId"])
 @Index("IDX_notification_delivery_channel_status", ["channel", "status"])
 export class NotificationDelivery extends BaseEntity {
-    @Column({ length: 36, comment: "站内通知ID" })
+    @Column({ type: "uuid", comment: "站内通知ID" })
     notificationId: string;
 
     @Column({ length: 36, comment: "用户ID" })
