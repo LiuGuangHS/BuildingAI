@@ -56,13 +56,16 @@ services:
             retries: 5
 
     nodejs:
-        image: ccr.ccs.tencentyun.com/buildingai/node:22.20.0
+        image: node:24-bookworm-slim
         container_name: buildingai-nodejs${DOCKER_CONTAINER_SUFFIX:-}
         restart: on-failure:3
         working_dir: /buildingai
         volumes:
             - ./:/buildingai
-            - /buildingai/node_modules
+            - buildingai-node-modules:/buildingai/node_modules
+            - buildingai-pnpm-store:/pnpm-store
+            - buildingai-turbo-cache:/root/.local/share/pnpm
+            - ./docker/postgres/backup/backups:/buildingai/backups
             - /buildingai/packages/api/node_modules
             - /buildingai/packages/cli/node_modules
             - /buildingai/packages/core/node_modules
@@ -124,6 +127,11 @@ services:
             set -e
             echo "🚀 Starting BuildingAI container..."
 
+            if ! command -v curl >/dev/null 2>&1 || ! command -v pg_dump >/dev/null 2>&1; then
+            echo "🔧 Installing system dependencies (curl, postgresql-client)..."
+            apt-get update -qq && apt-get install -y -qq --no-install-recommends curl postgresql-client >/dev/null 2>&1
+            fi
+
             if [ -n "$NPM_REGISTRY_URL" ]; then
             echo "🔧 Using custom registry: $NPM_REGISTRY_URL"
             if command -v npm >/dev/null 2>&1; then
@@ -138,13 +146,15 @@ services:
 
             if ! command -v pnpm >/dev/null 2>&1; then
             echo "📦 Installing pnpm..."
-            npm install -g pnpm
+            npm install -g pnpm@latest
             npm install -g pm2
 
             if [ -n "$NPM_REGISTRY_URL" ]; then
                 pnpm config set registry "$NPM_REGISTRY_URL"
             fi
             fi
+
+            pnpm config set store-dir /pnpm-store
 
             # localhost inside a container is the container itself, not host Postgres/Redis
             if [ "$DB_HOST" = "localhost" ] || [ "$DB_HOST" = "127.0.0.1" ]; then
@@ -177,3 +187,8 @@ services:
 networks:
     buildingai-network:
         driver: bridge
+
+volumes:
+    buildingai-node-modules:
+    buildingai-pnpm-store:
+    buildingai-turbo-cache:
