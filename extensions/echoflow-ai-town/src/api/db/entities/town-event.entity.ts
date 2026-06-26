@@ -14,6 +14,7 @@ export type TownEventResult = {
     coins?: number;
     stamina?: number;
     reputation?: number;
+    /** Audit-only values already applied to the character. Do NOT replay. */
     relationship?: Record<string, number>;
     bonuses?: string[];
     audit?: {

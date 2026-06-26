@@ -1,4 +1,5 @@
 import { ACTION } from "@buildingai/constants";
+import { BaseService } from "@buildingai/base";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Brackets, EntityManager, Repository } from "@buildingai/db/typeorm";
 import { ExtensionBillingService } from "@buildingai/extension-sdk";
@@ -27,6 +28,8 @@ import { TownAiService, type TownAiBillingContext } from "./town-ai.service";
 import { TownProgressRulesService, type ProgressContext, type ProgressResult, type TownGoal, type TownTask } from "./town-progress-rules.service";
 import { TownRelationshipRulesService, type RelationshipBonus, type RelationshipUpdate } from "./town-relationship-rules.service";
 import { TownWorldRulesService, type TownFestivalState } from "./town-world-rules.service";
+
+const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -84,7 +87,7 @@ type TownActionAuditContext = {
 };
 
 @Injectable()
-export class TownService {
+export class TownService extends BaseService<TownSave> {
     constructor(
         @InjectRepository(TownSave)
         private readonly saveRepo: Repository<TownSave>,
@@ -97,7 +100,9 @@ export class TownService {
         private readonly townRelationshipRulesService: TownRelationshipRulesService,
         private readonly townProgressRulesService: TownProgressRulesService,
         private readonly billingService: ExtensionBillingService,
-    ) {}
+    ) {
+        super(saveRepo);
+    }
 
     async createSave(userId: string, dto: CreateTownSaveDto) {
         const save = this.saveRepo.create({
@@ -113,6 +118,7 @@ export class TownService {
 
         let createdSaveId = "";
         await this.saveRepo.manager.transaction(async (manager) => {
+            await manager.query(LOCK_TIMEOUT);
             const saved = await manager.save(TownSave, save);
             createdSaveId = saved.id;
             await manager.save(TownCharacter, this.createDefaultCharacters(userId, saved.id));
@@ -179,9 +185,9 @@ export class TownService {
         return this.hydrateSave(save);
     }
 
-    async getEvents(userId: string, saveId: string) {
+    async getEvents(userId: string, saveId: string, take = 50) {
         await this.ensureSaveOwner(userId, saveId);
-        return this.eventRepo.find({ where: { userId, saveId }, order: { createdAt: "DESC" }, take: 50 });
+        return this.eventRepo.find({ where: { userId, saveId }, order: { createdAt: "DESC" }, take });
     }
 
     async runAction(userId: string, saveId: string, dto: TownActionDto) {
@@ -190,6 +196,7 @@ export class TownService {
 
         try {
             await this.saveRepo.manager.transaction(async (manager) => {
+                await manager.query(LOCK_TIMEOUT);
                 const save = await this.ensureSaveOwnerForUpdate(userId, saveId, manager);
                 const characters = await manager.find(TownCharacter, { where: { userId, saveId }, order: { relationship: "DESC" } });
                 const bonuses = this.getRelationshipBonuses(characters, dto.action);
@@ -389,6 +396,7 @@ export class TownService {
 
         try {
             await this.saveRepo.manager.transaction(async (manager) => {
+                await manager.query(LOCK_TIMEOUT);
                 const save = await this.ensureSaveOwnerForUpdate(userId, saveId, manager);
                 const character = await manager.findOne(TownCharacter, {
                     where: { id: dto.characterId, userId, saveId },
@@ -398,14 +406,15 @@ export class TownService {
                     throw new NotFoundException("小镇居民不存在");
                 }
 
-                const oldLevel = this.townRelationshipRulesService.getRelationshipLevel(character.relationship);
-                character.relationship = Math.min(100, character.relationship + 3);
-                const newLevel = this.townRelationshipRulesService.getRelationshipLevel(character.relationship);
                 character.status = "刚聊过天";
                 character.memory = this.updateCharacterMemory(character, dto.message, replyResult.text, save.day);
 
+                const result: TownEventResult = { relationship: { [character.id]: 3 } };
                 const progress = this.applyProgress(save, { action: "chat" });
+                const relationshipEvents = await this.applyRelationshipResult(manager, userId, saveId, result, character, "chat", save.day);
+                const activityEvents = this.createActivityEvents(userId, saveId, save, "chat");
                 this.markRetentionQualified(save, "chat", progress, [character]);
+
                 await manager.save(TownCharacter, character);
                 await manager.save(TownSave, save);
                 const chatResult = this.createChatResult(save, character);
@@ -425,13 +434,8 @@ export class TownService {
                 if (replyResult.billing.amount > 0 && !replyResult.billing.fallbackUsed) {
                     billedEventId = savedEvent.id;
                 }
-                const progressEvents = this.createProgressEvents(userId, saveId, progress, "visit");
-                if (progressEvents.length) {
-                    await manager.save(TownEvent, progressEvents);
-                }
-                if (oldLevel !== newLevel) {
-                    await manager.save(TownEvent, this.createRelationshipLevelEvent(userId, saveId, character, oldLevel, newLevel, 3));
-                }
+                const progressEvents = this.createProgressEvents(userId, saveId, progress, "chat");
+                await manager.save(TownEvent, [...progressEvents, ...activityEvents, ...relationshipEvents]);
                 characterResult = character;
             });
         } catch (error) {
@@ -470,6 +474,7 @@ export class TownService {
     private async refundTownAiBillingIfNeeded(eventId: string, remark: string) {
         try {
             await this.eventRepo.manager.transaction(async (manager) => {
+                await manager.query(LOCK_TIMEOUT);
                 const event = await manager.findOne(TownEvent, { where: { id: eventId }, lock: { mode: "pessimistic_write" }, withDeleted: true });
                 if (!event) return;
                 const metadata = (event.result ?? {}) as TownEventResult & { billingStatus?: string; billingAmount?: number; refundedAt?: string; refundError?: string };
@@ -598,7 +603,7 @@ export class TownService {
         return [...source, ...additions].slice(-limit);
     }
 
-    private createProgressEvents(userId: string, saveId: string, progress: ProgressResult, action: TownActionDto["action"]): TownEvent[] {
+    private createProgressEvents(userId: string, saveId: string, progress: ProgressResult, action: TownActionDto["action"] | "chat"): TownEvent[] {
         return [
             ...progress.completedTasks.map((task) => this.eventRepo.create({
                     userId,
@@ -678,9 +683,15 @@ export class TownService {
 
         const averageDay = saves.length ? Math.round(saves.reduce((total, save) => total + save.day, 0) / saves.length) : 0;
         const averageLevel = saves.length ? Math.round((saves.reduce((total, save) => total + save.level, 0) / saves.length) * 10) / 10 : 0;
-        const saveEventCounts = await Promise.all(saves.map(async (save) => ({ save, eventCount: await this.eventRepo.count({ where: { saveId: save.id } }) })));
-        const stuckSaveCount = saveEventCounts.filter(({ save, eventCount }) => save.day > 3 && eventCount === 0).length;
-        const averageEventCount = saveEventCounts.length ? Math.round((saveEventCounts.reduce((total, item) => total + item.eventCount, 0) / saveEventCounts.length) * 10) / 10 : 0;
+        const saveEventCounts = await this.eventRepo.createQueryBuilder("event")
+            .select("event.saveId", "saveId")
+            .addSelect("COUNT(event.id)", "count")
+            .where("event.saveId IN (:...saveIds)", { saveIds: saves.map((s) => s.id) })
+            .groupBy("event.saveId")
+            .getRawMany<{ saveId: string; count: string }>();
+        const eventCountBySave = new Map(saveEventCounts.map((r) => [r.saveId, parseInt(r.count, 10)]));
+        const stuckSaveCount = saves.filter((s) => s.day > 3 && !eventCountBySave.has(s.id)).length;
+        const averageEventCount = saveEventCounts.length ? Math.round((saveEventCounts.reduce((total, r) => total + parseInt(r.count, 10), 0) / saveEventCounts.length) * 10) / 10 : 0;
         const aiStats = await this.townAiService.getLogStats();
         const aiSuccessRate = aiStats.total ? Math.round(((aiStats.total - aiStats.failed) / aiStats.total) * 1000) / 10 : 100;
         const aiFallbackRate = aiStats.total ? Math.round((aiStats.fallback / aiStats.total) * 1000) / 10 : 0;
@@ -745,6 +756,7 @@ export class TownService {
 
     private async softDeleteSaveGraph(save: TownSave) {
         await this.saveRepo.manager.transaction(async (manager) => {
+            await manager.query(LOCK_TIMEOUT);
             await manager.softDelete(TownEvent, { saveId: save.id });
             await manager.softDelete(TownCharacter, { saveId: save.id });
             await manager.softDelete(TownSave, { id: save.id });
@@ -1264,7 +1276,7 @@ export class TownService {
         worldState.reputation = Math.max(0, worldState.reputation + (result.reputation ?? 0));
         save.worldState = worldState;
 
-        if (worldState.reputation >= save.level * 18) {
+        while (worldState.reputation >= save.level * 18 && save.level < 100) {
             save.level += 1;
         }
 
@@ -1434,7 +1446,7 @@ export class TownService {
         };
     }
 
-    private async applyRelationshipResult(manager: EntityManager, userId: string, saveId: string, result: TownEventResult, preferredTarget: TownCharacter | null, action: TownActionDto["action"], day: number): Promise<TownEvent[]> {
+    private async applyRelationshipResult(manager: EntityManager, userId: string, saveId: string, result: TownEventResult, preferredTarget: TownCharacter | null, action: TownActionDto["action"] | "chat", day: number): Promise<TownEvent[]> {
         const entries = Object.entries(result.relationship ?? {});
         const updates: RelationshipUpdate[] = [];
         const memoryEvents: TownEvent[] = [];
@@ -1442,25 +1454,26 @@ export class TownService {
             if (!delta) continue;
             const character = preferredTarget?.id === characterId ? preferredTarget : await manager.findOne(TownCharacter, { where: { id: characterId, userId, saveId } });
             if (!character) continue;
-            const update = this.townRelationshipRulesService.applyCharacterRelationship(character, delta, action);
             const promiseEvent = this.createPromiseReminderEvent(userId, saveId, character, action, day);
+            const finalDelta = delta + (promiseEvent ? 1 : 0);
+            const update = this.townRelationshipRulesService.applyCharacterRelationship(character, finalDelta, action);
             await manager.save(TownCharacter, character);
             updates.push(update);
             if (promiseEvent) memoryEvents.push(promiseEvent);
         }
         const relationshipEvents = updates.flatMap((update) => {
-            const story = this.createNpcStoryEvent(userId, saveId, update.character, action, update.delta);
+            const storyAction = action === "chat" ? "visit" : action;
+            const story = this.createNpcStoryEvent(userId, saveId, update.character, storyAction, update.delta);
             return update.oldLevel === update.newLevel ? [] : [story, this.createRelationshipLevelEvent(userId, saveId, update.character, update.oldLevel, update.newLevel, update.delta)];
         });
         return [...memoryEvents, ...relationshipEvents];
     }
 
-    private createPromiseReminderEvent(userId: string, saveId: string, character: TownCharacter, action: TownActionDto["action"], day: number): TownEvent | null {
+    private createPromiseReminderEvent(userId: string, saveId: string, character: TownCharacter, action: TownActionDto["action"] | "chat", day: number): TownEvent | null {
         if (!["visit", "chat", "decorate", "explore"].includes(action)) return null;
         const promises = Array.isArray(character.memory?.promises) ? character.memory.promises : [];
         const promise = promises[0];
         if (!promise) return null;
-        character.relationship = Math.min(100, character.relationship + 1);
         character.memory = {
             ...(character.memory ?? {}),
             relationshipLevel: this.townRelationshipRulesService.getRelationshipLevel(character.relationship),
@@ -1501,8 +1514,8 @@ export class TownService {
         });
     }
 
-    private formatActionName(action: TownActionDto["action"]) {
-        return TOWN_ACTION_LABELS[action] ?? action;
+    private formatActionName(action: TownActionDto["action"] | "chat") {
+        return action === "chat" ? "居民聊天" : (TOWN_ACTION_LABELS[action] ?? action);
     }
 
     private createRelationshipLevelEvent(userId: string, saveId: string, character: TownCharacter, oldLevel: string, newLevel: string, delta: number) {
@@ -1513,7 +1526,7 @@ export class TownService {
         return this.townRelationshipRulesService.createNpcStoryEvent((params) => this.eventRepo.create(params), userId, saveId, character, action, delta, this.createNextChoices(action === "explore" ? "explore" : "visit"));
     }
 
-    private createActivityEvents(userId: string, saveId: string, save: TownSave, action: TownActionDto["action"]): TownEvent[] {
+    private createActivityEvents(userId: string, saveId: string, save: TownSave, action: TownActionDto["action"] | "chat"): TownEvent[] {
         const worldState = this.normalizeWorldState(save.worldState, save.day);
         const result = this.townWorldRulesService.advanceFestival(worldState, save, action);
         save.worldState = result.worldState;
@@ -1540,7 +1553,7 @@ export class TownService {
         return parts.length ? `活动奖励：${parts.join("，")}。` : "居民把这一天写进了小镇日志。";
     }
 
-    private createNextChoices(action: TownActionDto["action"]) {
+    private createNextChoices(action: TownActionDto["action"] | "chat") {
         if (action === "advice") {
             return null;
         }

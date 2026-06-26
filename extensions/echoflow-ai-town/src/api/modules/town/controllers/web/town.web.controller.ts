@@ -1,3 +1,4 @@
+import { BaseController } from "@buildingai/base";
 import { ExtensionWebController } from "@buildingai/core/decorators";
 import { type UserPlayground } from "@buildingai/db";
 import { Playground } from "@buildingai/decorators/playground.decorator";
@@ -14,7 +15,7 @@ const TOWN_RATE_LIMIT_WINDOWS: ExtensionRateLimitWindow[] = [
 ];
 
 @ExtensionWebController("ai-town")
-export class TownWebController {
+export class TownWebController extends BaseController {
     constructor(
         private readonly townService: TownService,
         private readonly rateLimitService: ExtensionRateLimitService,
@@ -48,8 +49,8 @@ export class TownWebController {
     }
 
     @Get("saves/:id/events")
-    getEvents(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
-        return this.townService.getEvents(user.id, id);
+    getEvents(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Query("take") take?: string) {
+        return this.townService.getEvents(user.id, id, take ? parseInt(take as string, 10) : undefined);
     }
 
     @Delete("saves/:id")

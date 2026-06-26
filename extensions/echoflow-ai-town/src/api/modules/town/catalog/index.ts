@@ -5,3 +5,4 @@ export * from "./town-choices.catalog";
 export * from "./town-content-pack.catalog";
 export * from "./town-festivals.catalog";
 export * from "./town-progress.catalog";
+export * from "./town-weather.catalog";

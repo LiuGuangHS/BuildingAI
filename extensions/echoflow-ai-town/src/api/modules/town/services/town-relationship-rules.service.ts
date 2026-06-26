@@ -84,7 +84,7 @@ export class TownRelationshipRulesService {
         return 0;
     }
 
-    applyCharacterRelationship(character: TownCharacter, delta: number, action: TownActionDto["action"]): RelationshipUpdate {
+    applyCharacterRelationship(character: TownCharacter, delta: number, action: TownActionDto["action"] | "chat"): RelationshipUpdate {
         const oldLevel = this.getRelationshipLevel(character.relationship);
         character.relationship = Math.min(100, Math.max(0, character.relationship + delta));
         const newLevel = this.getRelationshipLevel(character.relationship);
@@ -111,7 +111,7 @@ export class TownRelationshipRulesService {
         });
     }
 
-    createNpcStoryEvent(eventFactory: (params: Partial<TownEvent>) => TownEvent, userId: string, saveId: string, character: TownCharacter, action: TownActionDto["action"], delta: number, choices: TownEvent["choices"]): TownEvent {
+    createNpcStoryEvent(eventFactory: (params: Partial<TownEvent>) => TownEvent, userId: string, saveId: string, character: TownCharacter, action: TownActionDto["action"] | "chat", delta: number, choices: TownEvent["choices"]): TownEvent {
         return eventFactory({
             userId,
             saveId,
@@ -144,7 +144,7 @@ export class TownRelationshipRulesService {
         return `${character.name}记下居民喜欢的味道，兴奋地说下一次营业可以试试新的套餐。`;
     }
 
-    private createNpcMemorySummary(character: TownCharacter, action: TownActionDto["action"], level: string) {
+    private createNpcMemorySummary(character: TownCharacter, action: TownActionDto["action"] | "chat", level: string) {
         return `${character.name}记得你今天通过${this.formatActionName(action)}靠近了小镇居民，现在把你当作“${level}”的伙伴。`;
     }
 
@@ -155,14 +155,15 @@ export class TownRelationshipRulesService {
         return `${character.name}对你的经营方式更熟悉了。`;
     }
 
-    private getNpcStatusAfterAction(character: TownCharacter, action: TownActionDto["action"]) {
+    private getNpcStatusAfterAction(character: TownCharacter, action: TownActionDto["action"] | "chat") {
         if (action === "explore") return "分享传闻";
         if (action === "decorate") return "筹备布置";
         if (action === "visit") return "刚被拜访";
+        if (action === "chat") return "刚聊过天";
         return character.status;
     }
 
-    private formatActionName(action: TownActionDto["action"]) {
-        return TOWN_ACTION_LABELS[action] ?? action;
+    private formatActionName(action: TownActionDto["action"] | "chat") {
+        return action === "chat" ? "居民聊天" : (TOWN_ACTION_LABELS[action] ?? action);
     }
 }

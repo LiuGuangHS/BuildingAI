@@ -59,8 +59,10 @@ export class TownProgressRulesService {
             });
         }
         if (!context.skipDailyProgress && worldState.weeklyGoal && !worldState.weeklyGoal.completed) {
-            const progress = this.getGoalProgress(worldState.weeklyGoal, context, completedTasks.length);
-            worldState.weeklyGoal = { ...worldState.weeklyGoal, progress: Math.min(worldState.weeklyGoal.target, worldState.weeklyGoal.progress + progress) };
+            const currentProgress = worldState.weeklyGoal.progress;
+            const delta = this.getGoalProgress(worldState.weeklyGoal, context, completedTasks.length);
+            const nextProgress = Math.min(worldState.weeklyGoal.target, Math.max(currentProgress, currentProgress + delta));
+            worldState.weeklyGoal = { ...worldState.weeklyGoal, progress: nextProgress };
             if (worldState.weeklyGoal.progress >= worldState.weeklyGoal.target) {
                 worldState.weeklyGoal.completed = true;
                 completedWeeklyGoal = worldState.weeklyGoal;

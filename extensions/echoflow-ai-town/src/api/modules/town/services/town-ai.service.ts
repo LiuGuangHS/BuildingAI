@@ -1,7 +1,7 @@
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { MoreThanOrEqual, Repository } from "@buildingai/db/typeorm";
 import { PublicAiModelService, safeJsonParse } from "@buildingai/extension-sdk";
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 
 import { TownAiCallLog, TownAiConfig, TownCharacter, TownEvent, TownSave } from "../../../db/entities";
 import { TOWN_ACTION_LABELS } from "../catalog";
@@ -222,7 +222,7 @@ export class TownAiService {
                 usage: null,
             });
             if (allowFallback) return { text: fallback, billing: this.createBillingContext(type, config, true) };
-            throw new Error("AI 未启用或未配置模型");
+            throw new BadRequestException("AI 未启用或未配置模型");
         }
 
         if (shouldUseTownAiDailyLimit(config)) {
@@ -237,7 +237,7 @@ export class TownAiService {
                 maxOutputTokens: config.maxTokens,
             });
             const text = result.text.trim();
-            if (!text) throw new Error("AI 返回为空");
+            if (!text) throw new BadRequestException("AI 返回为空");
 
             await this.logCall({
                 type,
@@ -290,7 +290,7 @@ export class TownAiService {
     private async loadLlmModel(modelId: string) {
         const modelInfo = await this.aiModelService.getModelInfo(modelId);
         if (!modelInfo.isActive || !modelInfo.provider?.isActive || modelInfo.modelType !== "llm") {
-            throw new Error("模型或 Provider 不存在、未激活，或不是 LLM 模型");
+            throw new BadRequestException("模型或 Provider 不存在、未激活，或不是 LLM 模型");
         }
         return modelInfo;
     }
@@ -302,7 +302,7 @@ export class TownAiService {
             where: { userId, createdAt: MoreThanOrEqual(today) },
         });
         if (hasTownAiDailyLimitReached(count, limit)) {
-            throw new Error("今日 AI 调用次数已达上限");
+            throw new BadRequestException("今日 AI 调用次数已达上限");
         }
     }
 

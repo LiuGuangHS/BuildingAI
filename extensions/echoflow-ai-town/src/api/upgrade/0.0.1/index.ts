@@ -148,8 +148,8 @@ export class Upgrade {
                 extensionData.type,
                 extensionData.isLocal,
                 extensionData.status,
-                JSON.stringify(extensionData.supportTerminal),
-                JSON.stringify(extensionData.author),
+                extensionData.supportTerminal,
+                extensionData.author,
             ],
         );
     }

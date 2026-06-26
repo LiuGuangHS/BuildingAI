@@ -1,3 +1,4 @@
+import { BaseController } from "@buildingai/base";
 import { ExtensionConsoleController } from "@buildingai/core/decorators";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
@@ -7,7 +8,7 @@ import { TownAiService } from "../../services/town-ai.service";
 import { TownService } from "../../services/town.service";
 
 @ExtensionConsoleController("ai-town", "AI乐园小镇管理")
-export class TownConsoleController {
+export class TownConsoleController extends BaseController {
     constructor(
         private readonly townService: TownService,
         private readonly townAiService: TownAiService,

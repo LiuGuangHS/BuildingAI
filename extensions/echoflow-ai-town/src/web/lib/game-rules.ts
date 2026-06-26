@@ -123,7 +123,7 @@ export function formatFestivalStatus(status: TownFestivalState["status"]) {
 export function getGoalActionTarget(save: TownSave, goalType: "quest" | "weekly" | "festival"): TownGoalActionTarget | null {
     if (goalType === "festival") {
         const festival = save.worldState.activeFestival;
-        if (!festival || festival.completed || festival.status === "completed") return null;
+        if (!festival || festival.status === "completed") return null;
         return {
             action: festival.action,
             buildingId: festival.action === "upgrade" ? getUpgradeableBuildingId(save) : undefined,

@@ -76,6 +76,8 @@ export function createTownContentPackState(seededAt = new Date().toISOString()):
         packId: TOWN_CONTENT_PACK_MANIFEST.id,
         version: TOWN_CONTENT_PACK_MANIFEST.version,
         seededAt,
+        seasonId: TOWN_CONTENT_PACK_MANIFEST.season.id,
+        seedStrategy: { ...TOWN_CONTENT_PACK_MANIFEST.seedStrategy },
     };
 }
 
@@ -83,9 +85,29 @@ export function normalizeTownContentPackState(state: unknown): TownContentPackSt
     const source = state && typeof state === "object" ? state as Partial<TownContentPackState> : {};
     const fallback = createTownContentPackState();
 
+    const validSeasonIds = new Set([TOWN_CONTENT_PACK_MANIFEST.season.id]);
+    const normalizedSeasonId = typeof source.seasonId === "string" && validSeasonIds.has(source.seasonId as TownContentSeasonId)
+        ? source.seasonId as TownContentSeasonId
+        : fallback.seasonId;
+
+    const sourceStrategy = source.seedStrategy;
+    const normalizedSeedStrategy = sourceStrategy && typeof sourceStrategy === "object"
+        ? {
+            mode: sourceStrategy.mode === TOWN_CONTENT_PACK_MANIFEST.seedStrategy.mode ? sourceStrategy.mode : fallback.seedStrategy.mode,
+            shouldRun: sourceStrategy.shouldRun === "create-save" || sourceStrategy.shouldRun === "upgrade-normalize"
+                ? sourceStrategy.shouldRun
+                : fallback.seedStrategy.shouldRun,
+            idempotencyKey: typeof sourceStrategy.idempotencyKey === "string" && sourceStrategy.idempotencyKey.trim()
+                ? sourceStrategy.idempotencyKey
+                : fallback.seedStrategy.idempotencyKey,
+        }
+        : { ...fallback.seedStrategy };
+
     return {
         packId: source.packId === TOWN_CONTENT_PACK_MANIFEST.id ? source.packId : fallback.packId,
         version: typeof source.version === "string" && source.version.trim() ? source.version : fallback.version,
         seededAt: typeof source.seededAt === "string" && source.seededAt.trim() ? source.seededAt : fallback.seededAt,
+        seasonId: normalizedSeasonId,
+        seedStrategy: normalizedSeedStrategy,
     };
 }

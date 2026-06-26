@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import type { TownSave, TownWorldState } from "../../../db/entities";
-import { TOWN_FESTIVAL_CATALOG, createTownFestivalState, type TownFestivalTemplate } from "../catalog";
+import { TOWN_FESTIVAL_CATALOG, TOWN_WEATHER_CATALOG, DEFAULT_WEATHER_EFFECT, createTownFestivalState, type TownFestivalTemplate } from "../catalog";
 
 type TownSettlement = NonNullable<TownWorldState["lastSettlement"]>;
 export type TownFestivalState = NonNullable<TownWorldState["activeFestival"]>;
@@ -18,14 +18,7 @@ export class TownWorldRulesService {
     }
 
     getWeatherEffect(weather: string) {
-        const effects: Record<string, { operateCoins: number; visitReputation: number; exploreReputation: number; exploreStaminaCost: number; reputationMultiplier: number }> = {
-            晴朗: { operateCoins: 1.1, visitReputation: 0, exploreReputation: 0, exploreStaminaCost: 0, reputationMultiplier: 1 },
-            小雨: { operateCoins: 0.95, visitReputation: 1, exploreReputation: 0, exploreStaminaCost: 0, reputationMultiplier: 1 },
-            微风: { operateCoins: 1, visitReputation: 0, exploreReputation: 1, exploreStaminaCost: 0, reputationMultiplier: 1 },
-            夜雾: { operateCoins: 1, visitReputation: 0, exploreReputation: 2, exploreStaminaCost: 2, reputationMultiplier: 1 },
-            节庆日: { operateCoins: 1.05, visitReputation: 1, exploreReputation: 1, exploreStaminaCost: 0, reputationMultiplier: 1.2 },
-        };
-        return effects[weather] ?? effects.晴朗;
+        return TOWN_WEATHER_CATALOG[weather] ?? DEFAULT_WEATHER_EFFECT;
     }
 
     createDailySettlement(save: TownSave, worldState: TownWorldState): TownSettlement {
@@ -91,7 +84,10 @@ export class TownWorldRulesService {
     }
 
     advanceFestival(worldState: TownWorldState, save: TownSave, action: string): TownFestivalResult {
-        const current = worldState.activeFestival;
+        let current = worldState.activeFestival;
+        if (current && current.status === "ready" && current.daysLeft <= 0) {
+            current = { ...current, progress: current.target, status: "completed" };
+        }
         const nextFestival = current ? this.advanceExistingFestival(current, action) : this.createFestivalCandidate(worldState, save);
         if (!nextFestival) return { worldState: { ...worldState, activeFestival: null } };
 
