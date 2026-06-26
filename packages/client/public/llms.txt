@@ -1,0 +1,14 @@
+# 清云AI (EchoFlow AI)
+> 清云AI 是一个 AI 智能助手工作台，提供 AI 对话、智能体、知识库等人工智能服务，让每个人都能轻松使用 AI。
+
+## 核心页面
+- [智能体广场](https://ai.echoflow.cn/agents): 浏览海量 AI 智能体，覆盖写作、编程、翻译、设计等场景
+- [知识库广场](https://ai.echoflow.cn/datasets): 发现优质知识库，与 AI 知识库进行交互
+- [应用中心](https://ai.echoflow.cn/apps): 探索 AI 应用，扩展你的 AI 工作台能力
+
+## 扩展应用
+- [AI 视频生成](https://ai.echoflow.cn/apps/echoflow-video): 多模型视频创作工作台，支持文生视频、图生视频
+- [AI 绘画](https://ai.echoflow.cn/apps/echoflow-image): 提示词润色、参考图生成与无限画布灵感白板
+- [AI 合同工作台](https://ai.echoflow.cn/apps/echoflow-contract-generation): 合同起草、审查、条款编辑、风险提示一站式工作台
+- [AI 星盘运势](https://ai.echoflow.cn/apps/echoflow-astrology-fortune): 每日运势、性格洞察、情感配对与追问建议
+- [乐园小镇](https://ai.echoflow.cn/apps/echoflow-ai-town): 治愈系 AI 小镇经营叙事游戏

@@ -27,6 +27,8 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { useDocumentHead, useBreadcrumbStructuredData } from "@buildingai/hooks";
+
 import {
   AssistantProvider,
   MessageItem,
@@ -534,6 +536,23 @@ const AgentChatPage = () => {
 
   const { data: agent, isLoading: isAgentLoading } = usePublishedAgentDetailQuery(agentId, {
     refetchOnWindowFocus: false,
+  });
+
+  useDocumentHead({
+    title: agent?.name || "智能体",
+    description: agent?.description || undefined,
+    ogTitle: agent?.name || "智能体",
+    ogDescription: agent?.description || undefined,
+    ogImage: agent?.avatar || undefined,
+    canonical: `https://ai.echoflow.cn/agents/${agentId}/chat`,
+  });
+
+  useBreadcrumbStructuredData({
+    items: [
+      { name: "清云AI", url: "https://ai.echoflow.cn" },
+      { name: "智能体广场", url: "https://ai.echoflow.cn/agents" },
+      { name: agent?.name || "智能体", url: `https://ai.echoflow.cn/agents/${agentId}/chat` },
+    ],
   });
 
   const [formValues, setFormValues] = useState<Record<string, string>>({});

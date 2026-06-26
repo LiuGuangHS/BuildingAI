@@ -49,7 +49,7 @@ const PAGE_SIZE = 20;
 
 export const meta = definePageMeta({
   title: "智能体广场",
-  description: "选择你想要的智能体",
+  description: "浏览海量 AI 智能体，覆盖写作、编程、翻译、设计等场景，选择你想要的智能助手",
   icon: "bot",
 });
 
@@ -64,6 +64,9 @@ const AgentsIndexPage = () => {
 
   useDocumentHead({
     title: "智能体广场",
+    description: "浏览海量 AI 智能体，覆盖写作、编程、翻译、设计等场景，选择你想要的智能助手",
+    keywords: "AI智能体,AI Agent,智能助手,AI对话,人工智能",
+    canonical: "https://ai.echoflow.cn/agents",
   });
 
   const { data: decorateConfig } = useWebAgentDecorateQuery();

@@ -1,4 +1,4 @@
-import { useDocumentHead } from "@buildingai/hooks";
+import { useDocumentHead, useBreadcrumbStructuredData } from "@buildingai/hooks";
 import {
   type AiProvider,
   useAiProvidersQuery,
@@ -82,6 +82,19 @@ export default function DatasetDetailPage() {
 
   useDocumentHead({
     title: dataset?.name || "知识库详情",
+    description: dataset?.description || undefined,
+    ogTitle: dataset?.name || "知识库详情",
+    ogDescription: dataset?.description || undefined,
+    ogImage: dataset?.coverUrl || undefined,
+    canonical: id ? `https://ai.echoflow.cn/datasets/${id}` : undefined,
+  });
+
+  useBreadcrumbStructuredData({
+    items: [
+      { name: "清云AI", url: "https://ai.echoflow.cn" },
+      { name: "知识库广场", url: "https://ai.echoflow.cn/datasets" },
+      { name: dataset?.name || "知识库详情", url: id ? `https://ai.echoflow.cn/datasets/${id}` : "https://ai.echoflow.cn/datasets" },
+    ],
   });
 
   const { uploadDocuments, uploadDocumentFromUrl } = useDatasetDocumentUpload(id);

@@ -4,7 +4,6 @@ import {
   WEB_HOME_PATH,
 } from "@buildingai/services/shared";
 import { useAuthStore, useConfigStore } from "@buildingai/stores";
-import SvgIcons from "@buildingai/ui/components/svg-icons";
 import { Navigate, useSearchParams } from "react-router-dom";
 
 import { LoginForm } from "./_components/login-form";
@@ -58,7 +57,7 @@ const LoginPage = () => {
               <span className="text-xl font-bold">{websiteConfig?.webinfo.name}</span>
             </div>
           ) : (
-            <SvgIcons.buildingaiFull className="h-8" />
+            <img className="h-10 w-auto object-contain" src="/logo-full.png" alt="清云AI" />
           )}
         </a>
         <LoginForm />

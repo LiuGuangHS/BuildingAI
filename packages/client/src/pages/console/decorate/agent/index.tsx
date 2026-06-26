@@ -153,7 +153,7 @@ const DecorateAgentIndexPage = () => {
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [localTitle, setLocalTitle] = useState("智能体广场");
   const [localDescription, setLocalDescription] = useState(
-    "在 EchoFlowAI 中与你喜爱的智能体进行交互",
+    "在 清云AI 中与你喜爱的智能体进行交互",
   );
   const [localItems, setLocalItems] = useState<DisplayAgentItem[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);

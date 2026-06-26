@@ -41,7 +41,7 @@ const WelcomeAnimate = ({ step, setStep }: { step: number; setStep: (step: numbe
             textAlign="center"
           />
           <SplitText
-            text="EchoFlowAI!"
+            text="清云AI!"
             className="text-primary h-10 text-2xl font-bold sm:h-14 sm:text-5xl md:h-17 md:text-6xl lg:h-20 lg:text-7xl"
             delay={100}
             duration={0.6}

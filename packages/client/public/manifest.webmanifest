@@ -1,7 +1,7 @@
 {
-  "name": "EchoFlowAI",
-  "short_name": "EchoFlow",
-  "description": "EchoFlowAI assistant workspace",
+  "name": "清云AI",
+  "short_name": "清云AI",
+  "description": "清云AI 智能助手工作台",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

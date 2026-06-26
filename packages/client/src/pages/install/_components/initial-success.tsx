@@ -9,7 +9,7 @@ const InitialSuccess = ({ step }: { step: number }) => {
     <div className={cn("flex h-full flex-col items-center justify-center", { hidden: step !== 3 })}>
       <SvgIcons.circleCheckFilled className="size-22 fill-green-500" />
       <h1 className="mt-4 text-2xl">系统初始化完成</h1>
-      <p className="text-muted-foreground mt-2">您现在可以开始使用 EchoFlowAI 了</p>
+      <p className="text-muted-foreground mt-2">您现在可以开始使用 清云AI 了</p>
 
       <div className="mt-6 flex items-center gap-4">
         <Button variant="outline" asChild>

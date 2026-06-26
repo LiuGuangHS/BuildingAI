@@ -35,7 +35,7 @@ import { Link } from "react-router-dom";
 
 export const meta = definePageMeta({
   title: "应用中心",
-  description: "选择你想要的应用",
+  description: "探索 AI 应用，扩展你的 AI 工作台能力，发现更多 AI 工具",
   icon: "layout-grid",
 });
 
@@ -91,7 +91,10 @@ const AppsIndexPage = () => {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   useDocumentHead({
-    title: "应用",
+    title: "应用中心",
+    description: "探索 AI 应用，扩展你的 AI 工作台能力，发现更多 AI 工具",
+    keywords: "AI应用,AI插件,AI工具,AI扩展,AI视频,AI绘画",
+    canonical: "https://ai.echoflow.cn/apps",
   });
 
   // 搜索防抖

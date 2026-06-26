@@ -1,3 +1,4 @@
+import { useDocumentHead, useSoftwareApplicationStructuredData } from "@buildingai/hooks";
 import { fetchWebExtensionDetail } from "@buildingai/services/web";
 import NotFoundPage from "@buildingai/ui/components/exception/not-found-page";
 import { useQuery } from "@tanstack/react-query";
@@ -31,11 +32,32 @@ export default function AppIframePage() {
     error: extensionLoadError,
     isError: isExtensionLoadError,
     isLoading: isExtensionLoading,
+    data: extension,
   } = useQuery({
     queryKey: ["web", "extension", "detail", identifier],
     queryFn: () => fetchWebExtensionDetail(identifier || "", { silent: true }),
     enabled: !!identifier,
     retry: false,
+  });
+
+  const extDisplayName = extension?.alias || extension?.name || identifier || "";
+  const extDescription = extension?.aliasDescription || extension?.description || "";
+  const extIcon = extension?.aliasIcon || extension?.icon;
+
+  useDocumentHead({
+    title: extDisplayName,
+    description: extDescription,
+    ogTitle: extDisplayName,
+    ogDescription: extDescription,
+    ogImage: extIcon,
+    canonical: identifier ? `https://ai.echoflow.cn/apps/${identifier}` : undefined,
+  });
+
+  useSoftwareApplicationStructuredData({
+    name: extDisplayName,
+    url: `https://ai.echoflow.cn/apps/${identifier}`,
+    description: extDescription,
+    image: extIcon,
   });
   const currentUrl = `${location.pathname}${location.search}${location.hash}`;
   const iframeSrc = useMemo(() => {

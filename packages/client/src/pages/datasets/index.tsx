@@ -28,7 +28,7 @@ const PAGE_SIZE = 20;
 
 export const meta = definePageMeta({
   title: "知识库广场",
-  description: "选择你想要的知识库",
+  description: "发现优质 AI 知识库，与知识库进行智能交互，获取专业知识问答",
   icon: "book-search",
 });
 
@@ -42,6 +42,9 @@ const KnowledgeIndexPage = () => {
 
   useDocumentHead({
     title: "知识库广场",
+    description: "发现优质 AI 知识库，与知识库进行智能交互，获取专业知识问答",
+    keywords: "AI知识库,知识库,RAG,AI问答,智能知识库",
+    canonical: "https://ai.echoflow.cn/datasets",
   });
 
   const { data: tagsData } = useDatasetTags();

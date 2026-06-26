@@ -33,6 +33,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { useDocumentHead } from "@buildingai/hooks";
+
 import {
   AssistantProvider,
   MessageItem,
@@ -275,6 +277,14 @@ export default function PublishChatPage() {
     anonymousIdentifier,
     conversationId: conversationIdParam,
     formVariables,
+  });
+
+  useDocumentHead({
+    title: agent?.name || "智能体",
+    description: agent?.description || undefined,
+    ogTitle: agent?.name || "智能体",
+    ogDescription: agent?.description || undefined,
+    ogImage: agent?.avatar || undefined,
   });
 
   const typedAgent = agent as PublishedAgentDetailWithUploadCapability | undefined;

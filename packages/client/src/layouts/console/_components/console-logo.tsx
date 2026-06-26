@@ -17,7 +17,7 @@ function formatBrandVersion(version?: string) {
 export function ConsoleLogo() {
   const { websiteConfig } = useConfigStore((state) => state.config);
   const { state } = useSidebar();
-  const siteName = websiteConfig?.webinfo.name || "EchoFlowAI";
+  const siteName = websiteConfig?.webinfo.name || "清云AI";
   const siteVersion = formatBrandVersion(websiteConfig?.webinfo.version);
 
   return (

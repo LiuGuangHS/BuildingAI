@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@buildingai/ui/components/ui/dropdown-menu";
+import { NotificationCenter } from "@buildingai/ui/components/notification-center";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -41,12 +42,12 @@ export function NavUser() {
 
   return (
     <SidebarMenu>
-      <SidebarMenuItem>
+      <SidebarMenuItem className="relative">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground overflow-visible pr-20"
             >
               <Avatar className="h-8 w-8 rounded-lg after:rounded-lg">
                 {isLogin() && (
@@ -70,9 +71,12 @@ export function NavUser() {
                     : "请先登录后使用"}
                 </span>
               </div>
-              <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
+          <div className="absolute top-1/2 right-9 z-10 -translate-y-1/2 group-data-[collapsible=icon]/sidebar-wrapper:hidden">
+            <NotificationCenter placement="sidebar" />
+          </div>
+          <ChevronsUpDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 group-data-[collapsible=icon]/sidebar-wrapper:hidden" />
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
             side={isMobile ? "bottom" : "right"}
@@ -109,7 +113,7 @@ export function NavUser() {
       <Dialog open={versionInfoOpen} onOpenChange={setVersionInfoOpen}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
-            <DialogTitle>关于EchoFlowAI</DialogTitle>
+            <DialogTitle>关于清云AI</DialogTitle>
             <div className="mt-4 flex items-center gap-1">
               <span className="text-muted-foreground">版本：</span>
               <span>1.0.0</span>
