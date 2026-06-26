@@ -1,7 +1,7 @@
 {
     "name": "echoflow-ai-town",
     "version": "0.0.1",
-    "description": "Town life management narrative game extension",
+    "description": "AI 小镇经营叙事游戏插件，内置建筑/居民/事件/任务 catalog，AI 担任叙事导演与镇务参谋，支持居民记忆、日结反馈、行动循环与运营后台。",
     "author": "EchoflowAI Teams",
     "private": true,
     "main": "./manifest.json",
@@ -22,13 +22,13 @@
         "./*": "./*"
     },
     "scripts": {
-        "build:clean": "rimraf build .nuxt .output .temp",
+        "build:clean": "rimraf build .output .temp",
         "dev:web": "vite --config vite.config.mjs",
-        "dev:api": "tsup --watch src/api",
+        "dev:api": "cross-env NODE_ENV=development tsup --watch src/api",
         "dev": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
-        "build:api": "tsup",
+        "build:api": "cross-env NODE_ENV=production tsup",
         "build:web": "vite build --config vite.config.mjs",
-        "build:publish": "rimraf build .nuxt .output .temp && vite build --config vite.config.mjs && tsup",
+        "build:publish": "rimraf build .nuxt .output .temp && vite build --config vite.config.mjs && cross-env NODE_ENV=production tsup",
         "format": "prettier --write src",
         "lint": "eslint src --quiet --no-error-on-unmatched-pattern",
         "lint:fix": "eslint src --fix --no-error-on-unmatched-pattern",
@@ -44,30 +44,33 @@
         "@buildingai/extension-sdk": "workspace:*",
         "@buildingai/pipe": "workspace:*",
         "@buildingai/services": "workspace:*",
-        "@buildingai/stores": "workspace:*",
         "@buildingai/ui": "workspace:*",
         "@buildingai/web-core": "workspace:*",
         "@nestjs/common": "catalog:api",
         "@tanstack/react-query": "^5.90.21",
         "class-transformer": "catalog:api",
         "class-validator": "catalog:api",
-        "framer-motion": "^12.23.26",
         "react": "catalog:web",
         "react-dom": "catalog:web",
-        "react-router-dom": "catalog:web",
-        "vite-tsconfig-paths": "catalog:web"
+        "react-router-dom": "catalog:web"
     },
     "devDependencies": {
         "@buildingai/eslint-config": "workspace:*",
         "@buildingai/typescript-config": "workspace:*",
+        "@buildingai/web-types": "workspace:*",
         "@types/react": "catalog:web",
         "@types/react-dom": "catalog:web",
-        "babel-plugin-react-compiler": "^1.0.0",
+        "concurrently": "catalog:dev",
+        "cross-env": "catalog:dev",
         "eslint": "catalog:dev",
         "eslint-plugin-react-refresh": "^0.4.26",
         "globals": "^16.5.0",
+        "prettier": "catalog:dev",
+        "rimraf": "catalog:dev",
+        "ts-node": "^10.9.2",
         "tsup": "^8.5.1",
-        "ts-node": "^10.9.2"
+        "typescript": "catalog:dev",
+        "vite": "catalog:web"
     },
     "engine": {
         "buildingai": ">=25.1.0"

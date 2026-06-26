@@ -1,7 +1,7 @@
 {
     "name": "echoflow-astrology-fortune",
     "version": "0.0.1",
-    "description": "基于出生信息、星座生肖、个人档案和 AI 推理生成每日运势、性格洞察、配对与决策建议。",
+    "description": "星盘与运势报告插件，基于出生档案/星座生肖/LLM 生成结构化每日运势、性格洞察、情感配对、事业财富报告，支持追问、质量反馈、复盘清单与计费退款。",
     "author": "EchoflowAI Teams",
     "private": true,
     "main": "./manifest.json",
@@ -66,11 +66,19 @@
     "devDependencies": {
         "@buildingai/eslint-config": "workspace:*",
         "@buildingai/typescript-config": "workspace:*",
+        "@buildingai/web-types": "workspace:*",
         "@types/react": "catalog:web",
         "@types/react-dom": "catalog:web",
+        "concurrently": "catalog:dev",
+        "cross-env": "catalog:dev",
         "eslint": "catalog:dev",
         "eslint-plugin-react-refresh": "^0.4.26",
-        "globals": "^16.5.0"
+        "globals": "^16.5.0",
+        "prettier": "catalog:dev",
+        "rimraf": "catalog:dev",
+        "tsup": "catalog:dev",
+        "typescript": "catalog:dev",
+        "vite": "catalog:web"
     },
     "engine": {
         "buildingai": ">=25.1.0"

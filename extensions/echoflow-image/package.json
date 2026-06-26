@@ -1,7 +1,7 @@
 {
     "name": "echoflow-image",
     "version": "0.0.1",
-    "description": "面向创作者的 AI 图像生成与编辑工作台，支持模型配置、参考图创作、历史管理和算力计费。",
+    "description": "图像生成与画布创作插件，支持 responses/images/openai-compatible-images 多协议、提示词润色、tldraw 无限画布与模型级计费。",
     "author": "EchoflowAI Teams",
     "private": true,
     "main": "./manifest.json",
@@ -28,11 +28,11 @@
         "dev": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
         "build:api": "cross-env NODE_ENV=production tsup",
         "build:web": "node scripts/build-web.mjs",
-        "build:publish": "pnpm build:clean && pnpm run build:web && pnpm run build:api",
+        "build:publish": "rimraf build .nuxt .output .temp && node scripts/build-web.mjs && cross-env NODE_ENV=production tsup",
         "format": "prettier --write src",
         "lint": "eslint src --quiet",
         "lint:fix": "eslint src --fix",
-        "check-types": "node ../../node_modules/vue-tsc/bin/vue-tsc.js --noEmit",
+        "check-types": "vue-tsc --noEmit",
         "test": "node --experimental-strip-types --test tests/*.test.mjs",
         "i18n:translate": "node ../../scripts/translate-i18n.mjs"
     },
@@ -47,7 +47,6 @@
         "@buildingai/errors": "workspace:*",
         "@buildingai/extension-sdk": "workspace:*",
         "@buildingai/hooks": "workspace:*",
-        "@buildingai/http": "workspace:*",
         "@buildingai/i18n": "workspace:*",
         "@buildingai/pipe": "workspace:*",
         "@buildingai/services": "workspace:*",
@@ -74,10 +73,15 @@
         "@buildingai/web-types": "workspace:*",
         "@types/react": "catalog:web",
         "@types/react-dom": "catalog:web",
+        "concurrently": "catalog:dev",
+        "cross-env": "catalog:dev",
         "eslint": "catalog:dev",
         "eslint-plugin-react-refresh": "^0.4.26",
         "globals": "^16.5.0",
-        "tsup": "^8.5.1"
+        "prettier": "catalog:dev",
+        "rimraf": "catalog:dev",
+        "tsup": "^8.5.1",
+        "vue-tsc": "catalog:dev"
     },
     "engine": {
         "buildingai": ">=25.1.0"

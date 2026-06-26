@@ -8,6 +8,13 @@ export class BaseService<T = unknown> {
     protected delete(id: string) {
         return this.repository?.delete?.(id) ?? Promise.resolve(undefined);
     }
+
+    protected withTransaction<T>(callback: (manager: unknown) => Promise<T>): Promise<T> {
+        return callback({
+            findOne: (...args: unknown[]) => (this.repository as { findOne?: (...args: unknown[]) => Promise<unknown> })?.findOne?.(...args),
+            save: async (_entity: unknown, value: T) => value,
+        });
+    }
 }
 
 export function InjectRepository() {
@@ -41,6 +48,10 @@ export function CreateDateColumn() {
 }
 
 export function UpdateDateColumn() {
+    return () => undefined;
+}
+
+export function DeleteDateColumn() {
     return () => undefined;
 }
 
