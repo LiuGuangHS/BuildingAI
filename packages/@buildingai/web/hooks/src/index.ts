@@ -7,3 +7,4 @@ export * from "./use-refresh-user";
 export * from "./use-refresh-user-config";
 export * from "./use-refresh-website-config";
 export * from "./use-settings-dialog";
+export * from "./use-structured-data";

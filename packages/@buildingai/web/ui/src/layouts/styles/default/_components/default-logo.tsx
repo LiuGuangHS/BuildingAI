@@ -13,7 +13,7 @@ import { Link } from "react-router-dom";
 export function DefaultLogo() {
   const { websiteConfig } = useConfigStore((state) => state.config);
   const { state } = useSidebar();
-  const siteName = websiteConfig?.webinfo.name || "EchoFlowAI";
+  const siteName = websiteConfig?.webinfo.name || "清云AI";
 
   return (
     <SidebarMenu>

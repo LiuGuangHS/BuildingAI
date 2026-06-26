@@ -1,8 +1,10 @@
 import {
   useHeadRenderer,
+  useOrganizationStructuredData,
   useRefreshUser,
   useRefreshUserConfig,
   useRefreshWebsiteConfig,
+  useWebApplicationStructuredData,
 } from "@buildingai/hooks";
 import { useCheckInitializeStatus } from "@buildingai/services/shared";
 import { useConfigStore, useUserConfigStore } from "@buildingai/stores";
@@ -38,11 +40,13 @@ const MainLayout = () => {
   }, [data?.isInitialized, setIsInitialized]);
 
   useHeadRenderer({
-    title: websiteConfig?.webinfo.name || "BuildingAI",
-    titleTemplate: `%s - ${websiteConfig?.webinfo.name || "BuildingAI"}`,
+    title: websiteConfig?.webinfo.name || "清云AI",
+    titleTemplate: `%s - ${websiteConfig?.webinfo.name || "清云AI"}`,
     description: websiteConfig?.webinfo.description,
-    icon: websiteConfig?.webinfo.icon || `/buildingai-favicon.ico?t=${new Date().getTime()}`,
+    icon: websiteConfig?.webinfo.icon || `/echoflowai-favicon.ico?t=${new Date().getTime()}`,
   });
+  useOrganizationStructuredData();
+  useWebApplicationStructuredData();
   useRefreshUser();
   useRefreshUserConfig();
 
