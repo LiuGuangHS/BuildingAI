@@ -31,7 +31,7 @@ import { useQuery } from "@tanstack/react-query";
 import Autoplay from "embla-carousel-autoplay";
 import { ChevronRight, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 export const meta = definePageMeta({
   title: "应用中心",
@@ -53,13 +53,11 @@ function extToDisplayItem(ext: Extension) {
 
 type DisplayAppItem = ReturnType<typeof extToDisplayItem>;
 
-const AppItem = ({ item }: { item: DisplayAppItem }) => {
+const AppItem = ({ item, onOpen }: { item: DisplayAppItem; onOpen: () => void }) => {
   return (
     <Item
       className="group/apps-item hover:bg-accent cursor-pointer px-0 transition-[padding] hover:px-4"
-      onClick={() => {
-        window.location.href = `/apps/${item.identifier}`;
-      }}
+      onClick={onOpen}
     >
       <ItemMedia>
         <Avatar className="size-10 rounded-lg after:rounded-lg">
@@ -85,6 +83,7 @@ const AppItem = ({ item }: { item: DisplayAppItem }) => {
 };
 
 const AppsIndexPage = () => {
+  const navigate = useNavigate();
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
@@ -205,9 +204,9 @@ const AppsIndexPage = () => {
                         className="h-full w-full cursor-pointer rounded-2xl object-cover"
                         onClick={() => {
                           if (banner.linkType === "system" && banner.linkUrl) {
-                            window.location.href = banner.linkUrl;
+                            navigate(banner.linkUrl);
                           } else if (banner.linkUrl) {
-                            window.open(banner.linkUrl, "_blank");
+                            window.open(banner.linkUrl, "_blank", "noopener,noreferrer");
                           }
                         }}
                       />
@@ -244,7 +243,11 @@ const AppsIndexPage = () => {
             {displayItems.length > 0 ? (
               <div className="grid gap-x-4 sm:grid-cols-2">
                 {displayItems.map((item) => (
-                  <AppItem key={item.id} item={item} />
+                  <AppItem
+                    key={item.id}
+                    item={item}
+                    onOpen={() => navigate(`/apps/${item.identifier}`)}
+                  />
                 ))}
               </div>
             ) : itemsLoading ? null : (

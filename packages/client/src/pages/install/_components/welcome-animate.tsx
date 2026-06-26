@@ -2,7 +2,6 @@ import SplitText from "@buildingai/ui/components/effects/split-text";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { cn } from "@buildingai/ui/lib/utils";
 import { ArrowRight, ExternalLink } from "lucide-react";
-import { Link } from "react-router-dom";
 
 const WelcomeAnimate = ({ step, setStep }: { step: number; setStep: (step: number) => void }) => {
   return (
@@ -63,10 +62,10 @@ const WelcomeAnimate = ({ step, setStep }: { step: number; setStep: (step: numbe
 
       <div className="flex items-center justify-center gap-4">
         <Button variant="outline" asChild>
-          <Link to="https://doc.buildingai.cc/" target="_blank">
+          <a href="https://doc.buildingai.cc/" target="_blank" rel="noopener noreferrer">
             访问文档
             <ExternalLink />
-          </Link>
+          </a>
         </Button>
         <Button
           onClick={() => {

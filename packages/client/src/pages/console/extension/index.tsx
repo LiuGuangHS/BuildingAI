@@ -446,7 +446,7 @@ const ExtensionIndexPage = () => {
   };
 
   const toStore = () => {
-    window.open("https://buildingai.cc/plugin");
+    window.open("https://buildingai.cc/plugin", "_blank", "noopener,noreferrer");
   };
 
   return (

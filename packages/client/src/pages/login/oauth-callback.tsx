@@ -2,7 +2,7 @@ import { exchangeOAuthCode } from "@buildingai/services/web";
 import { useAuthStore } from "@buildingai/stores";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 const OAuthCallbackPage = () => {
   const [searchParams] = useSearchParams();
@@ -43,9 +43,9 @@ const OAuthCallbackPage = () => {
         <p className="text-muted-foreground text-sm">
           {error === "missing_code" ? "缺少授权码" : "授权已失效或已使用，请重新登录"}
         </p>
-        <a href="/login" className="text-primary hover:underline">
+        <Link to="/login" className="text-primary hover:underline">
           返回登录
-        </a>
+        </Link>
       </div>
     );
   }

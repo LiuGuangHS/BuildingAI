@@ -175,14 +175,14 @@ const AgentsIndexPage = () => {
     );
 
   const openAgentChat = (agent: { id: string }) => {
-    window.location.assign(`/agents/${agent.id}/chat`);
+    navigate(`/agents/${agent.id}/chat`);
   };
 
   const handleBannerClick = (banner: AgentDecorateBannerItem) => {
     const path = banner.linkUrl?.trim();
     if (!path) return;
     if (banner.linkType === "custom") {
-      window.open(path, "_blank");
+      window.open(path, "_blank", "noopener,noreferrer");
       return;
     }
     navigate(path);

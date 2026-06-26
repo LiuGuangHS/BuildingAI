@@ -43,6 +43,7 @@ import type {
   RefObject,
 } from "react";
 import { memo, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { AssistantContext } from "../../context";
@@ -161,6 +162,7 @@ const PromptInputInner = memo(
     hiddenTools = [],
     children,
   }: PromptInputProps) => {
+    const navigate = useNavigate();
     const context = useContext(AssistantContext);
     const models = modelsProp ?? context?.models ?? [];
     const selectedModelId = selectedModelIdProp ?? context?.selectedModelId ?? "";
@@ -314,9 +316,8 @@ const PromptInputInner = memo(
     );
 
     const handleExploreApps = useCallback(() => {
-      // TODO: 跳转到全部应用页面
-      window.open("/apps", "_blank");
-    }, []);
+      navigate("/apps");
+    }, [navigate]);
 
     const selectedMenuItemConfig = useMemo(
       () => featureMenuItems.find((item) => item.id === selectedMenuItem),
