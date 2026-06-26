@@ -48,23 +48,6 @@ function parseMigrationName(file: string) {
     return { timestamp: parseInt(timestampStr, 10), version };
 }
 
-function findProjectRoot(startDir: string): string {
-    let currentDir = startDir;
-    let maxDepth = 10;
-    while (maxDepth > 0) {
-        if (fse.existsSync(path.join(currentDir, "pnpm-workspace.yaml"))) {
-            return currentDir;
-        }
-        const parentDir = path.dirname(currentDir);
-        if (parentDir === currentDir) break;
-        currentDir = parentDir;
-        maxDepth--;
-    }
-    return process.cwd();
-}
-
-const PROJECT_ROOT = findProjectRoot(__dirname);
-
 /**
  * Migration runner
  *
@@ -81,7 +64,7 @@ export class MigrationRunner {
         const dbPackagePath = require.resolve("@buildingai/db");
         const dbDistPath = path.dirname(dbPackagePath);
         this.migrationsDir = path.join(dbDistPath, "migrations");
-        this.versionsDir = path.join(PROJECT_ROOT, "data", "versions");
+        this.versionsDir = path.join(process.cwd(), "data", "versions");
     }
 
     /**

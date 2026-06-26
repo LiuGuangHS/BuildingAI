@@ -73,7 +73,7 @@ export class VersionDetector {
     private readonly packageJsonPath: string;
 
     constructor() {
-        this.versionsDir = path.join(PROJECT_ROOT, "data", "versions");
+        this.versionsDir = path.join(process.cwd(), "data", "versions");
         this.packageJsonPath = path.join(PROJECT_ROOT, "package.json");
     }
 
