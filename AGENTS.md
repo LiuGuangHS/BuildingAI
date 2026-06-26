@@ -202,8 +202,28 @@ EchoFlow 业务插件 devDependencies 最小基线（`catalog:*` 版本由 pnpm-
 | SDK Helper 引用 | 插件内多个文件需要 `safeJsonParse`、`buildDefinedWhere`、URL 校验、provider HTTP、下载器、限流、计费或通知 helper 时，调用方直接从 `@buildingai/extension-sdk`、`@buildingai/extension-sdk/utils/pure` 或主系统公开包导入；不要通过某个插件薄封装文件顺带转口，避免源码可用但公开导出或类型产物断裂。纯解析、序列化、view-model 或测试边界文件优先用 `utils/pure`；已经依赖 Nest/DB/AI 模块的业务 service 可以继续用 SDK 根入口，不为 import 美化制造无意义 churn。 |
 | 模型/配置 JSON 解析 | LLM 或 provider 返回文本、插件前端可编辑 JSON 配置字段需要解析结构化 JSON 时，后端/provider 侧使用 `@buildingai/extension-sdk` 公开的 `safeJsonParse`；纯解析、序列化和 view-model 类文件优先从 `@buildingai/extension-sdk/utils/pure` 引入纯工具，避免为了 JSON/where helper 拉起 Nest/DB/低层 AI provider；Web 侧使用 `@buildingai/stores` 的 `safeJsonParse`。直接 `JSON.parse` 只保留在隔离测试、迁移、脚本或确需原生语法错误且有边界测试覆盖的场景，业务 prompt、审计快照和 provider payload 的 `JSON.stringify` 可保留。 |
 | 依赖声明 | 插件源码直接 import 的运行时包必须在该插件 `package.json` 声明；类型 import 也要声明提供该类型的包。删除模板残留依赖时同步补 manifest 边界测试，避免只在根 workspace 或其他插件依赖里偶然可用。 |
+| Service 继承 | 业务 Service 优先继承 `@buildingai/base` 的 `BaseService<T>`，复用分页、事务包装、通用 CRUD 等已有能力；Controller 优先继承 `BaseController`；不要重复手写分页、`manager.transaction` 包装或错误处理模板。 |
+| 错误处理 | 业务校验失败统一使用 NestJS HTTP 异常（`BadRequestException`、`NotFoundException`、`ForbiddenException` 等），禁止 `throw new Error()` 返回 500；Controller 层禁止用 try/catch 吞掉异常返回 200，应让异常冒泡到全局过滤器。 |
+| DTO 验证 | 所有 DTO 字段必须有 class-validator 装饰器验证；嵌套对象/数组使用 `@ValidateNested({ each: true })` + `@Type()`；字符串 URL 字段用 `@IsUrl({ protocols: ["http","https"], require_protocol: true })`；文本内容字段加 `@MaxLength` 防止超长输入；禁止只用 `@IsString()` 而无长度/格式约束。 |
+
+### 事务与并发控制
+
+| 主题 | 规则 |
+|---|---|
+| 悲观锁超时 | 所有使用 `SELECT ... FOR UPDATE`、`manager.transaction` 包裹的写操作，事务开头必须执行 `await entityManager.query('SET LOCAL lock_timeout = 3000')`，定义文件级常量 `const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000'` 避免魔法字符串散落。 |
+| 任务恢复 | 异步任务（队列、Worker、定时任务）的恢复路径必须在事务内使用悲观锁 + CAS（Compare-And-Swap）二次校验：先 `SELECT ... FOR UPDATE` 锁定记录，再检查 `status === 'PROCESSING' AND updatedAt < staleThreshold`，确认是自己抢到后才更新 `updatedAt` 并入队；防止多实例并发重复入队。 |
+| 处理锁分离 | "处理中锁"（防止并发处理同一记录）与"恢复锁"（判定任务是否 stale 需要恢复）必须使用不同超时时间；处理锁通常 30 分钟，恢复锁通常 5 分钟，不能共用同一阈值。 |
+| 原子计数 | 计数器增减（浏览量、分类文章数、关系值等）必须使用 SQL 原子操作：`increment({ id }, "field", 1)` 或 `set({ field: () => 'GREATEST(field - 1, 0)' })`；禁止先 `find` → 内存改值 → `save` 的 read-modify-write 模式。 |
+| N+1 查询 | 循环内逐条数据库操作必须改为批量 SQL；批量更新分类计数使用 `CASE WHEN id = ? THEN ? ... ELSE 0 END` 单 SQL；关联列表使用 JOIN 或 IN 查询一次性加载；聚合统计使用 `GROUP BY` 替代多次 `COUNT`。 |
+| 事务范围 | AI 调用、HTTP 请求等外部 IO 不得放在长事务内；事务只包裹数据库读写和状态变更；外部调用失败后在事务外处理退款/补偿。 |
+
+### 队列与任务恢复
 
 长流程默认接主系统 `QueueModule`、BullMQ/Redis 或官方队列能力。当前主系统 `QueueModule` 只统一 BullMQ 根配置和默认队列，并导出 `BullModule`；插件自定义业务队列可以在导入 `QueueModule` 后使用 `BullModule.registerQueue()`、`@InjectQueue()`、`@Processor()`、`WorkerHost` 和 `Job` 类型。若未来主系统提供插件队列门面，再迁移到公开 SDK/模块导出；在此之前，不把这种官方 BullMQ 装饰器用法误判为未复用。图像、合同、星盘等付费生成链路不保留进程内 `setTimeout` fallback；入队失败要写业务失败状态并返回可观测错误。
+
+任务恢复必须实现 `onModuleInit` 启动恢复 + `@Cron` 定时 stale 扫描双路径：启动时扫描 PROCESSING 且锁超时的记录重新入队，运行时每 N 分钟定期扫描 stale 任务；恢复入队使用事务+悲观锁+CAS 防止重复入队；Webhook 回调、手动刷新、轮询完成等异步写回路径同样要在锁内校验当前状态，已终态记录不被旧结果覆盖。
+
+### 限流与错误处理
 
 高成本 Web 入口的短窗口请求限流优先复用 `@buildingai/extension-sdk` 的 `ExtensionRateLimitService`，由插件模块注入主系统 Redis 能力；生成、提示词优化、AI 问答、导出或批量操作等入口至少设置秒级和分钟级窗口。业务策略表里的并发数、每日额度或价格组只负责业务资格与成本控制，不能替代入口防刷限流；不要在插件里新建进程内 Map/计时器限流服务。
 

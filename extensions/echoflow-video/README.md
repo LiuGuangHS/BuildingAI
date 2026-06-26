@@ -26,6 +26,10 @@
 | Webhook | ready | Webhook Secret 通过主站 Secret 引用，字段支持 `webhookSecret` / `secret` / `token`。 |
 | 终态保护 | ready | Webhook、轮询、超时扫描和取消写回前重新加锁；已终态记录不被旧对象覆盖。 |
 | 主站通知 | ready | 视频终态通知提交到主站通知中心，由平台多渠道投递。 |
+| 事务锁超时 | ready | 所有写操作事务开头执行 `SET LOCAL lock_timeout = 3000`，通过文件级常量 `LOCK_TIMEOUT` 统一管理（generation.service.ts 和 prompt-optimization.service.ts）。 |
+| 任务恢复 | ready | 实现 `onModuleInit` 启动恢复 + `@Cron("*/5 * * * *")` 定时 stale 扫描双路径，事务内悲观锁+CAS二次校验防止多实例重复入队。 |
+| Service 继承 | ready | GenerationService 继承 BaseService，复用 withTransaction 等通用能力。 |
+| 错误处理 | ready | 业务校验失败使用 HTTP 异常，Controller 层无 try/catch 吞异常。 |
 | 短视频制作 | reserved | Web/Console 均保留页面入口，但当前不是默认上线能力。 |
 | 真实供应商 smoke | pending | 仍需使用真实 Secret 覆盖提交、轮询、Webhook、失败退款和结果转存。 |
 

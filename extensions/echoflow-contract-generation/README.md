@@ -24,6 +24,10 @@
 | 再次审查 | ready | 已生成任务可触发再次审查，写回前校验当前任务状态。 |
 | Word 导出 | ready | 导出任务写回前校验导出状态，避免覆盖其他终态。 |
 | 计费退款 | ready | 使用主系统算力账本，生成前预检、任务入库后预扣、失败按账务事实退款。 |
+| 事务锁超时 | ready | 所有写操作事务开头执行 `SET LOCAL lock_timeout = 3000`，通过文件级常量 `LOCK_TIMEOUT` 统一管理。 |
+| 任务恢复 | ready | 实现 `onModuleInit` 启动恢复扫描，事务内悲观锁+CAS二次校验防止多实例重复入队；Webhook/轮询/导出写回前在锁内校验当前状态，已终态记录不被旧结果覆盖。 |
+| Service 继承 | ready | ContractGenerationService 继承 BaseService，复用 withTransaction 等通用能力。 |
+| 错误处理 | ready | 业务校验失败使用 HTTP 异常，Controller 层无 try/catch 吞异常。 |
 | 队列恢复 | partial | 已有超时恢复和状态抢占逻辑；仍需真实 Redis/Worker smoke。 |
 | 真实 LLM smoke | pending | 需要真实主站模型、Secret、余额和文件存储验证完整链路。 |
 

@@ -30,6 +30,10 @@
 | 模板预设 | ready | Web 可读取模板，Console 可管理模板。 |
 | 无限画布 | ready | 白板草稿保存在本地浏览器，生成结果可整理到画布。 |
 | 局部重绘 | reserved | 旧轻量遮罩画布已下线，后续并入完整画布工作流。 |
+| 事务锁超时 | ready | 所有写操作事务开头执行 `SET LOCAL lock_timeout = 3000`，通过文件级常量 `LOCK_TIMEOUT` 统一管理。 |
+| 任务恢复 | ready | 实现 `onModuleInit` 启动恢复 + `@Cron("*/5 * * * *")` 定时 stale 扫描双路径，事务内悲观锁+CAS二次校验防止多实例重复入队。 |
+| Service 继承 | ready | GenerationService 继承 BaseService，复用 withTransaction 等通用能力。 |
+| 错误处理 | ready | 业务校验失败使用 HTTP 异常，Controller 层无 try/catch 吞异常。 |
 | 真实外部模型 smoke | pending | 需要真实 Secret 覆盖生成、失败退款和结果转存。 |
 
 ## 入口与页面

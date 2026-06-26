@@ -61,6 +61,12 @@
 | 内容包 | ready | `launch-core@0.0.1` / `season-0` manifest 已记录内容范围、seed 策略和幂等键；存档 `worldState.contentPack` 会保存当前内容包快照。 |
 | 内容包运营页 | ready | Console 提供只读内容包面板，展示 manifest、存档覆盖、章节分布、活动状态和运营告警；暂不提供后台改内容开关。 |
 | 正式计费 | ready | 已接入 `ExtensionBillingModule` / `ExtensionBillingService`；今日计划、居民聊天和探索导演价格由 Console 配置，默认价格为 0 时不扣费，真实模型成功且未 fallback 时才以事件 ID 作为 `associationNo` 幂等扣费，失败按账务事实退款。 |
+| Service/Controller 继承 | ready | TownService 继承 BaseService<TownSave>，Web/Console Controller 均继承 BaseController，复用事务包装和通用 CRUD。 |
+| 事务锁超时 | ready | 所有写操作事务开头执行 `SET LOCAL lock_timeout = 3000`，通过文件级常量 `LOCK_TIMEOUT` 统一管理，防止长时间锁等待。 |
+| HTTP 异常 | ready | 业务校验失败统一使用 `BadRequestException` / `NotFoundException`，不再 `throw new Error()` 返回 500；Controller 层无 try/catch 吞异常。 |
+| 天气 Catalog | ready | 天气效果乘数集中在 `catalog/town-weather.catalog.ts`，经营金币、拜访声望、探索体力消耗等数值配置与业务逻辑分离。 |
+| 统计聚合优化 | ready | 统计查询使用 `GROUP BY` 单 SQL 聚合替代多次 COUNT 查询，消除 N+1 查询问题。 |
+| 事件分页 | ready | getEvents 支持 `take` 参数分页，默认 50 条限制，防止全表扫描。 |
 
 ## 入口与页面
 

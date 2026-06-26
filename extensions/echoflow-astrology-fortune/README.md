@@ -31,6 +31,11 @@
 | 计费退款 | ready | 使用主系统算力账本，报告失败按账务事实退款。 |
 | 队列报告 | ready | 报告生成接入主系统 `QueueModule` / BullMQ，不保留进程内 fallback；入队失败、Worker 崩溃和超时回收都会写失败态并记录 `failureType/failureReason`，便于 Console 排查。 |
 | 终态保护 | ready | Worker 崩溃、超时回收和异常失败写回逐条加锁，只允许 `PENDING/PROCESSING` 报告进入失败态，并保留失败归因 metadata。 |
+| 事务锁超时 | ready | 所有写操作事务开头执行 `SET LOCAL lock_timeout = 3000`，通过文件级常量 `LOCK_TIMEOUT` 统一管理。 |
+| 任务恢复 | ready | 实现 `onModuleInit` 启动恢复（recoverInterruptedReports + failStaleReports），事务内悲观锁（`pessimistic_write`）+ CAS 二次校验（`canRecoverAstrologyReport`/`canClaimAstrologyReportForProcessing`）防止多实例重复入队。 |
+| Service 继承 | ready | AstrologyFortuneService 继承 BaseService<AstrologyReport>，复用 withTransaction 等通用能力。 |
+| 错误处理 | ready | 业务校验失败使用 HttpErrorFactory/BadRequestException 抛出 HTTP 异常，Controller 层无 try/catch 吞异常。 |
+| 统计聚合 | ready | Console 概览统计使用 CASE WHEN 单 SQL 聚合（success/failed/pending/processing/favorite），消除 N+1 COUNT 查询。 |
 | 真实 Redis/Worker smoke | pending | 仍需覆盖成功、失败、超时、删除保护和退款异常。 |
 
 ## 入口与页面
