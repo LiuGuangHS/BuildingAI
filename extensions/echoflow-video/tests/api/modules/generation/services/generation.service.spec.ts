@@ -315,3 +315,69 @@ describe("GenerationService media validation", () => {
         expect(mockVideoPollQueue.add).not.toHaveBeenCalled();
     });
 });
+
+describe("GenerationService task recovery", () => {
+    const staleProcessingRecord = {
+        id: "generation-stale",
+        userId: "user-001",
+        taskId: "task-stale",
+        status: VideoGenerationStatus.PROCESSING,
+        updatedAt: new Date(Date.now() - 10 * 60_000),
+        model: "happyhorse-1.0-i2v",
+        billingStatus: "deducted",
+        billingRuleSnapshot: { refundOnFailure: true },
+        progress: 50,
+        statusEvents: [],
+    };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockVideoPollQueue.add.mockResolvedValue(undefined);
+        mockGenerationRepository.manager = {
+            transaction: jest.fn(async (cb: (m: any) => Promise<any>) => {
+                return cb({
+                    query: jest.fn(),
+                    findOne: mockGenerationRepository.findOne,
+                    update: mockGenerationRepository.update,
+                });
+            }),
+        };
+    });
+
+    it("reschedules poll jobs for stale PROCESSING records on startup", async () => {
+        mockGenerationRepository.find.mockResolvedValue([staleProcessingRecord]);
+        mockGenerationRepository.findOne.mockResolvedValue(staleProcessingRecord);
+        mockGenerationRepository.update.mockResolvedValue({ affected: 1 });
+
+        const service = makeService();
+        await (service as any).recoverProcessingTasks();
+
+        expect(mockVideoPollQueue.add).toHaveBeenCalledWith(
+            "poll-video-generation",
+            expect.objectContaining({ id: "generation-stale" }),
+            expect.objectContaining({ delay: 0 }),
+        );
+    });
+
+    it("skips records without taskId during recovery", async () => {
+        mockGenerationRepository.find.mockResolvedValue([{
+            ...staleProcessingRecord,
+            taskId: null,
+        }]);
+
+        const service = makeService();
+        await (service as any).recoverProcessingTasks();
+
+        expect(mockVideoPollQueue.add).not.toHaveBeenCalled();
+    });
+
+    it("does not reschedule if claimPollForRecovery returns null (already claimed)", async () => {
+        mockGenerationRepository.find.mockResolvedValue([staleProcessingRecord]);
+        mockGenerationRepository.findOne.mockResolvedValue(null);
+
+        const service = makeService();
+        await (service as any).recoverProcessingTasks();
+
+        expect(mockVideoPollQueue.add).not.toHaveBeenCalled();
+    });
+});

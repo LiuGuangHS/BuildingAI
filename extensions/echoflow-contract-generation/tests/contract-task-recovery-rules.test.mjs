@@ -61,6 +61,7 @@ test("canRecoverContractTask respects recent recovery locks", () => {
 
 test("canClaimContractTaskForProcessing avoids busy processing records with fresh locks", () => {
     assert.equal(rules.canClaimContractTaskForProcessing(task({ status: "pending" }), nowMs), true);
+    // 1 minute old: within 30-min processing lock → blocked
     assert.equal(
         rules.canClaimContractTaskForProcessing(
             task({ providerMetadata: { processingLockedAt: new Date(nowMs - 60_000).toISOString() } }),
@@ -68,12 +69,34 @@ test("canClaimContractTaskForProcessing avoids busy processing records with fres
         ),
         false,
     );
+    // 10 minutes old: still within 30-min processing lock → blocked
     assert.equal(
         rules.canClaimContractTaskForProcessing(
             task({ providerMetadata: { processingLockedAt: new Date(nowMs - 10 * 60_000).toISOString() } }),
             nowMs,
         ),
-        true,
+        false,
     );
     assert.equal(rules.canClaimContractTaskForProcessing(task({ status: "success" }), nowMs), false);
+});
+
+test("processing lock timeout is 30 minutes, not affected by 5-minute recovery lock", () => {
+    assert.equal(rules.CONTRACT_TASK_PROCESSING_LOCK_MS, 30 * 60 * 1000);
+    assert.equal(rules.CONTRACT_TASK_RECOVERY_LOCK_MS, 5 * 60 * 1000);
+    // 25 minutes old: still within processing lock → blocked
+    assert.equal(
+        rules.canClaimContractTaskForProcessing(
+            task({ providerMetadata: { processingLockedAt: new Date(nowMs - 25 * 60_000).toISOString() } }),
+            nowMs,
+        ),
+        false,
+    );
+    // 35 minutes old: exceeds processing lock → allowed
+    assert.equal(
+        rules.canClaimContractTaskForProcessing(
+            task({ providerMetadata: { processingLockedAt: new Date(nowMs - 35 * 60_000).toISOString() } }),
+            nowMs,
+        ),
+        true,
+    );
 });

@@ -13,6 +13,9 @@ export class BaseService<T = unknown> {
         return callback({
             findOne: (...args: unknown[]) => (this.repository as { findOne?: (...args: unknown[]) => Promise<unknown> })?.findOne?.(...args),
             save: async (_entity: unknown, value: T) => value,
+            query: async () => undefined,
+            update: async () => ({ affected: 1 }),
+            getRepository: () => ({ increment: async () => ({ affected: 1 }), delete: async () => ({ affected: 1 }) }),
         });
     }
 }
@@ -69,6 +72,14 @@ export function JoinColumn() {
 
 export function ManyToOne() {
     return () => undefined;
+}
+
+export function Between<T>(from: T, to: T): [T, T] {
+    return [from, to];
+}
+
+export function LessThanOrEqual<T>(value: T): T {
+    return value;
 }
 
 export function Like(value: string) {
