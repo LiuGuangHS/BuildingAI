@@ -1,7 +1,17 @@
 /* global self, URL, caches, fetch */
 
-const CACHE_NAME = "echoflowai-v2";
-const STATIC_ASSETS = ["/", "/manifest.webmanifest"];
+const CACHE_NAME = "echoflowai-v3";
+const STATIC_ASSETS = [
+  "/",
+  "/manifest.webmanifest",
+  "/pwa-192x192.png",
+  "/pwa-512x512.png",
+  "/apple-touch-icon.png",
+];
+
+function isApiRequest(pathname) {
+  return pathname === "/api" || pathname.startsWith("/api/") || pathname === "/consoleapi" || pathname.startsWith("/consoleapi/");
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
@@ -24,8 +34,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (request.method !== "GET") return;
+  if (url.origin !== self.location.origin) return;
 
-  if (url.pathname.startsWith("/api/")) {
+  if (isApiRequest(url.pathname)) {
     return;
   }
 
@@ -40,8 +51,10 @@ self.addEventListener("fetch", (event) => {
         (cached) =>
           cached ||
           fetch(request).then((res) => {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            if (res.ok) {
+              const clone = res.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            }
             return res;
           }),
       ),
