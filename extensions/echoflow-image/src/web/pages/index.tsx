@@ -1,7 +1,6 @@
 import { useDocumentHead } from "@buildingai/hooks";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
-import { RefreshCcw } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -56,7 +55,7 @@ export default function EchoflowImagePublicPage() {
         isError: historyError,
         refetch: refetchHistory,
     } = useWebGenerationListQuery({ page: 1, pageSize: 6 });
-    const { data: models = [], isLoading: modelsLoading } = useWebImageModelOptionsQuery();
+    const { data: models = [], isLoading: modelsLoading, isError: modelsError } = useWebImageModelOptionsQuery();
     const { data: templateData } = useWebTemplatesQuery({ page: 1, pageSize: 20 });
 
     const createMutation = useWebCreateGenerationMutation();
@@ -156,7 +155,7 @@ export default function EchoflowImagePublicPage() {
                             <p className="truncate text-xs text-muted-foreground">最近作品暂时没有加载，当前生成不受影响。</p>
                         </div>
                         <Button variant="outline" size="sm" onClick={() => refetchHistory()} className="rounded-md">
-                            <RefreshCcw className="size-3.5" />
+                            <span aria-hidden="true" className="text-xs leading-none">↻</span>
                             重试
                         </Button>
                     </div>
@@ -185,7 +184,7 @@ export default function EchoflowImagePublicPage() {
             quickActions={
                 mode === "quick" ? (
                     <Button variant="outline" size="sm" onClick={() => refetchHistory()} className="rounded-md">
-                        <RefreshCcw className="size-4" />
+                        <span aria-hidden="true" className="text-sm leading-none">↻</span>
                         <span className="hidden sm:inline">刷新</span>
                     </Button>
                 ) : null
@@ -197,6 +196,7 @@ export default function EchoflowImagePublicPage() {
                         loading={isGenerating}
                         models={models}
                         modelsLoading={modelsLoading}
+                        modelsError={modelsError}
                         initialValues={reuseValues}
                         templates={templateData?.items ?? []}
                         estimatedPower={estimateMutation.data?.amount}
@@ -225,7 +225,15 @@ export default function EchoflowImagePublicPage() {
             </div>
             {mode === "canvas" && (
                 <Suspense fallback={<CanvasLoading />}>
-                    <CreativeCanvasWorkspace generation={currentGeneration} onReturnToGenerate={() => setMode("quick")} />
+                    <CreativeCanvasWorkspace
+                        generation={currentGeneration}
+                        onReturnToGenerate={() => setMode("quick")}
+                        onContinueFromImage={(values) => {
+                            setReuseValues(values);
+                            setMode("quick");
+                            toast.success("已填入参考图，可继续生成分支");
+                        }}
+                    />
                 </Suspense>
             )}
         </WorkspaceShell>

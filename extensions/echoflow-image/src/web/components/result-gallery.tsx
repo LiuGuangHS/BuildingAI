@@ -68,7 +68,7 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas, var
                                 <ImageIcon className="size-4" />
                             </span>
                             <div className="min-w-0">
-                                <h2 className={cn("truncate font-semibold", isStage ? "text-base" : "text-lg")}>结果舞台</h2>
+                                <h2 className={cn("truncate font-semibold", isStage ? "text-base" : "text-lg")}>生成结果</h2>
                                 <p className="truncate text-xs text-muted-foreground">
                                     {resolvedImages.length > 0
                                         ? `${resolvedImages.length} 张结果，可下载或继续整理到画布`
@@ -148,7 +148,7 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas, var
                             </div>
                             <p className="mt-4 font-semibold">画面还没开始</p>
                             <p className="mt-2 text-sm text-muted-foreground">
-                                输入提示词后提交生成，结果会停在这里等待你挑选。
+                                输入提示词后提交生成，结果会显示在这里。
                             </p>
                             <div className="mt-8 grid w-full max-w-lg grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
                                 {["待开始", "排队中", "生成中", "处理结果"].map((step, index) => (
@@ -194,14 +194,14 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas, var
                                                     />
                                                     <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                                                         {onOpenCanvas && (
-                                                            <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" onClick={onOpenCanvas}>
+                                                            <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="整理到画布" onClick={onOpenCanvas}>
                                                                 <LayoutPanelTop className="size-3.5" />
                                                             </Button>
                                                         )}
-                                                        <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" onClick={() => window.open(src, "_blank", "noopener,noreferrer")}>
+                                                        <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="打开图片" onClick={() => window.open(src, "_blank", "noopener,noreferrer")}>
                                                             <ExternalLink className="size-3.5" />
                                                         </Button>
-                                                        <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" onClick={() => downloadImage(src, `echoflow-image-${generation?.id || "result"}-${index + 1}.png`)}>
+                                                        <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="下载图片" onClick={() => downloadImage(src, `echoflow-image-${generation?.id || "result"}-${index + 1}.png`)}>
                                                             <Download className="size-3.5" />
                                                         </Button>
                                                     </div>
@@ -222,7 +222,7 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas, var
                                                 <p className="line-clamp-2 flex-1 text-xs italic text-muted-foreground">
                                                     &ldquo;{image.revisedPrompt}&rdquo;
                                                 </p>
-                                                <Button size="icon-sm" variant="ghost" className="-mr-1 shrink-0" onClick={() => copyText(image.revisedPrompt)}>
+                                                <Button size="icon-sm" variant="ghost" className="-mr-1 shrink-0" aria-label="复制优化提示词" onClick={() => copyText(image.revisedPrompt)}>
                                                     <Copy className="size-3" />
                                                 </Button>
                                             </div>

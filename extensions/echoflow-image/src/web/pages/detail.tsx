@@ -21,7 +21,7 @@ import {
 import { ImageGenerationBillingStatus, ImageGenerationStatus, type ImageGeneration } from "../services/types/generation";
 
 export default function DetailPage() {
-    useDocumentHead({ title: "AI图像工作台生成详情" });
+    useDocumentHead({ title: "图像工作台生成详情" });
 
     const navigate = useNavigate();
     const { id = "" } = useParams();
@@ -147,6 +147,13 @@ export default function DetailPage() {
                 <Alert variant="destructive">
                     <AlertTitle>生成失败</AlertTitle>
                     <AlertDescription className="whitespace-pre-wrap break-all">{data.errorMessage}</AlertDescription>
+                </Alert>
+            )}
+
+            {data.status === ImageGenerationStatus.SUCCEEDED && data.billingStatus === ImageGenerationBillingStatus.FAILED && (
+                <Alert>
+                    <AlertTitle>扣费异常</AlertTitle>
+                    <AlertDescription>图片已生成成功但扣费失败，请联系管理员处理。</AlertDescription>
                 </Alert>
             )}
 

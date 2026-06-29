@@ -11,7 +11,6 @@ import {
     PublicAiModelService,
     assertPublicHttpUrl,
     buildDefinedWhere,
-    normalizePublicHttpUrl,
     safeJsonParse,
 } from "@buildingai/extension-sdk";
 import { InjectQueue } from "@nestjs/bullmq";
@@ -48,7 +47,6 @@ import {
     IMAGE_PROCESSING_TIMEOUT_MS,
     getResumedImageProgress,
 } from "./image-generation-recovery-rules";
-import { OpenAIImageClient } from "./openai-image-client";
 
 const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
 
@@ -140,7 +138,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
 
         const effectiveConfig = await this.modelConfigService.findEnabledById(dto.modelId);
-        const runtime = await this.modelConfigService.resolveRuntimeEndpoint(effectiveConfig);
         const normalizedRequest = await this.normalizeGenerationRequest(dto, effectiveConfig, userId);
         const normalizedDto = {
             ...dto,
@@ -188,8 +185,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         // If a record with the same requestKey already exists, the save will fail
         // with a unique constraint violation. We catch that and return the existing record.
         // --- Stage 1: Create record with PENDING billing ---
-        const baseURLSummary = this.sanitizeBaseURL(runtime.baseUrl);
-
         const record = this.generationRepository.create({
             userId,
             requestKey: dto.requestKey,
@@ -203,14 +198,14 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             modelId: effectiveConfig.id,
             modelName: effectiveConfig.displayName,
             provider: effectiveConfig.provider,
-            baseURL: baseURLSummary,
+            baseURL: "",
             size: normalizedRequest.size,
             n: normalizedRequest.n,
             quality: normalizedRequest.quality,
             style: normalizedRequest.style,
             responseFormat: normalizedRequest.responseFormat,
-            apiMode: effectiveConfig.requestContract,
-            requestPolicy: effectiveConfig.requestContract,
+            apiMode: "ai-sdk-image",
+            requestPolicy: "ai-sdk-image",
             sourceImages: normalizedRequest.sourceImages,
             maskImage: normalizedRequest.hasMaskImage
                 ? { url: normalizedRequest.maskImageUrl, fileId: dto.maskImageFileId }
@@ -352,7 +347,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
 
         const modelConfig = await this.modelConfigService.findEnabledById(saved.modelId, true);
-        const runtime = await this.modelConfigService.resolveRuntimeEndpoint(modelConfig);
         const modelConfigId = modelConfig.id;
         const policy = await this.policyService.resolvePolicy(modelConfigId);
         const billingRule = await this.billingRuleService.resolveRule(modelConfigId);
@@ -381,7 +375,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         try {
             saved.progress = 30;
             await this.generationRepository.save(saved);
-            const result = await this.generateWithProvider(saved, modelConfig, runtime, policy.maxReferenceImageSizeMb);
+            const result = await this.generateWithProvider(saved, modelConfig, policy.maxReferenceImageSizeMb);
             const storedResult = await this.storeResultImages(saved.id, result.images);
             saved.resultImages = storedResult.images;
             saved.storageFiles = storedResult.storageFiles;
@@ -890,40 +884,50 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     private async generateWithProvider(
         record: ImageGeneration,
         modelConfig: ResolvedImageModelConfig,
-        runtime: { apiKey: string; baseUrl: string },
         maxReferenceImageSizeMb: number,
     ) {
-        const client = new OpenAIImageClient({
-            apiKey: runtime.apiKey,
-            baseURL: runtime.baseUrl,
-        });
-        const referenceImages = await this.resolveReferenceImages(record, maxReferenceImageSizeMb);
-        const maskImage = await this.resolveStoredImage(record.maskImage, maxReferenceImageSizeMb, "遮罩图", record.userId);
+        if (record.sourceImages?.length || record.referenceImageUrl || record.referenceImageFileId || record.maskImage) {
+            throw HttpErrorFactory.badRequest("当前 SDK 图片生成链路暂不支持参考图或局部重绘");
+        }
 
         this.logger.log(
-            `Generating image: model=${modelConfig.model} size=${record.size} n=${record.n} baseURL=${this.sanitizeBaseURL(runtime.baseUrl)}`,
+            `Generating image with SDK: model=${modelConfig.model} size=${record.size} n=${record.n}`,
         );
 
-        return client.generate({
-            model: modelConfig.externalModelId,
+        const result = await this.aiModelService.generateImage(modelConfig.mainModelId, {
             prompt: record.prompt,
-            negativePrompt: record.negativePrompt,
             n: record.n,
-            size: record.size,
-            quality: record.quality,
-            style: record.style,
-            responseFormat: record.responseFormat,
-            outputFormat: record.outputFormat,
-            background: record.background,
-            outputCompression: record.outputCompression,
-            inputFidelity: record.inputFidelity,
-            moderation: record.moderation,
-            seed: record.seed,
-            referenceImages,
-            maskImage,
-            maxReferenceImageBytes: maxReferenceImageSizeMb * 1024 * 1024,
-            requestContract: modelConfig.requestContract,
+            size: record.size as `${number}x${number}`,
+            providerOptions: {
+                openai: {
+                    quality: record.quality,
+                    style: record.style,
+                    output_format: record.outputFormat,
+                },
+            },
         });
+
+        return {
+            images: result.images.map((image) => ({
+                b64Json: image.base64 ?? (image.uint8Array ? Buffer.from(image.uint8Array).toString("base64") : undefined),
+                url: image.url,
+                mimeType: image.mediaType ?? this.mimeTypeForOutputFormat(record.outputFormat),
+            })).filter((image) => image.b64Json || image.url),
+            rawRequest: {
+                model: modelConfig.model,
+                prompt: record.prompt,
+                n: record.n,
+                size: record.size,
+                quality: record.quality,
+                style: record.style,
+                outputFormat: record.outputFormat,
+            },
+            rawResponse: {
+                imageCount: result.images.length,
+                providerMetadata: result.providerMetadata,
+                apiMode: "ai-sdk-image",
+            },
+        };
     }
 
     private buildProviderPrompt(record: ImageGeneration): string {
@@ -1004,7 +1008,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
     private async normalizeGenerationRequest(
         dto: CreateGenerationDto,
-        modelConfig: Pick<ImageModelConfig, "capabilities" | "defaultParams" | "requestContract">,
+        modelConfig: Pick<ImageModelConfig, "capabilities" | "defaultParams">,
         userId: string,
     ) {
         const sourceImages = await this.normalizeSourceImages(dto, userId);
@@ -1047,7 +1051,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
 
     private validateAllowedParams(
         dto: CreateGenerationDto,
-        modelConfig: Pick<ImageModelConfig, "allowedParams" | "capabilities" | "defaultParams" | "requestContract">,
+        modelConfig: Pick<ImageModelConfig, "allowedParams" | "capabilities" | "defaultParams">,
         sourceImages: ImageSourceRecord[],
     ) {
         const allowed = modelConfig.allowedParams ?? {};
@@ -1087,21 +1091,6 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
         if (dto.inputFidelity && !capabilities.inputFidelity) {
             throw HttpErrorFactory.badRequest("该模型未启用输入保真度参数");
-        }
-        if (modelConfig.requestContract === "responses" && (dto.maskImageUrl || dto.maskImageFileId)) {
-            throw HttpErrorFactory.badRequest("Responses API 暂不支持局部重绘，请改用 Images API 模式");
-        }
-        if (modelConfig.requestContract === "responses" && (dto.n ?? 1) > 1) {
-            throw HttpErrorFactory.badRequest("Responses API 暂不支持单次生成多张图片");
-        }
-        if (modelConfig.requestContract === "responses" && dto.seed) {
-            throw HttpErrorFactory.badRequest("Responses API 暂不支持 seed 参数");
-        }
-        if (modelConfig.requestContract === "responses" && dto.inputFidelity) {
-            throw HttpErrorFactory.badRequest("Responses API 暂不支持输入保真度参数");
-        }
-        if (modelConfig.requestContract === "responses" && dto.outputCompression !== undefined) {
-            throw HttpErrorFactory.badRequest("Responses API 暂不支持输出压缩参数");
         }
         if (size && allowed.sizes?.length && !allowed.sizes.includes(size)) {
             throw HttpErrorFactory.badRequest("所选尺寸不在该模型允许范围内");
@@ -1349,6 +1338,12 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         if (mimeType && ["image/png", "image/jpeg", "image/webp"].includes(mimeType)) {
             return mimeType;
         }
+        return "image/png";
+    }
+
+    private mimeTypeForOutputFormat(format?: string): string {
+        if (format === "jpeg") return "image/jpeg";
+        if (format === "webp") return "image/webp";
         return "image/png";
     }
 

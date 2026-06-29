@@ -1,11 +1,22 @@
+import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import {
-    assertAbsentDeps,
-    assertDeclaredDeps,
-    mergePackageDeps,
-} from "../../test-utils/manifest-boundary.mjs";
+function mergePackageDeps(pkg) {
+    return { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+}
+
+function assertDeclaredDeps(deps, entries) {
+    for (const [name, message] of entries) {
+        assert.ok(deps[name], message);
+    }
+}
+
+function assertAbsentDeps(deps, names) {
+    for (const name of names) {
+        assert.equal(deps[name], undefined, `${name} should not be declared`);
+    }
+}
 
 const PACKAGE_FILE = new URL("../package.json", import.meta.url);
 

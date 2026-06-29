@@ -21,7 +21,7 @@ import {
 import { ImageGenerationBillingStatus, ImageGenerationStatus } from "../../services/types/generation";
 
 export default function DetailPage() {
-    useDocumentHead({ title: "AI图像工作台生成详情" });
+    useDocumentHead({ title: "图像工作台生成详情" });
 
     const navigate = useNavigate();
     const { id = "" } = useParams();

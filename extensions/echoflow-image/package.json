@@ -2,7 +2,7 @@
     "name": "echoflow-image",
     "version": "0.0.1",
     "description": "图像生成与画布创作插件，支持 responses/images/openai-compatible-images 多协议、提示词润色、tldraw 无限画布与模型级计费。",
-    "author": "EchoflowAI Teams",
+    "author": "EchoFlowAI Team",
     "private": true,
     "main": "./manifest.json",
     "module": "./manifest.json",

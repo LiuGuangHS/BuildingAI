@@ -18,7 +18,13 @@ const WEB_SERVICES_GENERATION_FILE = new URL("../src/web/services/web/generation
 const ROUTES_FILE = new URL("../src/web/routes.tsx", import.meta.url);
 const CONSOLE_MODELS_FILE = new URL("../src/web/pages/console/models.tsx", import.meta.url);
 const WEB_CONTROLLER_FILE = new URL("../src/api/modules/generation/controllers/web/generation.web.controller.ts", import.meta.url);
+const MODEL_OPTIONS_WEB_CONTROLLER_FILE = new URL("../src/api/modules/config/controllers/web/model-options.web.controller.ts", import.meta.url);
 const GENERATION_MODULE_FILE = new URL("../src/api/modules/generation/generation.module.ts", import.meta.url);
+const WORKSPACE_SHELL_FILE = new URL("../src/web/components/workspace/workspace-shell.tsx", import.meta.url);
+const MODE_SWITCH_FILE = new URL("../src/web/components/workspace/mode-switch.tsx", import.meta.url);
+const REFERENCE_UPLOAD_FILE = new URL("../src/web/components/reference-image-upload.tsx", import.meta.url);
+const VITE_CONFIG_FILE = new URL("../vite.config.ts", import.meta.url);
+const BUILD_WEB_SCRIPT_FILE = new URL("../scripts/build-web.mjs", import.meta.url);
 const PACKAGE_FILE = new URL("../package.json", import.meta.url);
 
 function extractMethod(source, name) {
@@ -246,5 +252,40 @@ test("image console JSON inputs reuse the shared safe parser instead of raw JSON
         assert.match(source, /@buildingai\/stores/);
         assert.match(source, /safeJsonParse/);
         assert.doesNotMatch(source, /JSON\.parse\(/);
+    }
+});
+
+
+test("image web model options keep a single public endpoint", async () => {
+    const [generationController, modelOptionsController] = await Promise.all([
+        readFile(WEB_CONTROLLER_FILE, "utf8"),
+        readFile(MODEL_OPTIONS_WEB_CONTROLLER_FILE, "utf8"),
+    ]);
+
+    assert.doesNotMatch(generationController, /@Get\("options\/models"\)/);
+    assert.match(modelOptionsController, /@ExtensionWebController\("model-options"\)/);
+    assert.match(modelOptionsController, /listEnabledForWeb\(\)/);
+});
+
+
+test("image web build config does not duplicate pnpm aliases in the build script", async () => {
+    const [viteSource, buildScriptSource] = await Promise.all([
+        readFile(VITE_CONFIG_FILE, "utf8"),
+        readFile(BUILD_WEB_SCRIPT_FILE, "utf8"),
+    ]);
+
+    assert.match(viteSource, /tsconfigPaths:\s*false/);
+    assert.doesNotMatch(viteSource, /tsconfigPaths:\s*true/);
+    assert.match(buildScriptSource, /loadConfigFromFile/);
+    assert.match(buildScriptSource, /mergeConfig/);
+    assert.doesNotMatch(buildScriptSource, /\.pnpm\/node_modules/);
+    assert.doesNotMatch(buildScriptSource, /alias:\s*\[/);
+});
+
+
+test("image default shell and form avoid static lucide imports", async () => {
+    for (const file of [WEB_INDEX_FILE, WORKSPACE_SHELL_FILE, MODE_SWITCH_FILE, GENERATION_FORM_FILE, REFERENCE_UPLOAD_FILE]) {
+        const source = await readFile(file, "utf8");
+        assert.doesNotMatch(source, /lucide-react/);
     }
 });

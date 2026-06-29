@@ -25,6 +25,14 @@ test("web image generation type does not expose endpoint base URL", async () => 
     assert.equal(consoleType.includes("baseURL"), true);
 });
 
+
+test("image web generation request types do not keep estimate-only source metadata", async () => {
+    const source = await readFile(TYPES_FILE, "utf8");
+
+    assert.doesNotMatch(extractInterface(source, "ImageModelOption"), /\bsource\??:/);
+    assert.doesNotMatch(extractInterface(source, "CreateGenerationParams"), /\bsource\??:/);
+});
+
 test("shared image history list does not depend on console generation type", async () => {
     const source = await readFile(HISTORY_LIST_FILE, "utf8");
 

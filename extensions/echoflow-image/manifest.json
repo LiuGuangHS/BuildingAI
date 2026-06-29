@@ -1,14 +1,14 @@
 {
     "identifier": "echoflow-image",
-    "name": "EchoFlow AI 绘画",
+    "name": "图像工作台",
     "type": "application",
     "version": "0.0.1",
-    "description": "提示词润色、参考图生成、无限画布灵感白板与多协议图像模型接入的 AI 绘画工作台。",
+    "description": "生成、编辑和优化图片，适合封面、海报与营销素材。",
     "icon": "/echoflow-image/static/logo.png",
     "homepage": "",
     "author": {
         "avatar": "/echoflow-image/static/logo.png",
-        "name": "EchoflowAI Teams",
+        "name": "EchoFlowAI Team",
         "homepage": ""
     },
     "changelog": [],

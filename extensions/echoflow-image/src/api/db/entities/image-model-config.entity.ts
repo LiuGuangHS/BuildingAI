@@ -36,47 +36,22 @@ export interface ImageModelAllowedParams {
     maxImages?: number;
 }
 
-export type ImageRequestContract = "responses" | "images" | "openai-compatible-images" | "provider-native";
-
-export interface ImageModelEndpoint {
-    id?: string;
-    name: string;
-    secretId?: string;
-    secretName?: string;
-    baseUrlOverride?: string;
-    enabled: boolean;
-    priority: number;
-    requestTimeoutMs?: number;
-    testTimeoutMs?: number;
-    maxRetries?: number;
-    retryDelayMs?: number;
-}
-
 @ExtensionEntity()
 export class ImageModelConfig {
     @PrimaryGeneratedColumn("uuid")
     id: string;
 
+    @Column({ type: "uuid", comment: "Main-system text-to-image model ID" })
+    mainModelId: string;
+
     @Column({ type: "uuid", nullable: true, comment: "Main-system LLM model ID for prompt enhancement" })
     promptEnhancerModelId?: string | null;
 
-    @Column({ type: "varchar", length: 50, default: "echoflow-api", comment: "Provider identifier" })
-    provider: string;
+    @Column({ type: "varchar", length: 120, nullable: true, comment: "Display name override" })
+    displayNameOverride?: string | null;
 
-    @Column({ type: "varchar", length: 100, unique: true, comment: "Product model identifier" })
-    model: string;
-
-    @Column({ type: "varchar", length: 100, comment: "Upstream model identifier" })
-    externalModelId: string;
-
-    @Column({ type: "varchar", length: 50, default: "responses", comment: "Request contract" })
-    requestContract: ImageRequestContract;
-
-    @Column({ type: "varchar", length: 120, comment: "Display name" })
-    displayName: string;
-
-    @Column({ type: "text", nullable: true, comment: "Description" })
-    description?: string;
+    @Column({ type: "text", nullable: true, comment: "Description override" })
+    descriptionOverride?: string | null;
 
     @Column({ type: "boolean", default: true, comment: "Whether enabled for web users" })
     enabled: boolean;
@@ -92,9 +67,6 @@ export class ImageModelConfig {
 
     @Column({ type: "jsonb", default: () => "'{}'", comment: "Allowed generation params" })
     allowedParams: ImageModelAllowedParams;
-
-    @Column({ type: "jsonb", default: () => "'[]'", comment: "Model-level API endpoints" })
-    endpoints: ImageModelEndpoint[];
 
     @Column({ type: "int", default: 0, comment: "Sort order" })
     sortOrder: number;

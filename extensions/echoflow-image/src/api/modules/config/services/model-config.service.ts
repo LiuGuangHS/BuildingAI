@@ -1,43 +1,29 @@
 import { BaseService } from "@buildingai/base";
-import { SecretService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
-import { Repository } from "@buildingai/db/typeorm";
+import { In, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import {
-    PublicAiModelService,
-    assertPublicHttpUrl,
-    normalizePublicHttpUrl,
-    resolveProviderEndpointCredential,
-} from "@buildingai/extension-sdk";
+import { PublicAiModelService } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 
 import { ImageBillingRule } from "../../../db/entities/image-billing-rule.entity";
 import { ImageGeneration } from "../../../db/entities/image-generation.entity";
 import {
     ImageModelConfig,
-    type ImageModelCapabilities,
     type ImageModelAllowedParams,
+    type ImageModelCapabilities,
     type ImageModelDefaultParams,
-    type ImageModelEndpoint,
-    type ImageRequestContract,
 } from "../../../db/entities/image-model-config.entity";
 import { ImagePolicyConfig } from "../../../db/entities/image-policy-config.entity";
-import { CreateModelConfigDto, QueryModelConfigDto, UpdateModelConfigDto, ImageModelEndpointDto } from "../dto";
-import {
-    BUILT_IN_IMAGE_MODEL_CONFIGS,
-    DEFAULT_IMAGE_GATEWAY_BASE_URL,
-    getBuiltInImageModel,
-    type BuiltInImageModelConfig,
-} from "./image-model-catalog";
+import { CreateModelConfigDto, QueryModelConfigDto, UpdateModelConfigDto } from "../dto";
 
 export interface ResolvedImageModelConfig {
     id: string;
+    mainModelId: string;
     promptEnhancerModelId?: string | null;
     provider: string;
+    providerName: string;
     model: string;
-    externalModelId: string;
-    requestContract: ImageRequestContract;
     displayName: string;
     description?: string;
     enabled: boolean;
@@ -45,9 +31,37 @@ export interface ResolvedImageModelConfig {
     capabilities: ImageModelCapabilities;
     defaultParams: ImageModelDefaultParams;
     allowedParams: ImageModelAllowedParams;
-    endpoints: ImageModelEndpoint[];
     sortOrder: number;
 }
+
+const DEFAULT_CAPABILITIES: ImageModelCapabilities = {
+    textToImage: true,
+    imageToImage: false,
+    mask: false,
+    multiReference: false,
+    seed: false,
+    negativePrompt: false,
+    outputFormat: true,
+    background: false,
+    moderation: false,
+    inputFidelity: false,
+};
+
+const DEFAULT_PARAMS: ImageModelDefaultParams = {
+    size: "1024x1024",
+    quality: "standard",
+    n: 1,
+    responseFormat: "b64_json",
+    outputFormat: "png",
+};
+
+const DEFAULT_ALLOWED_PARAMS: ImageModelAllowedParams = {
+    sizes: ["1024x1024", "1024x1536", "1536x1024"],
+    qualities: ["standard", "hd"],
+    styles: ["vivid", "natural"],
+    outputFormats: ["png", "jpeg", "webp"],
+    maxImages: 1,
+};
 
 @Injectable()
 export class ModelConfigService extends BaseService<ImageModelConfig> {
@@ -62,7 +76,6 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         private readonly policyRepository: Repository<ImagePolicyConfig>,
         @InjectRepository(ImageGeneration)
         private readonly generationRepository: Repository<ImageGeneration>,
-        private readonly secretService: SecretService,
         private readonly publicAiModelService: PublicAiModelService,
     ) {
         super(modelConfigRepository);
@@ -72,23 +85,25 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         const page = Math.max(Number(query.page) || 1, 1);
         const pageSize = Math.min(Math.max(Number(query.pageSize) || 20, 1), 100);
         const keyword = query.keyword?.trim().toLowerCase();
-        const items = (await this.ensureDefaultModelConfigs())
-            .filter((config) => query.enabled === undefined || config.enabled === query.enabled)
-            .filter((config) => {
+        const configsByModelId = await this.getConfigsByMainModelId();
+        const items = (await this.publicAiModelService.listActiveImageModels(200))
+            .map((model) => this.toOperationalView(configsByModelId.get(model.id), model))
+            .filter((item) => query.enabled === undefined || item.enabled === query.enabled)
+            .filter((item) => {
                 if (!keyword) return true;
                 return [
-                    config.displayName,
-                    config.description,
-                    config.model,
-                    config.provider,
+                    item.displayName,
+                    item.description,
+                    item.model,
+                    item.provider,
+                    item.providerName,
                 ].some((field) => field?.toLowerCase().includes(keyword));
             })
             .sort((left, right) => {
                 const sortDiff = (right.sortOrder ?? 0) - (left.sortOrder ?? 0);
                 if (sortDiff !== 0) return sortDiff;
                 return String(right.createdAt ?? "").localeCompare(String(left.createdAt ?? ""));
-            })
-            .map((config) => this.toOperationalView(config));
+            });
         const total = items.length;
         const start = (page - 1) * pageSize;
         return {
@@ -101,43 +116,38 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     }
 
     async listEnabledForWeb() {
-        const configs = await this.ensureDefaultModelConfigs();
+        const configs = await this.modelConfigRepository.find({
+            where: { enabled: true, visibleToUser: true } as FindOptionsWhere<ImageModelConfig>,
+        });
+        const models = await this.publicAiModelService.listActiveImageModels(200);
+        const modelsById = new Map(models.map((model) => [model.id, model]));
         return configs
-            .filter((config) => config.enabled && config.visibleToUser)
-            .filter((config) => this.hasUsableEndpoint(this.toResolvedConfig(config)))
-            .sort((left, right) => (right.sortOrder ?? 0) - (left.sortOrder ?? 0))
-            .map((config) => this.toWebOption(this.toResolvedConfig(config)));
+            .map((config) => {
+                const model = modelsById.get(config.mainModelId);
+                return model ? this.toWebOption(this.toResolvedConfig(config, model)) : null;
+            })
+            .filter((item): item is NonNullable<typeof item> => Boolean(item));
     }
 
     async getConfigCompleteness() {
-        await this.ensureDefaultModelConfigs();
+        const models = await this.publicAiModelService.listActiveImageModels(200);
         const configs = await this.modelConfigRepository.find();
-        const configuredModels = new Set(configs.map((config) => config.model));
-        const missingModels = BUILT_IN_IMAGE_MODEL_CONFIGS
-            .filter((config) => !configuredModels.has(config.model))
-            .map((config) => config.model);
+        const configuredModelIds = new Set(configs.map((config) => config.mainModelId));
         return {
-            expected: BUILT_IN_IMAGE_MODEL_CONFIGS.length,
-            configured: configs.length,
-            missingModels,
-            complete: missingModels.length === 0,
+            expected: models.length,
+            configured: models.filter((model) => configuredModelIds.has(model.id)).length,
+            missingModels: models.filter((model) => !configuredModelIds.has(model.id)).map((model) => model.model),
+            complete: models.every((model) => configuredModelIds.has(model.id)),
         };
     }
 
     async findEnabledById(id: string, includeHidden = false): Promise<ResolvedImageModelConfig> {
-        await this.ensureDefaultModelConfigs();
-        const config = await this.modelConfigRepository.findOne({
-            where: { id } as FindOptionsWhere<ImageModelConfig>,
-        });
-        if (!config) {
-            throw HttpErrorFactory.badRequest(`不支持的图像模型配置: ${id}`);
-        }
+        const config = await this.findByIdOrFail(id);
         if (!config.enabled || (!includeHidden && !config.visibleToUser)) {
             throw HttpErrorFactory.badRequest(`图像模型配置已在管理后台禁用: ${id}`);
         }
-        const resolved = this.toResolvedConfig(config);
-        this.pickRuntimeEndpoint(resolved);
-        return resolved;
+        const model = await this.getImageModelOrFail(config.mainModelId);
+        return this.toResolvedConfig(config, model);
     }
 
     async findEnabledByIdForAdmin(id: string): Promise<ResolvedImageModelConfig> {
@@ -156,16 +166,27 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
     }
 
     async createConfig(dto: CreateModelConfigDto) {
-        void dto;
-        throw HttpErrorFactory.badRequest("图像模型由插件内置目录提供，请调整启用、可见性、排序、默认参数和接入点");
+        await this.ensureRuntimeSchema();
+        const mainModelId = dto.mainModelId?.trim();
+        if (!mainModelId) {
+            throw HttpErrorFactory.badRequest("请选择主站图片模型");
+        }
+        const model = await this.getImageModelOrFail(mainModelId);
+        const existing = await this.modelConfigRepository.findOne({
+            where: { mainModelId } as FindOptionsWhere<ImageModelConfig>,
+        });
+        const config = existing ?? this.modelConfigRepository.create({ mainModelId });
+        Object.assign(config, await this.normalizeOperationalConfig(dto, config));
+        const saved = await this.modelConfigRepository.save(config);
+        return this.toOperationalView(saved, model);
     }
 
     async updateConfig(id: string, dto: UpdateModelConfigDto) {
         const config = await this.findByIdOrFail(id);
-        this.assertSupportedModelConfig(config.model);
+        const model = await this.getImageModelOrFail(config.mainModelId);
         Object.assign(config, await this.normalizeOperationalConfig(dto, config));
         const saved = await this.modelConfigRepository.save(config);
-        return this.toOperationalView(saved);
+        return this.toOperationalView(saved, model);
     }
 
     async listAvailableLlmModels() {
@@ -182,285 +203,152 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             }));
     }
 
-    async testEndpoint(id: string, endpointDto: ImageModelEndpointDto) {
-        const config = await this.findByIdOrFail(id);
-        this.assertSupportedModelConfig(config.model);
-        if (!config.enabled) {
-            throw HttpErrorFactory.badRequest("图像模型配置已禁用，请先启用后再测试接入点");
-        }
-        const resolved = this.toResolvedConfig(config);
-        const [endpoint] = await this.normalizeEndpointConfigsForSave([endpointDto], config.endpoints ?? []);
-        const credential = await this.resolveEndpointCredential(endpoint);
-        const { OpenAIImageClient } = await import("../../generation/services/openai-image-client");
-        await new OpenAIImageClient({ apiKey: credential.apiKey, baseURL: credential.baseUrl }).testConnection(resolved.externalModelId, resolved.requestContract);
-        return { success: true, message: "接入点配置可用" };
-    }
-
     async deleteConfig(id: string) {
-        void id;
-        throw HttpErrorFactory.badRequest("内置图像模型不能删除，请使用停用或隐藏");
-    }
-
-    pickRuntimeEndpoint(config: ResolvedImageModelConfig): ImageModelEndpoint {
-        const endpoint = (config.endpoints ?? [])
-            .filter((item) => item.enabled && item.secretId)
-            .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0))[0];
-        if (!endpoint) {
-            throw HttpErrorFactory.badRequest(`模型 ${config.displayName} 未绑定可用主站密钥`);
-        }
-        return endpoint;
-    }
-
-    async resolveEndpointCredential(endpoint: ImageModelEndpoint) {
-        return resolveProviderEndpointCredential(endpoint, {
-            defaultBaseUrl: DEFAULT_IMAGE_GATEWAY_BASE_URL,
-            label: "Base URL",
-            secretConfigResolver: (secretId) => this.secretService.getConfigKeyValuePairs(secretId),
-        });
-    }
-
-    async resolveRuntimeEndpoint(config: ResolvedImageModelConfig) {
-        const endpoint = this.pickRuntimeEndpoint(config);
-        const credential = await this.resolveEndpointCredential(endpoint);
-        return { endpoint, ...credential };
+        await this.findByIdOrFail(id);
+        await this.assertConfigUnused(id);
+        await this.modelConfigRepository.delete(id);
+        return { success: true, message: "删除成功" };
     }
 
     toWebOption(config: ResolvedImageModelConfig | ImageModelConfig) {
+        const resolved = "mainModelId" in config && "providerName" in config
+            ? config as ResolvedImageModelConfig
+            : undefined;
+        if (!resolved) {
+            throw HttpErrorFactory.badRequest("图像模型配置缺少主站模型信息");
+        }
         return {
-            id: config.id,
-            name: config.displayName,
-            model: config.model,
+            id: resolved.id,
+            name: resolved.displayName,
+            model: resolved.model,
             modelType: "image",
-            description: config.description ?? "",
+            description: resolved.description ?? "",
             mediaTypes: ["image"],
-            capabilities: this.enforceProtocolCapabilities(config.requestContract, config.capabilities ?? {}),
-            defaultParams: config.defaultParams ?? {},
+            capabilities: resolved.capabilities ?? {},
+            defaultParams: resolved.defaultParams ?? {},
+            allowedParams: resolved.allowedParams ?? {},
         };
     }
 
-    private async ensureDefaultModelConfigs(): Promise<ImageModelConfig[]> {
-        await this.ensureRuntimeSchema();
-        const existing = await this.modelConfigRepository.find({
-            where: {} as FindOptionsWhere<ImageModelConfig>,
-        });
-        const supportedExisting = existing.filter((config) => this.isSupportedModelConfig(config.model));
-        const existingModels = new Set(supportedExisting.map((config) => config.model));
-        const missing = BUILT_IN_IMAGE_MODEL_CONFIGS.filter((config) => !existingModels.has(config.model));
-        if (missing.length === 0) return supportedExisting;
-
-        const created = await this.modelConfigRepository.save(
-            missing.map((config) => this.modelConfigRepository.create({
-                promptEnhancerModelId: null,
-                provider: config.provider,
-                model: config.model,
-                externalModelId: config.externalModelId,
-                requestContract: config.requestContract,
-                displayName: config.displayName,
-                description: config.description,
-                enabled: config.enabled,
-                visibleToUser: config.visibleToUser,
-                capabilities: this.enforceProtocolCapabilities(config.requestContract, config.capabilities),
-                defaultParams: config.defaultParams,
-                allowedParams: config.allowedParams,
-                endpoints: this.normalizeEndpointConfigs(config.endpoints, []),
-                sortOrder: config.sortOrder,
-            })),
-        );
-        const createdItems = Array.isArray(created) ? created : [created];
-        return [...supportedExisting, ...createdItems];
-    }
-
     private async ensureRuntimeSchema(): Promise<void> {
-        if (!this.modelConfigRepository.manager?.query) {
-            return;
-        }
+        if (!this.modelConfigRepository.manager?.query) return;
         this.schemaReadyPromise ??= (async () => {
             await this.modelConfigRepository.manager.query(`
                 ALTER TABLE "echoflow_image"."image_model_config"
+                ADD COLUMN IF NOT EXISTS "main_model_id" uuid,
+                ADD COLUMN IF NOT EXISTS "display_name_override" varchar(120),
+                ADD COLUMN IF NOT EXISTS "description_override" text,
                 ADD COLUMN IF NOT EXISTS "prompt_enhancer_model_id" uuid,
-                ADD COLUMN IF NOT EXISTS "provider" varchar(50) NOT NULL DEFAULT 'echoflow-api',
-                ADD COLUMN IF NOT EXISTS "model" varchar(100),
-                ADD COLUMN IF NOT EXISTS "external_model_id" varchar(100) NOT NULL DEFAULT '',
-                ADD COLUMN IF NOT EXISTS "request_contract" varchar(50) NOT NULL DEFAULT 'responses',
                 ADD COLUMN IF NOT EXISTS "visible_to_user" boolean NOT NULL DEFAULT true,
-                ADD COLUMN IF NOT EXISTS "endpoints" jsonb NOT NULL DEFAULT '[]'
+                ADD COLUMN IF NOT EXISTS "capabilities" jsonb NOT NULL DEFAULT '{}',
+                ADD COLUMN IF NOT EXISTS "default_params" jsonb NOT NULL DEFAULT '{}',
+                ADD COLUMN IF NOT EXISTS "allowed_params" jsonb NOT NULL DEFAULT '{}',
+                ADD COLUMN IF NOT EXISTS "sort_order" int NOT NULL DEFAULT 0
             `);
             await this.modelConfigRepository.manager.query(`
-                ALTER TABLE "echoflow_image"."image_model_config"
-                ALTER COLUMN "prompt_enhancer_model_id" DROP NOT NULL
-            `);
-            await this.modelConfigRepository.manager.query(`
-                CREATE UNIQUE INDEX IF NOT EXISTS "uq_image_model_config_model"
-                ON "echoflow_image"."image_model_config" ("model")
-                WHERE "model" IS NOT NULL
+                CREATE UNIQUE INDEX IF NOT EXISTS "uq_image_model_config_main_model"
+                ON "echoflow_image"."image_model_config" ("main_model_id")
+                WHERE "main_model_id" IS NOT NULL
             `);
         })();
         await this.schemaReadyPromise;
     }
 
     private async normalizeOperationalConfig(
-        dto: UpdateModelConfigDto,
+        dto: CreateModelConfigDto | UpdateModelConfigDto,
         existing?: ImageModelConfig,
     ) {
-        const defaultConfig = getBuiltInImageModel(existing?.model ?? "");
-        if (!existing || !defaultConfig) {
-            throw HttpErrorFactory.badRequest("内置图像模型配置不存在");
-        }
         const promptEnhancerModelId = dto.promptEnhancerModelId === null
             ? null
-            : dto.promptEnhancerModelId?.trim() || existing.promptEnhancerModelId || null;
+            : dto.promptEnhancerModelId?.trim() || existing?.promptEnhancerModelId || null;
         if (promptEnhancerModelId) {
             await this.assertPromptEnhancerModelUsable(promptEnhancerModelId);
         }
-
         return {
+            mainModelId: existing?.mainModelId ?? dto.mainModelId!,
             promptEnhancerModelId,
-            provider: defaultConfig.provider,
-            model: defaultConfig.model,
-            externalModelId: defaultConfig.externalModelId,
-            requestContract: defaultConfig.requestContract,
-            displayName: dto.displayName ?? existing.displayName,
-            description: dto.description ?? existing.description,
-            enabled: dto.enabled ?? existing.enabled ?? true,
-            visibleToUser: dto.visibleToUser ?? existing.visibleToUser ?? true,
-            capabilities: this.enforceProtocolCapabilities(defaultConfig.requestContract, defaultConfig.capabilities),
+            displayNameOverride: dto.displayNameOverride ?? dto.displayName ?? existing?.displayNameOverride ?? null,
+            descriptionOverride: dto.descriptionOverride ?? dto.description ?? existing?.descriptionOverride ?? null,
+            enabled: dto.enabled ?? existing?.enabled ?? true,
+            visibleToUser: dto.visibleToUser ?? existing?.visibleToUser ?? true,
+            capabilities: {
+                ...DEFAULT_CAPABILITIES,
+                ...(existing?.capabilities ?? {}),
+                ...(dto.capabilities ?? {}),
+            },
             defaultParams: {
-                ...defaultConfig.defaultParams,
-                ...(existing.defaultParams ?? {}),
+                ...DEFAULT_PARAMS,
+                ...(existing?.defaultParams ?? {}),
                 ...(dto.defaultParams ?? {}),
             },
             allowedParams: {
-                ...defaultConfig.allowedParams,
-                ...(existing.allowedParams ?? {}),
+                ...DEFAULT_ALLOWED_PARAMS,
+                ...(existing?.allowedParams ?? {}),
                 ...(dto.allowedParams ?? {}),
             },
-            endpoints: await this.normalizeEndpointConfigsForSave(dto.endpoints, existing.endpoints ?? []),
-            sortOrder: dto.sortOrder ?? existing.sortOrder ?? defaultConfig.sortOrder,
+            sortOrder: dto.sortOrder ?? existing?.sortOrder ?? 0,
         };
     }
 
-    private normalizeEndpointConfigs(
-        endpoints: ImageModelEndpointDto[] | undefined,
-        existing: ImageModelEndpoint[],
-    ): ImageModelEndpoint[] {
-        const source = endpoints?.length ? endpoints : existing;
-        return source.map((endpoint, index) => ({
-            id: endpoint.id || `endpoint-${index + 1}`,
-            name: endpoint.name || `接入点 ${index + 1}`,
-            secretId: endpoint.secretId?.trim() || undefined,
-            secretName: endpoint.secretName?.trim() || undefined,
-            baseUrlOverride: endpoint.baseUrlOverride
-                ? normalizePublicHttpUrl(endpoint.baseUrlOverride, { label: "Base URL" })
-                : existing[index]?.baseUrlOverride,
-            enabled: endpoint.enabled ?? index === 0,
-            priority: Number(endpoint.priority ?? 100 - index),
-            requestTimeoutMs: Number(endpoint.requestTimeoutMs ?? 120000),
-            testTimeoutMs: Number(endpoint.testTimeoutMs ?? 15000),
-            maxRetries: Number(endpoint.maxRetries ?? 2),
-            retryDelayMs: Number(endpoint.retryDelayMs ?? 1000),
-        }));
+    private async getConfigsByMainModelId() {
+        await this.ensureRuntimeSchema();
+        const configs = await this.modelConfigRepository.find();
+        return new Map(configs.map((config) => [config.mainModelId, config]));
     }
 
-    private async normalizeEndpointConfigsForSave(
-        endpoints: ImageModelEndpointDto[] | undefined,
-        existing: ImageModelEndpoint[],
-    ): Promise<ImageModelEndpoint[]> {
-        const normalized = this.normalizeEndpointConfigs(endpoints, existing);
-        await Promise.all(
-            normalized
-                .filter((endpoint) => endpoint.baseUrlOverride)
-                .map((endpoint) => assertPublicHttpUrl(endpoint.baseUrlOverride!, { label: "Base URL" })),
-        );
-        return normalized;
-    }
-
-    private isSupportedModelConfig(model: string) {
-        return Boolean(getBuiltInImageModel(model));
-    }
-
-    private assertSupportedModelConfig(model: string) {
-        if (!this.isSupportedModelConfig(model)) {
-            throw HttpErrorFactory.badRequest("不支持的内置图像模型");
+    private async getImageModelOrFail(modelId: string) {
+        const model = await this.publicAiModelService.getModelInfo(modelId);
+        if (model.modelType !== "text-to-image" || model.isActive === false || model.provider?.isActive === false) {
+            throw HttpErrorFactory.badRequest("主站图片模型不可用");
         }
+        return model;
     }
 
-    private enforceProtocolCapabilities(
-        requestContract: ImageRequestContract,
-        capabilities: ImageModelCapabilities,
-    ): ImageModelCapabilities {
-        if (requestContract === "responses") {
-            return {
-                ...capabilities,
-                mask: false,
-            };
-        }
-        if (requestContract === "images") {
-            return {
-                ...capabilities,
-                imageToImage: false,
-                mask: false,
-                multiReference: false,
-            };
-        }
-        return capabilities;
-    }
-
-    private hasUsableEndpoint(config: ResolvedImageModelConfig) {
-        return (config.endpoints ?? []).some((item) => item.enabled && Boolean(item.secretId));
-    }
-
-    private toResolvedConfig(config: ImageModelConfig): ResolvedImageModelConfig {
+    private toResolvedConfig(config: ImageModelConfig, model: Awaited<ReturnType<PublicAiModelService["getModelInfo"]>>): ResolvedImageModelConfig {
         return {
             id: config.id,
+            mainModelId: config.mainModelId,
             promptEnhancerModelId: config.promptEnhancerModelId ?? undefined,
-            provider: config.provider,
-            model: config.model,
-            externalModelId: config.externalModelId,
-            requestContract: config.requestContract,
-            displayName: config.displayName,
-            description: config.description,
+            provider: model.provider.provider,
+            providerName: model.provider.name,
+            model: model.model,
+            displayName: config.displayNameOverride || model.name,
+            description: config.descriptionOverride ?? model.description,
             enabled: config.enabled,
             visibleToUser: config.visibleToUser,
-            capabilities: this.enforceProtocolCapabilities(config.requestContract, config.capabilities),
-            defaultParams: config.defaultParams,
-            allowedParams: config.allowedParams ?? {},
-            endpoints: this.normalizeEndpointConfigs(config.endpoints, []),
-            sortOrder: config.sortOrder,
+            capabilities: { ...DEFAULT_CAPABILITIES, ...(config.capabilities ?? {}) },
+            defaultParams: { ...DEFAULT_PARAMS, ...(config.defaultParams ?? {}) },
+            allowedParams: { ...DEFAULT_ALLOWED_PARAMS, ...(config.allowedParams ?? {}) },
+            sortOrder: config.sortOrder ?? model.sortOrder ?? 0,
         };
     }
 
-    private toOperationalView(config: ImageModelConfig) {
-        const resolved = this.toResolvedConfig(config);
+    private toOperationalView(config: ImageModelConfig | undefined, model: Awaited<ReturnType<PublicAiModelService["getModelInfo"]>>) {
+        const resolved = config
+            ? this.toResolvedConfig(config, model)
+            : {
+                id: "",
+                mainModelId: model.id,
+                promptEnhancerModelId: null,
+                provider: model.provider.provider,
+                providerName: model.provider.name,
+                model: model.model,
+                displayName: model.name,
+                description: model.description,
+                enabled: false,
+                visibleToUser: true,
+                capabilities: DEFAULT_CAPABILITIES,
+                defaultParams: DEFAULT_PARAMS,
+                allowedParams: DEFAULT_ALLOWED_PARAMS,
+                sortOrder: model.sortOrder ?? 0,
+            };
         return {
-            id: resolved.id,
-            promptEnhancerModelId: resolved.promptEnhancerModelId,
-            provider: resolved.provider,
-            model: resolved.model,
-            externalModelId: resolved.externalModelId,
-            requestContract: resolved.requestContract,
-            displayName: resolved.displayName,
-            description: resolved.description,
-            enabled: resolved.enabled,
-            visibleToUser: resolved.visibleToUser,
-            capabilities: resolved.capabilities,
-            defaultParams: resolved.defaultParams,
-            allowedParams: resolved.allowedParams,
-            endpoints: resolved.endpoints.map((endpoint) => ({
-                id: endpoint.id,
-                name: endpoint.name,
-                secretId: endpoint.secretId,
-                secretName: endpoint.secretName,
-                baseUrlOverride: endpoint.baseUrlOverride,
-                enabled: endpoint.enabled,
-                priority: endpoint.priority,
-                requestTimeoutMs: endpoint.requestTimeoutMs,
-                testTimeoutMs: endpoint.testTimeoutMs,
-                maxRetries: endpoint.maxRetries,
-                retryDelayMs: endpoint.retryDelayMs,
-            })),
-            sortOrder: resolved.sortOrder,
-            createdAt: config.createdAt,
-            updatedAt: config.updatedAt,
+            ...resolved,
+            displayNameOverride: config?.displayNameOverride,
+            descriptionOverride: config?.descriptionOverride,
+            configured: Boolean(config),
+            createdAt: config?.createdAt,
+            updatedAt: config?.updatedAt,
         };
     }
 
@@ -479,4 +367,14 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
         }
     }
 
+    private async assertConfigUnused(id: string) {
+        const [billing, policy, generation] = await Promise.all([
+            this.billingRuleRepository.exists({ where: { modelConfigId: id } as FindOptionsWhere<ImageBillingRule> }),
+            this.policyRepository.exists({ where: { modelConfigId: id } as FindOptionsWhere<ImagePolicyConfig> }),
+            this.generationRepository.exists({ where: { modelId: id } as FindOptionsWhere<ImageGeneration> }),
+        ]);
+        if (billing || policy || generation) {
+            throw HttpErrorFactory.badRequest("模型配置已被计费、风控或生成记录引用，请停用而不是删除");
+        }
+    }
 }

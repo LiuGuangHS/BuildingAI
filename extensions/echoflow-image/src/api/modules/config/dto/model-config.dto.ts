@@ -1,7 +1,6 @@
 import { PaginationDto } from "@buildingai/dto";
-import { Transform, Type } from "class-transformer";
+import { Transform } from "class-transformer";
 import {
-    IsArray,
     IsBoolean,
     IsInt,
     IsObject,
@@ -9,9 +8,6 @@ import {
     IsString,
     IsUUID,
     Length,
-    Max,
-    Min,
-    ValidateNested,
 } from "class-validator";
 
 import type {
@@ -19,75 +15,12 @@ import type {
     ImageModelCapabilities,
     ImageModelDefaultParams,
 } from "../../../db/entities/image-model-config.entity";
-
-export class ImageModelEndpointDto {
-    @IsString()
-    @Length(1, 80)
-    @IsOptional()
-    id?: string;
-
-    @IsString()
-    @Length(1, 80)
-    name: string;
-
-    @IsString()
-    @Length(1, 80)
-    @IsOptional()
-    secretId?: string;
-
-    @IsString()
-    @Length(1, 120)
-    @IsOptional()
-    secretName?: string;
-
-    @IsString()
-    @Length(1, 500)
-    @IsOptional()
-    baseUrlOverride?: string;
-
-    @Transform(({ value }) => (value === undefined ? value : value === "true" || value === true))
-    @IsBoolean()
-    @IsOptional()
-    enabled?: boolean;
-
-    @Transform(({ value }) => (value == null ? value : Number(value)))
-    @IsInt()
-    @Min(0)
-    @Max(100000)
-    @IsOptional()
-    priority?: number;
-
-    @Transform(({ value }) => (value == null ? value : Number(value)))
-    @IsInt()
-    @Min(3000)
-    @Max(300000)
-    @IsOptional()
-    requestTimeoutMs?: number;
-
-    @Transform(({ value }) => (value == null ? value : Number(value)))
-    @IsInt()
-    @Min(3000)
-    @Max(60000)
-    @IsOptional()
-    testTimeoutMs?: number;
-
-    @Transform(({ value }) => (value == null ? value : Number(value)))
-    @IsInt()
-    @Min(0)
-    @Max(5)
-    @IsOptional()
-    maxRetries?: number;
-
-    @Transform(({ value }) => (value == null ? value : Number(value)))
-    @IsInt()
-    @Min(100)
-    @Max(10000)
-    @IsOptional()
-    retryDelayMs?: number;
-}
+import { emptyStringToUndefined } from "../../common/dto-transforms";
 
 export class QueryModelConfigDto extends PaginationDto {
+    @Transform(emptyStringToUndefined)
     @IsString()
+    @Length(1, 120)
     @IsOptional()
     keyword?: string;
 
@@ -98,20 +31,30 @@ export class QueryModelConfigDto extends PaginationDto {
 }
 
 export class CreateModelConfigDto {
-    @IsString()
-    @Length(1, 50)
-    @IsOptional()
-    provider?: string;
+    @IsUUID("4")
+    mainModelId: string;
 
-    @IsString()
-    @Length(1, 100)
-    model: string;
-
+    @Transform(emptyStringToUndefined)
     @IsString()
     @Length(1, 120)
-    displayName: string;
+    @IsOptional()
+    displayNameOverride?: string;
 
+    @Transform(emptyStringToUndefined)
     @IsString()
+    @Length(1, 120)
+    @IsOptional()
+    displayName?: string;
+
+    @Transform(emptyStringToUndefined)
+    @IsString()
+    @Length(1, 1000)
+    @IsOptional()
+    descriptionOverride?: string;
+
+    @Transform(emptyStringToUndefined)
+    @IsString()
+    @Length(1, 1000)
     @IsOptional()
     description?: string;
 
@@ -139,12 +82,6 @@ export class CreateModelConfigDto {
     @IsOptional()
     allowedParams?: ImageModelAllowedParams;
 
-    @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => ImageModelEndpointDto)
-    @IsOptional()
-    endpoints?: ImageModelEndpointDto[];
-
     @Transform(({ value }) => (value == null ? value : Number(value)))
     @IsInt()
     @IsOptional()
@@ -152,13 +89,7 @@ export class CreateModelConfigDto {
 }
 
 export class UpdateModelConfigDto extends CreateModelConfigDto {
-    @IsString()
-    @Length(1, 100)
+    @IsUUID("4")
     @IsOptional()
-    declare model: string;
-
-    @IsString()
-    @Length(1, 120)
-    @IsOptional()
-    declare displayName: string;
+    declare mainModelId: string;
 }

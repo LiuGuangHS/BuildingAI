@@ -3,7 +3,7 @@ import { ExtensionConsoleController } from "@buildingai/core/decorators";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Post, Put, Query } from "@nestjs/common";
 
-import { CreateModelConfigDto, ImageModelEndpointDto, QueryModelConfigDto, UpdateModelConfigDto } from "../../dto";
+import { CreateModelConfigDto, QueryModelConfigDto, UpdateModelConfigDto } from "../../dto";
 import { ModelConfigService } from "../../services/model-config.service";
 
 @ExtensionConsoleController("model-configs", "Echoflow Image Model Config")
@@ -40,10 +40,5 @@ export class ModelConfigController extends BaseController {
     @Delete(":id")
     async remove(@Param("id", UUIDValidationPipe) id: string) {
         return this.modelConfigService.deleteConfig(id);
-    }
-
-    @Post(":id/test-endpoint")
-    async testEndpoint(@Param("id", UUIDValidationPipe) id: string, @Body() dto: ImageModelEndpointDto) {
-        return this.modelConfigService.testEndpoint(id, dto);
     }
 }

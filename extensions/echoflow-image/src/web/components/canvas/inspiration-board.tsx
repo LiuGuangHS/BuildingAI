@@ -153,7 +153,7 @@ export function InspirationBoard({ generation, compact = false }: InspirationBoa
                 <div className="min-w-0">
                     <div className="flex items-center gap-2 text-sm font-medium">
                         <ImageIcon className="text-primary size-4" />
-                        生成素材
+                        结果素材
                         <Badge variant="outline">{assets.length} 张</Badge>
                     </div>
                     <p className="text-muted-foreground mt-1 text-xs">
@@ -196,7 +196,7 @@ export function InspirationBoard({ generation, compact = false }: InspirationBoa
                 </div>
             ) : (
                 <div className="bg-background/70 text-muted-foreground mt-3 rounded-lg border border-dashed px-3 py-3 text-sm">
-                    当前还没有生成素材，白板仍可用于草图、文本和参考整理。
+                    还没有生成结果。你仍可先在白板上草图、写字或整理参考。
                 </div>
             )}
         </div>
@@ -277,11 +277,11 @@ export function InspirationBoard({ generation, compact = false }: InspirationBoa
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                                <CardTitle className="text-xl">批注与拼贴</CardTitle>
+                                <CardTitle className="text-xl">灵感白板</CardTitle>
                                 <Badge variant="secondary">tldraw</Badge>
                             </div>
                             <CardDescription>
-                                手绘、文本、箭头、形状和图片拼贴，适合做灵感板和交付前标注。
+                                手绘构图、写说明、圈重点，作为生成参考。
                             </CardDescription>
                         </div>
                         <div className="flex flex-wrap gap-2">

@@ -2,7 +2,6 @@ import { BaseController } from "@buildingai/base";
 import { ExtensionWebController } from "@buildingai/core/decorators";
 import { type UserPlayground } from "@buildingai/db";
 import { Playground } from "@buildingai/decorators/playground.decorator";
-import { Public } from "@buildingai/decorators/public.decorator";
 import { ExtensionRateLimitService, type ExtensionRateLimitWindow } from "@buildingai/extension-sdk";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
 import { Body, Delete, Get, Param, Post, Query } from "@nestjs/common";
@@ -39,12 +38,6 @@ export class GenerationWebController extends BaseController {
     @Get()
     async findAll(@Query() queryGenerationDto: QueryGenerationDto, @Playground() user: UserPlayground) {
         return this.generationService.listForWeb(queryGenerationDto, user.id);
-    }
-
-    @Get("options/models")
-    @Public()
-    async listModels() {
-        return this.generationService.listImageModels();
     }
 
     @Get(":id")

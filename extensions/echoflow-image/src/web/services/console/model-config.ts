@@ -5,7 +5,6 @@ import { consoleHttpClient } from "../base";
 import type { OperationResult } from "../types/common";
 import type {
     ImageModelConfig,
-    ImageModelEndpoint,
     PromptEnhancerModelOption,
     SaveModelConfigParams,
 } from "../types/model-config";
@@ -62,15 +61,6 @@ export function useUpdateModelConfigMutation(
 export function useDeleteModelConfigMutation(options?: MutationOptionsUtil<OperationResult, string>) {
     return useMutation<OperationResult, Error, string>({
         mutationFn: (id) => consoleHttpClient.delete<OperationResult>(`/model-configs/${id}`),
-        ...options,
-    });
-}
-
-export function useTestModelEndpointMutation(
-    options?: MutationOptionsUtil<OperationResult, { id: string; data: ImageModelEndpoint }>,
-) {
-    return useMutation<OperationResult, Error, { id: string; data: ImageModelEndpoint }>({
-        mutationFn: ({ id, data }) => consoleHttpClient.post<OperationResult>(`/model-configs/${id}/test-endpoint`, data),
         ...options,
     });
 }

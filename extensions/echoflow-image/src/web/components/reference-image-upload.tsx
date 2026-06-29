@@ -1,6 +1,5 @@
 import { ImageUpload } from "@buildingai/ui/components/ui/image-upload";
 import type { UploadFileResult } from "@buildingai/services/shared";
-import { ImagePlus } from "lucide-react";
 
 interface ReferenceImageUploadProps {
     value?: string;
@@ -30,7 +29,7 @@ export function ReferenceImageUpload({
                 params={{ description, extensionId: "echoflow-image" }}
                 placeholder={
                     <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
-                        <ImagePlus className="size-7" />
+                        <span aria-hidden="true" className="text-2xl leading-none">＋</span>
                         <span>{label}</span>
                     </div>
                 }

@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useConsoleBillingRulesQuery, useConsoleModelConfigsQuery, useGenerationListQuery, useConsoleTemplatesQuery } from "../../services";
 
 export default function EchoflowImageConsolePage() {
-    useDocumentHead({ title: "AI图像工作台管理" });
+    useDocumentHead({ title: "图像工作台管理" });
     const navigate = useNavigate();
     const { data: models } = useConsoleModelConfigsQuery({ page: 1, pageSize: 50 });
     const { data: rules } = useConsoleBillingRulesQuery({ page: 1, pageSize: 50 });
@@ -26,7 +26,7 @@ export default function EchoflowImageConsolePage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <Badge variant="secondary" className="mb-2">Console</Badge>
-                    <h1 className="text-2xl font-semibold tracking-tight">AI图像工作台运营台</h1>
+                    <h1 className="text-2xl font-semibold tracking-tight">图像工作台运营台</h1>
                     <p className="text-muted-foreground text-sm">固定绘画模型绑定主站密钥，模型配置页统一维护接入、计费、风控、模板和全量生成任务。</p>
                 </div>
                 <Button onClick={() => navigate("/console/models")}>

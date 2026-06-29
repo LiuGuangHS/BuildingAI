@@ -17,7 +17,7 @@ import {
 import { ImageGenerationStatus, type QueryGenerationParams } from "../services/types/generation";
 
 export default function HistoryPage() {
-    useDocumentHead({ title: "AI图像工作台生成历史" });
+    useDocumentHead({ title: "图像工作台生成历史" });
 
     const [params, setParams] = useState<QueryGenerationParams>({ page: 1, pageSize: 12 });
     const { data, isLoading, isError, refetch } = useWebGenerationListQuery(params);
@@ -33,9 +33,13 @@ export default function HistoryPage() {
     });
 
     const handleDelete = async (id: string) => {
-        await deleteMutation.mutateAsync(id);
-        toast.success("删除成功");
-        refetch();
+        try {
+            await deleteMutation.mutateAsync(id);
+            toast.success("删除成功");
+            refetch();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "删除失败");
+        }
     };
 
     const handleRetry = async (id: string) => {

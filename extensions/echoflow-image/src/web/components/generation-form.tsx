@@ -5,7 +5,6 @@ import { Label } from "@buildingai/ui/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
-import { ChevronDown, ImagePlus, Plus, ShieldCheck, Sparkles, Trash2, WandSparkles, Zap } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
@@ -22,6 +21,7 @@ interface GenerationFormProps {
     loading?: boolean;
     models?: ImageModelOption[];
     modelsLoading?: boolean;
+    modelsError?: boolean;
     initialValues?: Partial<CreateGenerationParams>;
     templates?: ImagePromptTemplate[];
     estimatedPower?: number;
@@ -48,6 +48,7 @@ export function GenerationForm({
     loading,
     models = [],
     modelsLoading,
+    modelsError,
     initialValues,
     templates = [],
     estimatedPower,
@@ -142,7 +143,7 @@ export function GenerationForm({
     const effectiveHasReferenceImage = usableSourceImages.length > 0;
     const effectiveMode = effectiveHasReferenceImage ? ImageGenerationMode.IMAGE_TO_IMAGE : ImageGenerationMode.TEXT_TO_IMAGE;
 
-    const buildGenerationPayload = (includeRequestKey = false, includeClientMetadata = false): CreateGenerationParams => ({
+    const buildGenerationPayload = (includeRequestKey = false): CreateGenerationParams => ({
         prompt,
         negativePrompt: canUseNegativePrompt ? normalizeOptionalString(negativePrompt) : undefined,
         referenceImageUrl: primarySourceImage?.url,
@@ -156,7 +157,6 @@ export function GenerationForm({
         responseFormat,
         mode: effectiveMode,
         requestKey: includeRequestKey ? crypto.randomUUID() : undefined,
-        source: includeClientMetadata ? selectedModel?.source : undefined,
     });
 
     const handleEnhancePrompt = async () => {
@@ -183,7 +183,7 @@ export function GenerationForm({
 
     useEffect(() => {
         if (!modelId || !prompt.trim()) return;
-        onEstimateChange?.(buildGenerationPayload(false, true));
+        onEstimateChange?.(buildGenerationPayload());
     }, [
         modelId,
         prompt,
@@ -200,7 +200,6 @@ export function GenerationForm({
         effectiveHasReferenceImage,
         effectiveMode,
         canUseNegativePrompt,
-        selectedModel?.source,
     ]);
 
     useEffect(() => {
@@ -229,7 +228,7 @@ export function GenerationForm({
                     <div className="flex items-center justify-between gap-3 border-b bg-muted/20 p-4">
                         <div className="min-w-0">
                             <p className="text-xs font-medium text-primary">创作指令</p>
-                            <h2 className="mt-1 text-base font-semibold leading-none">描述你要的画面</h2>
+                            <h2 className="mt-1 text-base font-semibold leading-none">输入提示词</h2>
                         </div>
                         {hasContent && (
                             <Button
@@ -240,7 +239,7 @@ export function GenerationForm({
                                 onClick={clearAll}
                                 className="h-8 shrink-0 text-muted-foreground hover:text-destructive"
                             >
-                                <Trash2 className="size-3.5" />
+                                <span aria-hidden="true" className="text-xs leading-none">×</span>
                                 清空
                             </Button>
                         )}
@@ -271,7 +270,7 @@ export function GenerationForm({
                                     size="sm"
                                     className="border-primary/30 bg-primary/5 text-primary"
                                 >
-                                    <WandSparkles className="size-3.5" />
+                                    <span aria-hidden="true" className="text-xs leading-none">✦</span>
                                     优化提示词
                                 </Button>
                                 <span className="text-xs text-muted-foreground">支持中文、英文，也支持中英混写。</span>
@@ -294,7 +293,7 @@ export function GenerationForm({
                                         size="sm"
                                         className="min-w-0 justify-start rounded-md bg-muted/20 text-xs"
                                     >
-                                        <Plus className="size-3.5 shrink-0" />
+                                        <span aria-hidden="true" className="shrink-0 text-xs leading-none">＋</span>
                                         <span className="truncate">{template.label}</span>
                                     </Button>
                                 ))}
@@ -337,13 +336,21 @@ export function GenerationForm({
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {selectedModel && (
+                                {modelsError ? (
+                                    <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                                        图片模型加载失败，请稍后重试。
+                                    </p>
+                                ) : !modelsLoading && models.length === 0 ? (
+                                    <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                                        暂无可用图片模型，请先在模型管理中启用。
+                                    </p>
+                                ) : selectedModel ? (
                                     <p className="truncate text-xs text-muted-foreground">
                                         {selectedModel.model}
                                         {canUseImageToImage ? " / 支持参考图" : " / 文生图"}
                                         {canUseMultiReference ? " / 多参考" : ""}
                                     </p>
-                                )}
+                                ) : null}
                             </div>
 
                             {canUseImageToImage && (
@@ -387,7 +394,7 @@ export function GenerationForm({
                                                             setAdditionalReferenceImages((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
                                                         }
                                                     >
-                                                        <Trash2 className="size-3.5" />
+                                                        <span aria-hidden="true" className="text-xs leading-none">×</span>
                                                     </Button>
                                                 </div>
                                             ))}
@@ -398,7 +405,7 @@ export function GenerationForm({
                                                 disabled={loading || !hasReferenceImage || additionalReferenceImages.length >= 3}
                                                 onClick={() => setAdditionalReferenceImages((prev) => [...prev, {}])}
                                             >
-                                                <ImagePlus className="size-3.5" />
+                                                <span aria-hidden="true" className="text-xs leading-none">＋</span>
                                                 添加参考图
                                             </Button>
                                         </div>
@@ -416,12 +423,15 @@ export function GenerationForm({
                                 variant="ghost"
                             >
                                 <span className="flex items-center gap-2">
-                                    <ChevronDown
+                                    <span
+                                        aria-hidden="true"
                                         className={cn(
-                                            "size-4 text-muted-foreground transition-transform duration-200",
+                                            "text-sm text-muted-foreground transition-transform duration-200",
                                             showAdvanced && "rotate-180",
                                         )}
-                                    />
+                                    >
+                                        ▾
+                                    </span>
                                     高级设置
                                 </span>
                                 <span className="text-xs font-normal text-muted-foreground">
@@ -527,11 +537,11 @@ export function GenerationForm({
                     <div className="flex flex-col gap-3 border-t bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="grid gap-1.5 text-xs text-muted-foreground sm:flex sm:flex-wrap sm:items-center">
                             <span className="inline-flex items-center gap-1.5 text-foreground">
-                                <Zap className="size-4 text-amber-500" />
+                                <span aria-hidden="true" className="text-amber-500">●</span>
                                 预计消耗 <strong className="text-base text-amber-700">{visibleEstimatedPower}</strong> 算力
                             </span>
                             <span className="inline-flex items-center gap-1">
-                                <ShieldCheck className="size-3.5" />
+                                <span aria-hidden="true">✓</span>
                                 失败按账务结果退款
                             </span>
                         </div>
@@ -542,7 +552,7 @@ export function GenerationForm({
                             loading={loading}
                             className="min-h-11 rounded-lg shadow-sm sm:min-w-36"
                         >
-                            <Sparkles className="size-4" />
+                            <span aria-hidden="true">✦</span>
                             开始生成
                         </Button>
                     </div>

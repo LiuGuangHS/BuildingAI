@@ -1,6 +1,6 @@
 import { PaginationDto } from "@buildingai/dto";
 import { Transform } from "class-transformer";
-import { IsBoolean, IsEnum, IsNumber, IsObject, IsOptional, IsUUID, Min } from "class-validator";
+import { IsBoolean, IsEnum, IsNumber, IsObject, IsOptional, IsString, IsUUID, Length, Min } from "class-validator";
 
 import { ImageGenerationMode } from "../../../db/entities/image-generation.entity";
 import type { ImageBillingMultipliers } from "../../../db/entities/image-billing-rule.entity";
@@ -70,6 +70,8 @@ export class EstimateBillingDto {
     @IsOptional()
     mode?: ImageGenerationMode;
 
+    @IsString()
+    @Length(1, 60)
     @IsOptional()
     size?: string;
 
@@ -79,6 +81,8 @@ export class EstimateBillingDto {
     @IsOptional()
     n?: number;
 
+    @IsString()
+    @Length(1, 60)
     @IsOptional()
     quality?: string;
 }

@@ -1,67 +1,62 @@
+import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { defineExtensionViteConfig } from "@buildingai/web-core/vite/extension";
 
 import packageJson from "./package.json";
 
+const repoRoot = resolve(__dirname, "../..");
+
+function resolvePnpmPackage(packageName: string) {
+    const pnpmStore = resolve(repoRoot, "node_modules/.pnpm");
+    const packageFolder = packageName.replace("/", "+");
+    const candidates = readdirSync(pnpmStore)
+        .filter((name) => name.startsWith(`${packageFolder}@`))
+        .sort()
+        .reverse();
+
+    if (!candidates[0]) {
+        throw new Error(`Cannot resolve ${packageName} from ${pnpmStore}`);
+    }
+
+    return resolve(pnpmStore, candidates[0], "node_modules", packageName);
+}
+
 export default defineExtensionViteConfig(packageJson, {
     resolve: {
+        tsconfigPaths: false,
         alias: [
             {
                 find: /^react-router-dom$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/react-router-dom/dist/index.mjs",
-                ),
+                replacement: resolve(resolvePnpmPackage("react-router-dom"), "dist/index.mjs"),
             },
             {
                 find: /^react-router\/dom$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/react-router/dist/production/dom-export.mjs",
-                ),
+                replacement: resolve(resolvePnpmPackage("react-router"), "dist/production/dom-export.mjs"),
             },
             {
                 find: /^react-router$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/react-router/dist/production/index.mjs",
-                ),
+                replacement: resolve(resolvePnpmPackage("react-router"), "dist/production/index.mjs"),
             },
             {
                 find: /^radix-ui$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/radix-ui/dist/index.mjs",
-                ),
+                replacement: resolve(resolvePnpmPackage("radix-ui"), "dist/index.mjs"),
             },
             {
                 find: /^tldraw$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/tldraw/dist-esm/index.mjs",
-                ),
+                replacement: resolve(resolvePnpmPackage("tldraw"), "dist-esm/index.mjs"),
             },
             {
                 find: /^tldraw\/tldraw.css$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/tldraw/tldraw.css",
-                ),
+                replacement: resolve(resolvePnpmPackage("tldraw"), "tldraw.css"),
             },
             {
                 find: /^zustand\/(.+)$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/zustand/esm/$1.mjs",
-                ),
+                replacement: `${resolve(resolvePnpmPackage("zustand"), "esm")}/$1.mjs`,
             },
             {
                 find: /^zustand$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/zustand/esm/index.mjs",
-                ),
+                replacement: resolve(resolvePnpmPackage("zustand"), "esm/index.mjs"),
             },
             {
                 find: /^@buildingai\/utils\/(.+)$/,

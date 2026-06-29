@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buil
 import { TimeText } from "@buildingai/ui/components/ui/time-text";
 import { cn } from "@buildingai/ui/lib/utils";
 import { CopyPlus, HistoryIcon, ImageIcon, RefreshCcw, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { type KeyboardEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { ImageGeneration } from "../services/types/generation";
@@ -159,13 +159,18 @@ export function HistoryList({
                                             onKeyDown={(event) => event.stopPropagation()}
                                         >
                                             {onRetry && (
-                                                <Button size="icon-sm" variant="ghost" disabled={isRetrying} loading={isRetrying} onClick={() => handleRetry(item.id)} title="重试">
+                                                <Button size="icon-sm" variant="ghost" disabled={isRetrying} loading={isRetrying} onClick={() => handleRetry(item.id)} title="重试" aria-label="重试生成">
                                                     <RefreshCcw className="size-3.5" />
                                                 </Button>
                                             )}
                                             {onReuse && (
-                                                <Button size="icon-sm" variant="ghost" onClick={() => onReuse(item)} title="复用参数">
+                                                <Button size="icon-sm" variant="ghost" onClick={() => onReuse(item)} title="复用参数" aria-label="复用参数">
                                                     <CopyPlus className="size-3.5" />
+                                                </Button>
+                                            )}
+                                            {onDelete && (
+                                                <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(item.id)} title="删除" aria-label="删除生成记录">
+                                                    <Trash2 className="size-3.5" />
                                                 </Button>
                                             )}
                                         </span>
@@ -216,12 +221,22 @@ export function HistoryList({
                             {items.map((item) => {
                                 const src = resolveImageSrc(item.resultImages?.[0]);
                                 const isRetrying = retryingId === item.id;
+                                const openDetail = () => navigate(`${detailBasePath}/${item.id}`);
+                                const openDetailWithKeyboard = (event: KeyboardEvent) => {
+                                    if (event.key === "Enter" || event.key === " ") {
+                                        event.preventDefault();
+                                        openDetail();
+                                    }
+                                };
                                 if (compact) {
                                     return (
                                         <div
                                             key={item.id}
-                                            className="group cursor-pointer overflow-hidden rounded-md border bg-background transition hover:border-primary/30 hover:shadow-sm"
-                                            onClick={() => navigate(`${detailBasePath}/${item.id}`)}
+                                            role="button"
+                                            tabIndex={0}
+                                            className="group cursor-pointer overflow-hidden rounded-md border bg-background transition hover:border-primary/30 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                                            onClick={openDetail}
+                                            onKeyDown={openDetailWithKeyboard}
                                         >
                                             <div className="relative aspect-square bg-muted">
                                                 {src ? (
@@ -244,14 +259,14 @@ export function HistoryList({
                                                 <p className="line-clamp-1 text-xs font-medium">{item.prompt}</p>
                                                 <div className="mt-1 flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
                                                     <TimeText value={item.createdAt} variant="relative" />
-                                                    <div className="flex shrink-0 items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
+                                                    <div className="flex shrink-0 items-center gap-0.5" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
                                                         {onRetry && (
-                                                            <Button size="icon-sm" variant="ghost" disabled={isRetrying} loading={isRetrying} onClick={() => handleRetry(item.id)}>
+                                                            <Button size="icon-sm" variant="ghost" disabled={isRetrying} loading={isRetrying} aria-label="重试生成" onClick={() => handleRetry(item.id)}>
                                                                 <RefreshCcw className="size-3.5" />
                                                             </Button>
                                                         )}
                                                         {onReuse && (
-                                                            <Button size="icon-sm" variant="ghost" onClick={() => onReuse(item)}>
+                                                            <Button size="icon-sm" variant="ghost" aria-label="复用参数" onClick={() => onReuse(item)}>
                                                                 <CopyPlus className="size-3.5" />
                                                             </Button>
                                                         )}
@@ -264,8 +279,11 @@ export function HistoryList({
                                 return (
                                     <div
                                         key={item.id}
-                                        className="group flex cursor-pointer items-center gap-3 rounded-xl border bg-background p-3 transition hover:border-primary/30 hover:bg-muted/30 hover:shadow-sm"
-                                        onClick={() => navigate(`${detailBasePath}/${item.id}`)}
+                                        role="button"
+                                        tabIndex={0}
+                                        className="group flex cursor-pointer items-center gap-3 rounded-xl border bg-background p-3 transition hover:border-primary/30 hover:bg-muted/30 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                                        onClick={openDetail}
+                                        onKeyDown={openDetailWithKeyboard}
                                     >
                                         <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
                                             {src ? (
@@ -302,19 +320,19 @@ export function HistoryList({
                                                 <p className="mt-0.5 truncate text-xs text-muted-foreground">用户 {item.userId}</p>
                                             )}
                                         </div>
-                                        <div className="flex shrink-0 items-center gap-0.5 md:opacity-0 md:transition-opacity md:group-hover:opacity-100" onClick={(event) => event.stopPropagation()}>
+                                        <div className="flex shrink-0 items-center gap-0.5 md:opacity-0 md:transition-opacity md:group-hover:opacity-100" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
                                             {onRetry && (
-                                                <Button size="icon-sm" variant="ghost" disabled={isRetrying} loading={isRetrying} onClick={() => handleRetry(item.id)}>
+                                                <Button size="icon-sm" variant="ghost" disabled={isRetrying} loading={isRetrying} aria-label="重试生成" onClick={() => handleRetry(item.id)}>
                                                     <RefreshCcw className="size-3.5" />
                                                 </Button>
                                             )}
                                             {onReuse && (
-                                                <Button size="icon-sm" variant="ghost" onClick={() => onReuse(item)}>
+                                                <Button size="icon-sm" variant="ghost" aria-label="复用参数" onClick={() => onReuse(item)}>
                                                     <CopyPlus className="size-3.5" />
                                                 </Button>
                                             )}
                                             {onDelete && (
-                                                <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(item.id)}>
+                                                <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" aria-label="删除生成记录" onClick={() => setDeleteTarget(item.id)}>
                                                     <Trash2 className="size-3.5" />
                                                 </Button>
                                             )}

@@ -267,17 +267,17 @@ export class Upgrade {
     private async ensureExtensionRecord(): Promise<void> {
         const extensionData = {
             icon: "/echoflow-image/static/logo.png",
-            name: "AI图像工作台",
+            name: "图像工作台",
             identifier: "echoflow-image",
             version: "0.0.1",
-            description: "面向创作者的 AI 图像生成与编辑工作台，支持模型配置、参考图创作、历史管理和算力计费。",
+            description: "生成、编辑和优化图片，适合封面、海报与营销素材。",
             type: 1,
             isLocal: true,
             status: "1",
             supportTerminal: [1],
             author: {
                 avatar: "/echoflow-image/static/logo.png",
-                name: "EchoflowAI Teams",
+                name: "EchoFlowAI Team",
                 homepage: "",
             },
         };

@@ -1,26 +1,10 @@
-export type ImageRequestContract = "responses" | "images" | "openai-compatible-images" | "provider-native";
-
-export interface ImageModelEndpoint {
-    id?: string;
-    name: string;
-    secretId?: string;
-    secretName?: string;
-    baseUrlOverride?: string;
-    enabled: boolean;
-    priority: number;
-    requestTimeoutMs?: number;
-    testTimeoutMs?: number;
-    maxRetries?: number;
-    retryDelayMs?: number;
-}
-
 export interface ImageModelConfig {
     id: string;
+    mainModelId: string;
     promptEnhancerModelId?: string | null;
     provider: string;
+    providerName: string;
     model: string;
-    externalModelId: string;
-    requestContract: ImageRequestContract;
     displayName: string;
     description?: string;
     enabled: boolean;
@@ -34,13 +18,13 @@ export interface ImageModelConfig {
         outputFormats?: string[];
         maxImages?: number;
     };
-    endpoints?: ImageModelEndpoint[];
     sortOrder: number;
     createdAt: string;
     updatedAt: string;
 }
 
 export interface SaveModelConfigParams {
+    mainModelId?: string;
     displayName?: string;
     description?: string;
     promptEnhancerModelId?: string | null;
@@ -48,7 +32,6 @@ export interface SaveModelConfigParams {
     visibleToUser?: boolean;
     defaultParams?: Record<string, unknown>;
     allowedParams?: Record<string, unknown>;
-    endpoints?: ImageModelEndpoint[];
     sortOrder?: number;
 }
 
