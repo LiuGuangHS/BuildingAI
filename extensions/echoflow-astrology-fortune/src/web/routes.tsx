@@ -3,8 +3,8 @@ import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { lazy, Suspense, type ReactNode } from "react";
 
 import packageJson from "./../../package.json";
+import AstrologyFortuneHomePage from "./pages";
 
-const AstrologyFortuneHomePage = lazy(() => import("./pages"));
 const AstrologyFortuneConsolePage = lazy(() => import("./pages/console"));
 
 function RouteLoading() {

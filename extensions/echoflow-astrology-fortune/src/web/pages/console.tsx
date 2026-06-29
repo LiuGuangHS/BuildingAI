@@ -52,6 +52,7 @@ import { toast } from "sonner";
 
 import packageJson from "../../../package.json";
 import { priceGroupLabel, reportLabel, reportTypeOptions, statusLabel, statusOptions } from "../constants/report-types";
+import { formatCredits, formatDateTime } from "../utils/format";
 import {
     useAstrologyFortuneSettingQuery,
     useAvailableLlmModelsQuery,
@@ -1200,20 +1201,6 @@ function isBusy(status: AstrologyReportStatus) {
 
 function formatMetricValue(value: number, loading: boolean) {
     return loading ? "--" : String(value);
-}
-
-function formatCredits(value?: number | string | null) {
-    const numberValue = Number(value ?? 0);
-    if (!Number.isFinite(numberValue)) return "0";
-    return numberValue.toFixed(4).replace(/\.?0+$/, "");
-}
-
-function formatDateTime(value?: string | Date | null) {
-    if (!value) return "-";
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return "-";
-    const pad = (item: number) => String(item).padStart(2, "0");
-    return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function formatMetadataValue(value: unknown) {

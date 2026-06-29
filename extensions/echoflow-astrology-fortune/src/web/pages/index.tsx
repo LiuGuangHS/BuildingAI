@@ -32,6 +32,7 @@ import {
     AlertCircle,
     BookOpen,
     CalendarDays,
+    CheckCircle2,
     Coins,
     Copy,
     Download,
@@ -53,6 +54,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { toast } from "sonner";
 
+import { buildAstrologyQuestionQualityContext } from "../../shared/astrology-question-quality";
 import {
     priceGroupLabel,
     reportIntents,
@@ -60,6 +62,7 @@ import {
     statusLabel,
     type ReportIntent,
 } from "../constants/report-types";
+import { formatCredits, formatDateTime } from "../utils/format";
 import {
     useAstrologyGenerationStatusQuery,
     useAstrologyProfilesQuery,
@@ -99,6 +102,13 @@ type GenerateOverride = {
     currentState?: string;
     question?: string;
     sourceReportId?: string;
+};
+
+type GenerationBlock = {
+    title: string;
+    text: string;
+    actionLabel?: string;
+    tone?: "neutral" | "warning";
 };
 
 type ReportFeedbackHandler = (
@@ -301,6 +311,12 @@ export default function AstrologyFortuneHomePage() {
     const generationDisabled = generationStatus.data?.canGenerate === false;
     const generationUnavailableReason =
         generationStatus.data?.unavailableReason || "当前生成服务暂不可用，请稍后再试。";
+    const generationBlock = getGenerationBlock({
+        profile: selectedProfile,
+        profileInput: selectedProfile ?? profileForm,
+        generationDisabled,
+        generationUnavailableReason,
+    });
     const historyPagination = usePagination({
         total: reportsQuery.data?.total ?? 0,
         pageSize: reportsQuery.data?.pageSize ?? HISTORY_PAGE_SIZE,
@@ -435,6 +451,7 @@ export default function AstrologyFortuneHomePage() {
             toast.success("报告任务已提交，生成完成后会自动刷新。");
         } catch (error) {
             toast.error(getErrorMessage(error, "报告生成失败"));
+            reportsQuery.refetch();
         }
     }
 
@@ -461,6 +478,7 @@ export default function AstrologyFortuneHomePage() {
             toast.success("报告任务已提交，生成完成后会自动刷新。");
         } catch (error) {
             toast.error(getErrorMessage(error, "重新生成失败"));
+            reportsQuery.refetch();
         }
     }
 
@@ -549,14 +567,15 @@ export default function AstrologyFortuneHomePage() {
     }
 
     return (
-        <main className="w-full overflow-x-hidden text-foreground">
-            <section className="w-full space-y-3">
+        <main className="astro-workbench w-full overflow-x-hidden px-3 pb-6 text-foreground sm:px-4">
+            <section className="mx-auto w-full max-w-[1480px] space-y-3">
                 <PluginBusinessToolbar
                     activeView={activeView}
                     intent={toolbarIntent}
                     profile={selectedProfile}
                     report={currentReport}
                     completion={profileCompletion}
+                    generationBlock={generationBlock}
                     onChangeView={setActiveView}
                     onOpenProfiles={() => setActiveView("profiles")}
                 />
@@ -576,6 +595,7 @@ export default function AstrologyFortuneHomePage() {
                                 : (latestDailyReport ?? currentReport)
                         }
                         busy={busy}
+                        generationBlock={generationBlock}
                         generationDisabled={generationDisabled}
                         generationUnavailableReason={generationUnavailableReason}
                         onDailyFocusChange={(option) => {
@@ -781,6 +801,7 @@ function PluginBusinessToolbar({
     profile,
     report,
     completion,
+    generationBlock,
     onChangeView,
     onOpenProfiles,
 }: {
@@ -789,13 +810,17 @@ function PluginBusinessToolbar({
     profile: AstrologyProfile | null;
     report: AstrologyReport | null;
     completion: ProfileCompletion;
+    generationBlock: GenerationBlock | null;
     onChangeView: (view: WorkView) => void;
     onOpenProfiles: () => void;
 }) {
+    const subtitle = profile
+        ? `${profile.zodiacSign || "星座待补"} · 完整度 ${completion.percent}%`
+        : "补全出生信息后，即可生成今日建议。";
     return (
-        <header className="sticky top-0 z-10 mb-3 grid gap-3 border-b bg-background/95 py-3 backdrop-blur lg:grid-cols-[minmax(280px,.9fr)_minmax(0,1.1fr)]">
+        <header className="astro-toolbar sticky top-0 z-10 mb-3 grid gap-3 border bg-background/95 p-3 backdrop-blur lg:grid-cols-[minmax(280px,.9fr)_minmax(0,1.1fr)]">
             <div
-                className="min-w-0 cursor-pointer rounded-md p-2 text-left hover:bg-muted/60"
+                className="astro-toolbar-profile min-w-0 cursor-pointer rounded-md p-2 text-left hover:bg-muted/60"
                 role="button"
                 tabIndex={0}
                 onClick={onOpenProfiles}
@@ -805,19 +830,12 @@ function PluginBusinessToolbar({
             >
                 <div className="flex min-w-0 items-center gap-2">
                     <UserRound size={16} />
-                    <strong>{profile?.name || "未创建档案"}</strong>
-                    <span>
-                        {profile
-                            ? `${profile.zodiacSign} · ${profile.birthDate}`
-                            : "生成前先保存基础信息"}
-                    </span>
+                    <strong>{activeView === "today" ? "今日建议" : intent.label}</strong>
+                    <span>{profile?.name || "未完善档案"}</span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                    <span>完整度 {completion.percent}%</span>
-                    <span>{priceGroupLabel(intent.priceGroup)}</span>
-                    <span>失败退款</span>
-                    <span>{report ? statusLabel(report.status) : "未生成"}</span>
-                    <b>{profile ? "完善" : "创建"}</b>
+                <div className="mt-1 flex flex-wrap gap-1.5 text-sm text-muted-foreground">
+                    <span>{generationBlock?.title || subtitle}</span>
+                    {report && <span>最近报告：{statusLabel(report.status)}</span>}
                 </div>
             </div>
             <WorkTabs activeView={activeView} onChange={onChangeView} />
@@ -838,7 +856,7 @@ function WorkTabs({
             onValueChange={(value) => onChange(value as WorkView)}
             className="min-w-0"
         >
-            <TabsList className="grid w-full grid-cols-5 justify-start border-b bg-transparent max-[760px]:overflow-visible min-[761px]:flex min-[761px]:overflow-x-auto [&::-webkit-scrollbar]:hidden" variant="line">
+            <TabsList className="astro-work-tabs grid w-full grid-cols-5 justify-start border-b bg-transparent max-[760px]:overflow-visible min-[761px]:flex min-[761px]:overflow-x-auto [&::-webkit-scrollbar]:hidden" variant="line">
                 {viewOptions.map((item) => {
                     const Icon = item.icon;
                     return (
@@ -861,6 +879,7 @@ function TodayView({
     question,
     report,
     busy,
+    generationBlock,
     generationDisabled,
     generationUnavailableReason,
     onDailyFocusChange,
@@ -871,6 +890,7 @@ function TodayView({
     onOpenReport,
     onFavorite,
     onCopy,
+    onDownload,
     onDelete,
     onRegenerate,
     onFollowUp,
@@ -883,6 +903,7 @@ function TodayView({
     question: string;
     report: AstrologyReport | null;
     busy: boolean;
+    generationBlock: GenerationBlock | null;
     generationDisabled: boolean;
     generationUnavailableReason: string;
     onDailyFocusChange: (option: DailyFocusOption) => void;
@@ -893,6 +914,7 @@ function TodayView({
     onOpenReport: (report: AstrologyReport) => void;
     onFavorite: (report: AstrologyReport) => void;
     onCopy: (report: AstrologyReport) => void;
+    onDownload: (report: AstrologyReport) => void;
     onDelete: (id: string) => void;
     onRegenerate: (report: AstrologyReport) => void;
     onFollowUp: (report: AstrologyReport, prompt: string) => void;
@@ -900,16 +922,19 @@ function TodayView({
 }) {
     return (
         <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.04fr)_minmax(300px,.96fr)]">
-            <div className="rounded-md border bg-card p-4">
-                <div className="mb-3 flex items-start justify-between gap-3 border-b pb-3 max-md:grid">
-                    <div>
-                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
-                            <CalendarDays size={15} /> 今日
-                        </div>
-                        <h2>今天先看哪里</h2>
-                        <p>结合星盘档案、今日状态和关注点，让 AI 生成一份能执行的今日建议。</p>
+            <div className="astro-hero-card rounded-md border bg-card p-4">
+                <div className="mb-4 border-b pb-4">
+                    <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
+                        <CalendarDays size={15} /> 今日建议
                     </div>
-                    <CostHint intent={dailyIntent} compact />
+                    <h2 className="mt-2 text-2xl font-bold tracking-tight">{generationBlock?.title || "今天想关注什么？"}</h2>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{generationBlock?.text || "结合星盘档案、今日状态和关注点，生成一份能执行的今日建议。"}</p>
+                    {generationBlock && generationBlock.tone !== "warning" && (
+                        <Button className="mt-3 font-semibold" variant="outline" onClick={onOpenProfile} type="button">
+                            <UserRound size={16} />
+                            {generationBlock.actionLabel || "去完善档案"}
+                        </Button>
+                    )}
                 </div>
                 <div className="flex flex-wrap gap-1.5" aria-label="今日关注点">
                     {dailyFocusOptions.map((option) => (
@@ -919,38 +944,28 @@ function TodayView({
                             variant="outline"
                             size="sm"
                             type="button"
-                            disabled={generationDisabled}
                             onClick={() => onDailyFocusChange(option)}
                         >
                             {option.label}
                         </Button>
                     ))}
                 </div>
-                <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted p-3 text-xs text-muted-foreground">
-                    <span>参考</span>
-                    <strong>
-                        {profile ? `${profile.name} / ${profile.zodiacSign}` : "生成时自动创建档案"}
-                    </strong>
-                    <span>完整度 {completion.percent}%</span>
-                    <span>{report ? `最近：${statusLabel(report.status)}` : "还没有今日报告"}</span>
-                </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <TextField
                         label="今天状态"
                         value={currentState}
                         onChange={onCurrentStateChange}
-                        disabled={generationDisabled}
                     />
-                    <TextField label="想确认的问题" value={question} onChange={onQuestionChange} disabled={generationDisabled} />
+                    <TextField label="想确认的问题" value={question} onChange={onQuestionChange} />
                 </div>
-                <div className="mt-3 flex flex-wrap gap-1.5 mt-0">
+                <div className="mt-3 flex flex-wrap gap-1.5">
                     {intentQuestionTemplates.daily?.map((item) => (
-                        <Template key={item} onClick={() => onQuestionChange(item)} disabled={generationDisabled}>
+                        <Template key={item} onClick={() => onQuestionChange(item)}>
                             {item}
                         </Template>
                     ))}
                 </div>
-                {generationDisabled && <GenerationUnavailableNotice text={generationUnavailableReason} />}
+                {generationBlock && <GenerationUnavailableNotice block={generationBlock} />}
                 <InsightScope
                     items={[
                         {
@@ -967,26 +982,17 @@ function TodayView({
                         },
                     ]}
                 />
-                <BillingNotice intent={dailyIntent} compact />
-                <div className="mt-4 flex items-center justify-between gap-3 max-md:grid max-md:grid-cols-2">
+                <div className="mt-4 flex items-center justify-between gap-3 max-md:grid">
+                    <CostHint intent={dailyIntent} />
                     <Button
                         className="font-semibold"
                         loading={busy}
-                        disabled={busy || generationDisabled}
+                        disabled={busy || Boolean(generationBlock)}
                         onClick={onGenerate}
                         type="button"
                     >
                         <CalendarDays size={16} />
-                        生成今日建议
-                    </Button>
-                    <Button
-                        className="font-semibold text-muted-foreground"
-                        variant="outline"
-                        onClick={onOpenProfile}
-                        type="button"
-                    >
-                        <UserRound size={16} />
-                        完善档案
+                        {generationBlock?.actionLabel || "生成今日建议"}
                     </Button>
                 </div>
                 <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
@@ -1008,6 +1014,7 @@ function TodayView({
                     generationUnavailableReason={generationUnavailableReason}
                     onFavorite={onFavorite}
                     onCopy={onCopy}
+                    onDownload={onDownload}
                     onOpen={onOpenReport}
                     onDelete={onDelete}
                     onRegenerate={onRegenerate}
@@ -1048,7 +1055,12 @@ function ReportComposer(props: {
         intentQuestionTemplates.decision ??
         [];
     const { generationDisabled, generationUnavailableReason } = props;
-    const quality = getQuestionQuality(props.question);
+    const quality = getQuestionQuality({
+        reportType: props.reportType,
+        focusArea: props.focusArea,
+        currentState: props.currentState,
+        question: props.question,
+    });
     return (
         <form className="self-start rounded-md border bg-card p-4" onSubmit={props.onSubmit}>
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -1144,7 +1156,7 @@ function ReportComposer(props: {
             <div className="mt-4">
                 <Label className="font-semibold text-foreground">具体问题</Label>
                 <Textarea
-                    className="min-h-10 min-h-28"
+                    className="min-h-28"
                     value={props.question}
                     disabled={generationDisabled}
                     onChange={(event) => props.onQuestionChange(event.target.value)}
@@ -1369,7 +1381,7 @@ function ProfileManager(props: {
     return (
         <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.04fr)_minmax(300px,.96fr)]">
             <div className="rounded-md border bg-card p-4">
-                <div className="mb-4 flex items-start justify-between gap-3 items-center">
+                <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
                         <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">星盘档案</div>
                         <h2>选择生成依据</h2>
@@ -1438,7 +1450,7 @@ function ProfileManager(props: {
             </div>
 
             <form className="rounded-md border bg-card p-4" onSubmit={props.onSubmit}>
-                <div className="mb-4 flex items-start justify-between gap-3 items-center">
+                <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
                         <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                             {props.editingProfileId ? "编辑档案" : "新建档案"}
@@ -1543,7 +1555,7 @@ function HistoryPanel({
 }) {
     return (
         <section className="rounded-md border bg-card p-4">
-            <div className="mb-4 flex items-start justify-between gap-3 items-center">
+            <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                     <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">报告库</div>
                     <h2>历史报告</h2>
@@ -1675,7 +1687,7 @@ function ReportPanel({
     const isRunning = report?.status === "pending" || report?.status === "processing";
     const isFailed = report?.status === "failed";
     return (
-        <section className={"rounded-md border bg-card p-4"}>
+        <section className={cn("astro-report-card rounded-md border bg-card p-4", compact && "astro-report-card-compact")}>
             <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                     <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
@@ -1908,26 +1920,26 @@ function GenerationValuePanel({
         "继续追问上下文",
     ];
     return (
-        <section className="rounded-md border bg-card p-4">
+        <section className="astro-context-card rounded-md border bg-card p-4">
             <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                 <FileText size={14} /> 本次参考
             </div>
-            <h3>报告会看这些信息</h3>
-            <p>AI 会把这些上下文转成可复盘的结构化报告，并沉淀到当前报告和报告库。</p>
-            <ul>
+            <h3 className="mt-2 text-lg font-bold">报告会看这些信息</h3>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">AI 会把这些上下文转成可复盘的结构化报告，并沉淀到当前报告和报告库。</p>
+            <ul className="mt-3 grid gap-2 text-sm text-muted-foreground">
                 {items.map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={item} className="rounded-md border bg-muted/35 px-3 py-2">{item}</li>
                 ))}
             </ul>
-            <div className="grid gap-2 rounded-md border bg-muted p-3 text-muted-foreground">
+            <div className="mt-3 grid gap-2 rounded-md border bg-muted p-3 text-muted-foreground">
                 <div className="font-semibold text-foreground">生成后得到</div>
-                <div>
+                <div className="flex flex-wrap gap-1.5">
                     {deliverables.map((item) => (
-                        <span key={item}>{item}</span>
+                        <span key={item} className="rounded-full border bg-background px-2 py-1 text-xs">{item}</span>
                     ))}
                 </div>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="astro-cost-hint mt-3 flex flex-wrap gap-1.5">
                 <span>
                     <Coins size={15} /> {priceGroupLabel(intent.priceGroup)}
                 </span>
@@ -2043,40 +2055,34 @@ function ProfileReadiness({
     completion: ProfileCompletion;
     onOpenProfile: () => void;
 }) {
-    const missingItems = completion.missing.slice(0, 3);
+    const missingItems = completion.missing;
     return (
-        <section className="grid gap-3 rounded-md border bg-card p-4 shadow-sm">
+        <section className="astro-readiness-card grid gap-3 rounded-md border bg-card p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
                 <div>
                     <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                         <UserRound size={14} /> 档案准备度
                     </div>
-                    <h3>{profile?.name || "未选择档案"}</h3>
-                    <p>
+                    <h3 className="mt-2 text-lg font-bold">{missingItems.length ? `还差 ${missingItems.length} 项即可生成` : "档案已就绪"}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
                         {profile
-                            ? `${profile.zodiacSign} · ${profile.birthDate}`
+                            ? `${profile.name} · ${profile.zodiacSign || "星座待补"}`
                             : "先建立档案，再让报告拿到稳定上下文。"}
                     </p>
                 </div>
-                <strong>{completion.percent}%</strong>
+                <strong className="text-2xl tabular-nums">{completion.percent}%</strong>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className="astro-meter h-2 overflow-hidden rounded-full bg-muted">
                 <span style={{ width: `${completion.percent}%` }} />
             </div>
-            {missingItems.length > 0 ? (
-                <div className="grid gap-3 rounded-md border border-dashed bg-muted/45 p-3 text-muted-foreground">
-                    <span className="text-xs font-semibold text-foreground">可提升</span>
-                    <div className="flex flex-wrap gap-1.5">
-                        {missingItems.map((item) => (
-                            <small key={item} className="rounded-full border bg-background px-2 py-1">
-                                {item}
-                            </small>
-                        ))}
-                    </div>
-                </div>
-            ) : (
-                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-primary">档案信息充足，可直接用于高质量生成。</div>
-            )}
+            <div className="grid gap-2 rounded-md border border-dashed bg-muted/45 p-3 text-sm text-muted-foreground">
+                {(missingItems.length ? missingItems : ["姓名", "出生日期", "出生时间", "出生地点"]).map((item) => (
+                    <span key={item} className="flex items-center gap-2">
+                        <CheckCircle2 className={missingItems.includes(item) ? "text-muted-foreground/40" : "text-primary"} size={14} />
+                        {item}
+                    </span>
+                ))}
+            </div>
             <div className="flex items-center justify-between text-muted-foreground">
                 <span>{completion.missing.length ? "补全后建议更具体" : "上下文已就绪"}</span>
                 <Button
@@ -2105,30 +2111,19 @@ function GenerationFooter({ intent, busy, generationDisabled }: { intent: Report
     );
 }
 
-function BillingNotice({ intent, compact }: { intent: ReportIntent; compact?: boolean }) {
+function GenerationUnavailableNotice({ text, block }: { text?: string; block?: GenerationBlock }) {
+    const isWarning = block?.tone === "warning";
     return (
-        <div className={cn("grid gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs", compact && "py-2")}>
-            <div>
-                <Coins size={14} />
-                <span>{priceGroupLabel(intent.priceGroup)}</span>
-            </div>
-            <p>提交生成时按后台配置扣费；模型、队列或服务失败会按账务事实退款。</p>
-        </div>
-    );
-}
-
-function GenerationUnavailableNotice({ text }: { text: string }) {
-    return (
-        <div className="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+        <div className={cn("flex items-start gap-2 rounded-md border p-3 text-xs", isWarning ? "border-destructive/20 bg-destructive/10 text-destructive" : "border-primary/20 bg-primary/5 text-muted-foreground")}>
             <AlertCircle size={15} />
-            <span>{text}</span>
+            <span>{block?.text || text}</span>
         </div>
     );
 }
 
 function CostHint({ intent, compact }: { intent: ReportIntent; compact?: boolean }) {
     return (
-        <div className={cn("flex flex-wrap gap-1.5", compact && "justify-end")}>
+        <div className={cn("astro-cost-hint flex flex-wrap gap-1.5", compact && "justify-end")}>
             <span>
                 <Coins size={14} /> {priceGroupLabel(intent.priceGroup)}
             </span>
@@ -2403,13 +2398,13 @@ function SignalList({ items, compact }: { items: ReportWarningItem[]; compact?: 
 
 function InsightScope({ items }: { items: InsightScopeItem[] }) {
     return (
-        <div className="grid gap-2 rounded-md border bg-muted p-3 text-muted-foreground">
+        <div className="astro-insight-scope grid gap-2 rounded-md border bg-muted p-3 text-muted-foreground">
             <div className="font-semibold text-foreground">AI 解读范围</div>
-            <div>
+            <div className="grid gap-2 sm:grid-cols-3">
                 {items.map((item) => (
-                    <span key={item.title}>
-                        <strong>{item.title}</strong>
-                        <small>{item.text}</small>
+                    <span key={item.title} className="rounded-md border bg-background/70 p-3">
+                        <strong className="block text-foreground">{item.title}</strong>
+                        <small className="mt-1 block leading-5">{item.text}</small>
                     </span>
                 ))}
             </div>
@@ -2471,7 +2466,7 @@ function CompletionMeter({
                 <strong>{title}</strong>
                 <span>{completion.percent}%</span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className="astro-meter h-2 overflow-hidden rounded-full bg-muted">
                 <span style={{ width: `${completion.percent}%` }} />
             </div>
             <p>{completion.missing.length ? `建议补充：${completion.missing.join("、")}` : text}</p>
@@ -2670,8 +2665,8 @@ function ReportDetailModal({
                                 <p className="text-muted-foreground">{section.content}</p>
                             </article>
                         ))}
-                        <ListBlock title="行动建议" items={result.actions ?? []} />
-                        <ListBlock title="风险提醒" items={result.warnings ?? []} />
+                        <ActionList items={result.actions ?? []} />
+                        <SignalList items={result.warnings ?? []} />
                         <FollowUpPanel
                             report={report}
                             generationDisabled={generationDisabled}
@@ -2714,21 +2709,6 @@ function ReportDetailModal({
                 )}
             </DialogContent>
         </Dialog>
-    );
-}
-
-function ListBlock({ title, items }: { title: string; items: Array<ReportActionItem | ReportWarningItem> }) {
-    if (!items.length) return null;
-    const formatter = title === "风险提醒" ? formatWarningItem : formatActionItem;
-    return (
-        <div className="rounded-md border bg-card p-3">
-            <h3>{title}</h3>
-            <ul>
-                {items.map((item) => (
-                    <li key={formatter(item)}>{formatter(item)}</li>
-                ))}
-            </ul>
-        </div>
     );
 }
 
@@ -2794,6 +2774,45 @@ function formatReportResultForExport(result?: AstrologyReport["result"] | null) 
 
 type ProfileCompletion = { percent: number; missing: string[] };
 
+function getGenerationBlock({
+    profile,
+    profileInput,
+    generationDisabled,
+    generationUnavailableReason,
+}: {
+    profile: AstrologyProfile | null;
+    profileInput: Partial<AstrologyProfileInput>;
+    generationDisabled: boolean;
+    generationUnavailableReason: string;
+}): GenerationBlock | null {
+    const requiredMissing = getRequiredProfileMissing(profileInput);
+    if (requiredMissing.length) {
+        return {
+            title: profile ? `还差 ${requiredMissing.join("、")}` : "请先填写基础档案",
+            text: "姓名和出生日期即可生成；出生时间、地点和星座信息可提升精度。",
+            actionLabel: profile ? "去完善档案" : "去创建档案",
+        };
+    }
+    if (generationDisabled) {
+        return {
+            title: "生成服务暂不可用",
+            text: generationUnavailableReason,
+            actionLabel: "稍后再试",
+            tone: "warning",
+        };
+    }
+    return null;
+}
+
+function getRequiredProfileMissing(profile: Partial<AstrologyProfileInput>) {
+    return ([
+        ["name", "姓名"],
+        ["birthDate", "出生日期"],
+    ] as const)
+        .filter(([key]) => !String(profile[key] ?? "").trim())
+        .map(([, label]) => label);
+}
+
 function calculateProfileCompletion(profile: Partial<AstrologyProfileInput>): ProfileCompletion {
     const fields: Array<[keyof AstrologyProfileInput, string]> = [
         ["name", "姓名"],
@@ -2823,23 +2842,17 @@ function calculatePartnerCompletion(partner: PartnerInput): ProfileCompletion {
     return { percent: Math.round((filled.length / fields.length) * 100), missing };
 }
 
-function getQuestionQuality(question: string): QuestionQuality {
-    const trimmed = question.trim();
-    const hasScene = /关系|工作|事业|财富|感情|沟通|选择|机会|复合|推进|决定|状态/.test(trimmed);
-    const hasTime = /今天|明天|本周|这周|近期|未来|7天|一周|一个月|现在|当前/.test(trimmed);
-    const hasGoal = /应该|适合|要不要|如何|怎么|风险|机会|行动|建议|避开|观察/.test(trimmed);
-    const hasDetail = trimmed.length >= 18;
-    const checks = [
-        { label: "有具体场景", passed: hasScene },
-        { label: "有时间范围", passed: hasTime },
-        { label: "有决策目标", passed: hasGoal },
-        { label: "信息足够", passed: hasDetail },
-    ];
-    const score = Math.max(
-        10,
-        Math.round((checks.filter((item) => item.passed).length / checks.length) * 100),
-    );
-    return { score, checks };
+function getQuestionQuality(input: {
+    reportType: AstrologyReportType;
+    focusArea: string;
+    currentState: string;
+    question: string;
+}): QuestionQuality {
+    const quality = buildAstrologyQuestionQualityContext(input);
+    return {
+        score: quality.score,
+        checks: quality.signals.map((signal) => ({ label: signal.label, passed: signal.present })),
+    };
 }
 
 function scoreLabel(key: string) {
@@ -2877,12 +2890,6 @@ function confidenceLabel(confidence: "low" | "medium" | "high") {
     );
 }
 
-function formatCredits(value?: number | string | null) {
-    const numberValue = Number(value ?? 0);
-    if (!Number.isFinite(numberValue)) return "0";
-    return numberValue.toFixed(4).replace(/\.?0+$/, "");
-}
-
 function isReportBusy(status: AstrologyReport["status"]) {
     return status === "pending" || status === "processing";
 }
@@ -2906,11 +2913,7 @@ function getWarningItemTitle(item: ReportWarningItem) {
 }
 
 function formatReportTime(value?: string | null) {
-    if (!value) return "未知时间";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "未知时间";
-    const pad = (input: number) => String(input).padStart(2, "0");
-    return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return formatDateTime(value, "未知时间");
 }
 
 function getErrorMessage(error: unknown, fallback: string) {

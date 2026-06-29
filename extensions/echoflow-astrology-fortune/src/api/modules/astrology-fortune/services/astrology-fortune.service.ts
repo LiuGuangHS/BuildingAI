@@ -413,7 +413,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
         };
         const modelId = setting.defaultModelId ?? null;
         const model = modelId ? await this.getModelInfo(modelId) : null;
-        const canGenerate = Boolean(model?.provider?.isActive && model.modelType === "llm");
+        const canGenerate = Boolean(model?.isActive !== false && model?.provider?.isActive && model.modelType === "llm");
 
         return {
             canGenerate,
@@ -655,7 +655,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
 
     private async loadModel(modelId: string, errorMessage = "AI 星盘运势需要可用的 LLM 模型") {
         const model = await this.getModelInfo(modelId);
-        if (!model || !model.provider || !model.provider.isActive || model.modelType !== "llm") {
+        if (!model || model.isActive === false || !model.provider || !model.provider.isActive || model.modelType !== "llm") {
             throw HttpErrorFactory.badRequest(errorMessage);
         }
         return model;
@@ -672,7 +672,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
     async listAvailableLlmModels() {
         const models = await this.publicAiModelService.listActiveLlmModels();
         return models
-            .filter((model) => model.provider?.isActive)
+            .filter((model) => model.isActive !== false && model.provider?.isActive)
             .map((model) => ({
                 id: model.id,
                 name: model.name,

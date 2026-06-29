@@ -100,8 +100,30 @@ describe("astrology report web actions", () => {
 
     it("formats report times without depending on an extra host i18n provider", () => {
         assert.doesNotMatch(pageSource, /TimeText/);
+        assert.match(pageSource, /formatDateTime/);
         assert.match(pageSource, /function formatReportTime\(value\?: string \| null\)/);
         assert.match(pageSource, /formatReportTime\(report\.createdAt\)/);
+    });
+
+    it("reuses backend question quality rules for the pre-generation guidance", () => {
+        assert.match(pageSource, /buildAstrologyQuestionQualityContext/);
+        assert.doesNotMatch(pageSource, /function getQuestionQuality\(question: string\)/);
+        assert.match(pageSource, /reportType: props\.reportType/);
+        assert.match(pageSource, /focusArea: props\.focusArea/);
+        assert.match(pageSource, /currentState: props\.currentState/);
+    });
+
+    it("refreshes reports when generation submission fails after a report row was created", () => {
+        const appBody = componentBody("AstrologyFortuneHomePage");
+        const generateToastIndex = appBody.indexOf('toast.error(getErrorMessage(error, "报告生成失败"));');
+        const regenerateToastIndex = appBody.indexOf('toast.error(getErrorMessage(error, "重新生成失败"));');
+        const generateRefetchIndex = appBody.indexOf("reportsQuery.refetch();", generateToastIndex);
+        const regenerateRefetchIndex = appBody.indexOf("reportsQuery.refetch();", regenerateToastIndex);
+
+        assert.ok(generateToastIndex >= 0, "generate failure toast should exist");
+        assert.ok(regenerateToastIndex >= 0, "regenerate failure toast should exist");
+        assert.ok(generateRefetchIndex > generateToastIndex, "generate failure should refetch reports");
+        assert.ok(regenerateRefetchIndex > regenerateToastIndex, "regenerate failure should refetch reports");
     });
 
     it("renders structured AI actions and warnings without leaking raw objects into React", () => {
@@ -114,11 +136,16 @@ describe("astrology report web actions", () => {
         assert.match(pageSource, /function getActionItemTitle\(item: ReportActionItem\)/);
         assert.match(pageSource, /function formatWarningItem\(item: ReportWarningItem\)/);
         assert.match(pageSource, /function getWarningItemTitle\(item: ReportWarningItem\)/);
+        const modalBody = componentBody("ReportDetailModal");
+
         assert.match(actionBody, /getActionItemTitle\(item\)/);
         assert.match(actionBody, /原因：\{item\.reason\}/);
         assert.match(actionBody, /时间：\{item\.timebox\}/);
         assert.match(signalBody, /getWarningItemTitle\(item\)/);
         assert.match(signalBody, /\{item\.detail\}/);
+        assert.match(modalBody, /<ActionList items=\{result\.actions \?\? \[\]\} \/>/);
+        assert.match(modalBody, /<SignalList items=\{result\.warnings \?\? \[\]\} \/>/);
+        assert.doesNotMatch(pageSource, /function ListBlock/);
         assert.match(exportBody, /result\.actions\.map\(\(item\) => `- \$\{formatActionItem\(item\)\}`\)/);
         assert.match(exportBody, /result\.warnings\.map\(\(item\) => `- \$\{formatWarningItem\(item\)\}`\)/);
     });

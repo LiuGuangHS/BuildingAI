@@ -26,17 +26,17 @@ export class Upgrade {
     private async ensureExtensionRecord(): Promise<void> {
         const extensionData = {
             icon: "/echoflow-astrology-fortune/static/icon.png",
-            name: "AI星盘运势",
+            name: "星盘运势",
             identifier: "echoflow-astrology-fortune",
             version: "0.0.1",
-            description: "基于出生信息、星座生肖、个人档案和 AI 推理，生成每日运势、性格洞察、事业财富、情感关系、星座配对与生活决策建议。",
+            description: "输入出生信息，生成个人星盘、运势解读与提问建议。",
             type: 1,
             isLocal: true,
             status: "1",
             supportTerminal: [1],
             author: {
                 avatar: "/echoflow-astrology-fortune/static/icon.png",
-                name: "EchoflowAI Teams",
+                name: "EchoFlowAI Team",
                 homepage: "",
             },
         };

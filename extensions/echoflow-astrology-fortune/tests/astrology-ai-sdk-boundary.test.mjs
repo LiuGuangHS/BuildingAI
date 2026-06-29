@@ -12,6 +12,8 @@ const moduleSource = readFileSync(
 );
 const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
 const readmeSource = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+const apiQuestionQualitySource = readFileSync(new URL("../src/api/modules/astrology-fortune/services/astrology-question-quality.ts", import.meta.url), "utf8");
+const questionQualitySource = readFileSync(new URL("../src/shared/astrology-question-quality.ts", import.meta.url), "utf8");
 
 test("astrology reports use the extension SDK text generation entrypoint", () => {
     const generateCalls = serviceSource.match(/generateText\(\{/g) ?? [];
@@ -32,6 +34,12 @@ test("astrology console model list uses the extension SDK instead of a direct Ai
     assert.equal(serviceSource.includes("@InjectRepository(AiModel)"), false);
     assert.equal(serviceSource.includes("modelRepo"), false);
     assert.equal(moduleSource.includes("AiModel"), false);
+});
+
+test("astrology question quality helper stays pure while API build keeps the standard root", () => {
+    assert.match(apiQuestionQualitySource, /\.\.\/\.\.\/\.\.\/\.\.\/shared\/astrology-question-quality/);
+    assert.equal(questionQualitySource.includes("@nestjs"), false);
+    assert.equal(apiQuestionQualitySource.includes("@nestjs"), false);
 });
 
 test("astrology README documents PublicAiModelService as the provider boundary", () => {

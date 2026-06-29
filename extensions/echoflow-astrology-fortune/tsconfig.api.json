@@ -2,13 +2,14 @@
     "extends": "@buildingai/typescript-config/nestjs.extension.json",
     "compilerOptions": {
         "outDir": "./.temp/api",
-        "rootDir": "./src/api",
+        "rootDir": "./src",
         "tsBuildInfoFile": "./.temp/tsconfig.api.tsbuildinfo",
         "resolveJsonModule": true,
         "erasableSyntaxOnly": false,
         "strictPropertyInitialization": false
     },
     "include": [
-        "src/api/**/*"
+        "src/api/**/*",
+        "src/shared/**/*"
     ]
 }

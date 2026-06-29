@@ -1,6 +1,6 @@
-# AI 星盘运势
+# 星盘运势
 
-`echoflow-astrology-fortune` 是 EchoFlow 的星盘与运势报告插件。插件基于出生信息、星座生肖、长期档案和用户问题生成每日运势、性格洞察、情感配对、事业财富与生活决策建议；报告生成走主站 LLM，按报告类型计费，并提供失败退款保护。
+`echoflow-astrology-fortune` 是 EchoFlow 的星盘运势插件。用户输入出生信息后生成个人星盘、运势解读与提问建议；报告生成走主站 LLM，按报告类型计费，并提供失败退款保护。
 
 文档维护规则：全仓公共边界、主系统二开、上游同步、组件化 UI 和验证规则维护在根目录 `AGENTS.md`；本 README 只维护 `echoflow-astrology-fortune` 的业务边界、能力状态、入口、报告/队列/计费/生成上下文事实、验证命令和待办。临时分析、浏览器 QA checklist、设计参考、外部项目快照或计划文档只作为施工材料，有效结论必须合并到 `AGENTS.md` 或本 README，不长期维护第二套插件规范；新的报告结构、追问、反馈、计费、队列、浏览器 QA 或 AI 可信度结论也同样先回写这两处长期入口，并从“下一步”移除已经落地的旧计划。
 
@@ -189,7 +189,7 @@ pnpm --filter echoflow-astrology-fortune smoke:web
 | 单测 | 已覆盖 AI SDK 边界、AI 输出契约、常见 SDK 文本返回形态、模型输出异常失败归一化、标题/摘要非空、评分 scores 必填且包含 overall、关键词 keywords 与幸运锚点 lucky 必填非空、判断依据 evidence、判断依据来源白名单、洞察段落 sections 的洞察/机会/风险/行动覆盖、结构化行动建议 actions `{ item, reason, timebox }`、结构化风险提醒 warnings `{ title, detail }`、AI 复盘清单 reviewChecklist 和模型生成追问 followUps 的必填/非空下限、复盘清单依据可追溯性、继续追问可执行性、继续追问来源在问问区可见并可清除、继续追问 prompt 带入上一份报告的带置信度判断依据、行动/风险/复盘和脱敏反馈，并约束 high/medium/low 置信度在追问里的使用方式、复制/下载/成功通知保留评分、关键词、幸运锚点、带置信度 AI 依据、复盘清单与追问，用户端、Console 和复制/下载统一使用“高/中/低置信”标签，compact 报告卡展示前三条判断依据以保留完整置信层级，通知摘要过滤 raw provider 字段且不会把缺置信度的依据发给用户、问题质量上下文、问题质量面板的已包含/建议补充/输出影响说明、公开生成依据中的脱敏问题质量、追问来源上下文入队与 prompt、反馈反哺、反馈 metadata、用户端反馈短备注进入提交 payload、报告时间不依赖额外 i18n provider、结构化行动/风险对象安全渲染与导出、Web/Console public 类型边界、公开生成状态和不可用禁用入口、用户端 compact 报告卡 AI 锚点、Console 详情失败归因与 AI 评分/关键词/幸运锚点/依据/复盘清单/行动建议/风险提醒/继续追问展示、用户端样式边界、嵌入式工作区不使用 `self-stretch` 拉伸输入面板、路由分包、RootLayout 查询上下文边界、构建产物入口 smoke、Web API smoke 脚本公开路径/标准响应壳/Token 必填/真实生成 opt-in 边界、通知规则、报告回收规则、公开生成上下文、扣费幂等、失败退款顺序，以及队列入队失败、Worker 崩溃和超时回收归因边界；仍需补真实模型联调和账务数据库集成测试。 |
 | Redis/Worker | 需要真实 smoke 成功、失败、超时、删除保护和多实例恢复。 |
 | 真实 LLM | 需要主站真实模型、Secret、余额和测试档案覆盖报告生成与失败退款。 |
-| Web 构建 | 已在 Node 22 / pnpm 10 环境通过 `build:web`；Web 首页和 Console 管理页通过 lazy route 独立拆包，Vite preview HTTP smoke 可访问 HTML、JS 和 CSS 产物。 |
+| Web 构建 | 已在当前 Node 24 / pnpm 10 基线通过 `build:web`；Web 首页和 Console 管理页通过 lazy route 独立拆包，Vite preview HTTP smoke 可访问 HTML、JS 和 CSS 产物。 |
 | 浏览器 QA | 2026-06-20 先发现 `http://localhost:5173/extension/echoflow-astrology-fortune` 实际由视频插件 dev server 提供，Vite 提示 base URL 为 `/extension/echoflow-video`；星盘前端应使用本插件 dev server 输出的实际端口访问，例如本轮 Vite 输出 `http://localhost:5177/extension/echoflow-astrology-fortune`。本轮 in-app browser 验证空态可打开，无 error boundary、无横向溢出、无 `[object Object]`；多列今日工作区左侧输入面板不再被右侧报告撑成等高整页卡。Playwright/Edge 以主系统标准响应壳 `code: 20000` mock `localhost:4090` 的档案、公开 generation-status 和报告接口后，1366x900 与 390x844 报告态均可见 AI 摘要 `Alert`、分数 `Progress`、状态/关键词/依据 `Badge`、“高/中/低置信”三档判断依据、结构化行动 `reason/timebox`、风险 `detail`、AI 复盘清单、继续追问和反馈入口；无 React page error，未出现页面横向滚动。mock 环境中未拦截的主站资源可能产生 `ERR_CONNECTION_RESET/EMPTY_RESPONSE` 资源日志，不作为插件渲染错误。 |
 | 当前 CLI 复验 | 2026-06-20 本轮 `pnpm --filter echoflow-astrology-fortune test` 共 94 项全通过；聚焦 `astrology-report-ai-result.test.mjs` 已覆盖每条判断依据必须由模型给出 low/medium/high 置信度、不可用/猜测来源即使包含白名单词也会被拒绝，且用户可见 AI 报告内容不能使用确定性承诺；`astrology-prompt-boundary.test.mjs` 已覆盖主生成 prompt 明确要求 `confidence` 只能是 low/medium/high，并覆盖主生成 prompt 与格式修复 prompt 都明确禁止确定性承诺；`astrology-web-report-actions.test.mjs` 已覆盖复制/下载文本从结构化结果重建、保留“高/中/低置信”标签，并要求 compact 报告卡展示前三条判断依据；`astrology-web-style-boundary.test.mjs` 已覆盖嵌入式工作区不用 `self-stretch` 把输入面板拉成完整应用壳；`astrology-web-smoke-script.test.mjs` 已覆盖 Web smoke 对 AI 修复审计字段的公开 API 过滤断言，并要求真实生成 smoke 逐条校验 `evidence.source`、`evidence.insight` 和 `evidence.confidence`。`check-types`、`build:api`、`build:web` 和 `build:publish` 均通过；`smoke:web` 在未提供 token 时按设计失败并提示需要 `ASTROLOGY_SMOKE_TOKEN` 或 `BUILDINGAI_ACCESS_TOKEN`。本轮同时重建了 `@buildingai/extension-sdk` dist，确认 `utils/pure`、`provider-config` 等公开导出产物存在；星盘后端纯解析服务从 `@buildingai/extension-sdk/utils/pure` 导入 `safeJsonParse` / `buildDefinedWhere`，避免为了 JSON/where helper 拉起 SDK 根入口的 Nest/DB/低层 AI provider。Web 用户端主入口约 910 KB，Console 管理页独立 chunk 约 47 KB，仍有 Vite chunk warning；`build:publish` 已改为直接串联底层 CLI，避免嵌套 pnpm 触发 Windows/Corepack 版本守卫。 |
 
@@ -207,8 +207,8 @@ pnpm --filter echoflow-astrology-fortune smoke:web
 
 | 任务 | 范围/文件 | 具体步骤 | 验收 |
 |---|---|---|---|
-| P1 真实端到端 smoke | Web 报告工作台、报告 service、主站模型/Secret/余额 | 使用 `pnpm --filter echoflow-astrology-fortune smoke:web` 做用户端公开 API smoke；默认只验证登录、状态、档案和历史列表，设置 `ASTROLOGY_SMOKE_GENERATE=1` 后才进入真实生成、计费、队列、反馈和继续追问。 | 必须提供 `ASTROLOGY_SMOKE_TOKEN` 或 `BUILDINGAI_ACCESS_TOKEN`，并记录脱敏报告 ID、账务事实、反馈 metadata、追问上下文和失败退款事实；未配置真实模型/Secret/余额/Redis Worker 时不声明通过。 |
-| P1 Redis/Worker smoke | BullMQ processor、超时回收、删除保护 | 覆盖成功、失败、超时回收、软删除保护、退款异常和服务重启恢复。 | 不重复扣费、不重复通知；Console 任务页能看到失败类型和退款异常。 |
+| P1 真实端到端 smoke | Web 报告工作台、报告 service、主站模型/Secret/余额 | 使用 `pnpm --filter echoflow-astrology-fortune smoke:web` 做用户端公开 API smoke；默认只验证登录、generation-status、档案和历史列表，设置 `ASTROLOGY_SMOKE_GENERATE=1` 后才进入真实生成、队列轮询、扣费、结构化结果、反馈和继续追问。 | 必须提供 `ASTROLOGY_SMOKE_TOKEN` 或 `BUILDINGAI_ACCESS_TOKEN`；记录脱敏报告 ID、账务事实、AI 结构字段、反馈 metadata、追问上下文和失败退款事实；Web 不暴露模型/Provider/Secret/raw/修复审计字段。 |
+| P1 Redis/Worker smoke | BullMQ processor、超时回收、删除保护 | 覆盖成功、模型格式异常失败、provider 失败、超时回收、软删除保护、退款异常、服务重启恢复和多实例重复恢复。 | 不重复扣费、不重复通知；Console 任务页能看到 failureType、failureReason、退款异常和 AI 修复状态。 |
 | P1 真实模型与账务测试 | `tests/*`、Console 任务页、计费 service | 补真实模型联调脚本、账务数据库集成测试和 Console 任务页 focused tests。 | 测试能证明扣费幂等、失败退款顺序和脱敏排障字段；Web 不暴露模型/Provider/Secret。 |
 | P2 反馈实体化评估 | 报告 metadata、可选反馈实体、Console 统计 | 按正式运营需求决定是否把反馈 metadata 迁移为独立实体。 | 没有大规模统计需求时继续 metadata；若迁移，提供 migration、serializer 和 Console 查询边界。 |
 | P2 用户端文案继续收敛 | Web 页面、报告卡、详情、模板问题 | 继续压缩用户端技术词，保持智能感来自分析结构、行动项和上下文来源。 | 用户端不出现 Provider、模型 ID、原始 payload；无可用模型时输入与提交保持禁用。 |

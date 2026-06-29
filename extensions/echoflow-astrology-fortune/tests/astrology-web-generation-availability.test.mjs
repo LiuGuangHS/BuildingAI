@@ -50,6 +50,16 @@ describe("astrology web generation availability", () => {
         assert.doesNotMatch(webServiceSource, /consoleHttpClient/);
     });
 
+    it("treats disabled models as unavailable even when the provider is active", () => {
+        const publicStatusBody = serviceSource.match(/async getPublicGenerationStatus[\s\S]*?\n    async cleanupStaleReports/)?.[0] ?? "";
+        const loadModelBody = serviceSource.match(/private async loadModel[\s\S]*?\n    private async getModelInfo/)?.[0] ?? "";
+        const listModelsBody = serviceSource.match(/async listAvailableLlmModels[\s\S]*?\n    private async reserveReportCreditsOnce/)?.[0] ?? "";
+
+        assert.match(publicStatusBody, /model\?\.isActive !== false/);
+        assert.match(loadModelBody, /model\.isActive === false/);
+        assert.match(listModelsBody, /model\.isActive !== false/);
+    });
+
     it("disables user generation controls when no model is available", () => {
         const rootBody = extractFunction("AstrologyFortuneHomePage");
         const composerBody = extractFunction("ReportComposer");
@@ -67,6 +77,20 @@ describe("astrology web generation availability", () => {
         assert.match(reportPanelBody, /disabled={generationDisabled \|\| isReportBusy\(report\.status\)}/);
         assert.match(followUpBody, /disabled={generationDisabled}/);
         assert.match(detailModalBody, /disabled={generationDisabled \|\| isReportBusy\(report\.status\)}/);
+    });
+
+    it("uses only backend-required profile fields as the web generation gate", () => {
+        const rootBody = extractFunction("AstrologyFortuneHomePage");
+        const blockBody = extractFunction("getGenerationBlock");
+        const requiredBody = extractFunction("getRequiredProfileMissing");
+
+        assert.match(rootBody, /profileInput: selectedProfile \?\? profileForm/);
+        assert.match(blockBody, /getRequiredProfileMissing\(profileInput\)/);
+        assert.doesNotMatch(blockBody, /completion\.missing\.length/);
+        assert.match(requiredBody, /\["name", "姓名"\]/);
+        assert.match(requiredBody, /\["birthDate", "出生日期"\]/);
+        assert.doesNotMatch(requiredBody, /birthTime|birthPlace|zodiacSign|moonSign|risingSign/);
+        assert.match(blockBody, /generationDisabled/);
     });
 
     it("keeps public report metadata typed as an explicit whitelist", () => {

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import {
     buildAstrologyQuestionQualityContext,
     summarizeAstrologyQuestionQuality,
-} from "../src/api/modules/astrology-fortune/services/astrology-question-quality.ts";
+} from "../src/shared/astrology-question-quality.ts";
 
 test("scores concrete astrology questions higher than vague questions", () => {
     const concrete = buildAstrologyQuestionQualityContext({

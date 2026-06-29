@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { buildAstrologyReportGenerationContext } from "../src/api/modules/astrology-fortune/services/astrology-report-public-metadata.ts";
-import { buildAstrologyQuestionQualityContext } from "../src/api/modules/astrology-fortune/services/astrology-question-quality.ts";
+import { buildAstrologyQuestionQualityContext } from "../src/shared/astrology-question-quality.ts";
 
 const typesSource = readFileSync(
     new URL("../src/web/services/types/index.ts", import.meta.url),
