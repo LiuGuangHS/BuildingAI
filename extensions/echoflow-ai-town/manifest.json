@@ -4,10 +4,10 @@
     "type": "application",
     "version": "0.0.1",
     "icon": "/echoflow-ai-town/static/icon.png",
-    "description": "治愈系 AI 小镇经营叙事游戏——经营、拜访居民、探索事件、AI 镇务参谋与记忆驱动的日常循环。",
+    "description": "治愈系小镇经营游戏，建造、装饰并经营你的专属小镇。",
     "author": {
         "avatar": "/echoflow-ai-town/static/icon.png",
-        "name": "EchoflowAI Teams",
+        "name": "EchoFlowAI Team",
         "homepage": ""
     },
     "changelog": [],

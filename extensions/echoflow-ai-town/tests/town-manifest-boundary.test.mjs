@@ -19,6 +19,7 @@ test("town manifest declares direct build and test imports", async () => {
     const deps = mergePackageDeps(pkg);
 
     assertDeclaredDeps(deps, [
+        ["@buildingai/base", "@buildingai/base is directly imported by base service/controller classes"],
         ["eslint", "eslint/config is directly imported by eslint.config.mjs"],
         ["globals", "globals is directly imported by eslint.config.mjs"],
         ["tsup", "tsup is directly used by api build scripts"],

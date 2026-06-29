@@ -1,6 +1,6 @@
 # 乐园小镇
 
-`echoflow-ai-town` 是 EchoFlow 的小镇经营叙事插件。用户端直接进入可玩小镇，围绕存档、行动、居民关系、事件、日结、今日计划和居民对话形成日常循环；Console 负责模型配置、存档诊断、日志和运营排查。
+`echoflow-ai-town` 是 EchoFlow 的小镇经营游戏插件。用户端直接进入可玩小镇，建造、装饰并经营专属小镇，围绕存档、行动、居民关系、事件、日结、今日计划和居民对话形成日常循环；Console 负责模型配置、存档诊断、日志和运营排查。
 
 文档维护规则：全仓公共边界、主系统二开、上游同步、组件化 UI 和验证规则维护在根目录 `AGENTS.md`；本 README 只维护 `echoflow-ai-town` 的业务边界、能力状态、入口、玩法/记忆/catalog/计费事实、验证命令和待办。临时分析、浏览器 QA checklist、外部项目快照或计划文档只作为施工材料，有效结论必须合并到 `AGENTS.md` 或本 README，不长期维护第二套插件规范；新的玩法循环、记忆、catalog、计费、降级体验或浏览器 QA 结论也直接沉淀到这两处，并从“下一步”移除已经落地的旧计划。
 
@@ -155,7 +155,7 @@ pnpm --filter echoflow-ai-town build:publish
 
 | 命令 | 状态 | 说明 |
 |---|---|---|
-| `check-types` | pass | 已在 Node 22.23.0 / pnpm 10.20.0 环境通过。 |
+| `check-types` | pass | 已在当前 Node 24 / pnpm 10.20.0 基线复核通过。 |
 | `test` | pass | 覆盖规则闭环、内容包边界、前端首屏约束、AI 计费边界、限流和 UI 组件复用。 |
 | Console 图标白名单 | covered | 小镇静态测试覆盖 Console 静态映射和未登记图标 fallback，类型层不再引用 `lucide-react/dynamic`。 |
 | `build:api` | pass | API 产物已包含 catalog、migration 和 `0.0.1` upgrade。 |
@@ -179,6 +179,6 @@ pnpm --filter echoflow-ai-town build:publish
 
 | 任务 | 范围/文件 | 具体步骤 | 验收 |
 |---|---|---|---|
-| P1 真实浏览器交互 smoke | Web 主场景、`TownService`、浏览器 QA 环境 | 先恢复 Playwright Chromium、系统浏览器或 Codex Browser 连接；确认端口确属 `echoflow-ai-town` 后，在主系统插件容器完成创建存档 -> 2 到 3 次行动 -> 日结 -> 第二天变化；同时检查控制台错误、首屏布局、抽屉焦点和移动端可操作区域。 | 记录真实存档 ID、行动结果、日结资源变化、桌面/移动截图和浏览器状态；没有新截图或浏览器运行证据时保持 blocked，不声明端到端通过。 |
-| P1 真实账务 smoke | `src/api/modules/town/*`、主站余额、真实模型 | 使用测试用户和余额覆盖今日计划、居民聊天、探索导演的免费、扣费、fallback 不扣费和失败退款。 | 记录脱敏事件 ID、`AccountLog` 扣费/退款事实和用户端账务 chip；未跑真实余额前不声明真实闭环。 |
+| P1 真实浏览器交互 smoke | Web 主场景、`TownService`、浏览器 QA 环境 | 先恢复 Playwright Chromium、系统浏览器或 Codex Browser 连接；确认端口确属 `echoflow-ai-town` 后，在主系统插件容器完成创建存档 -> 经营餐馆/拜访居民/探索街区 2 到 3 次行动 -> 休息日结 -> 第二天变化；同时检查控制台错误、首屏布局、抽屉焦点和移动端可操作区域。 | 记录真实存档 ID、行动序列、事件标题、资源 before/after、日结变化、桌面/移动截图和浏览器状态；没有新截图或浏览器运行证据时保持 blocked，不声明端到端通过。 |
+| P1 真实账务 smoke | `src/api/modules/town/*`、主站余额、真实模型 | 使用测试用户和余额覆盖今日计划、居民聊天、探索导演三类动作的免费、真实模型成功扣费、fallback 不扣费、provider 失败退款和退款异常记录。 | 记录脱敏事件 ID、`AccountLog` 扣费/退款事实、fallback 标记和用户端账务 chip；未跑真实余额前不声明真实闭环。 |
 | P2 规则与记忆测试补强 | `tests/*`、规则服务、记忆压缩、计费幂等 | 补世界规则、关系推进、任务进度、AI fallback、记忆压缩和计费幂等 focused tests。 | 测试覆盖新增规则且不把运营内容内联回 service；失败输出能定位 catalog、规则或计费边界。 |

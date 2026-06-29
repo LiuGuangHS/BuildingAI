@@ -1454,8 +1454,8 @@ export class TownService extends BaseService<TownSave> {
             if (!delta) continue;
             const character = preferredTarget?.id === characterId ? preferredTarget : await manager.findOne(TownCharacter, { where: { id: characterId, userId, saveId } });
             if (!character) continue;
-            const promiseEvent = this.createPromiseReminderEvent(userId, saveId, character, action, day);
-            const finalDelta = delta + (promiseEvent ? 1 : 0);
+            const promiseEvent = action === "chat" ? null : this.createPromiseReminderEvent(userId, saveId, character, action, day);
+            const finalDelta = delta;
             const update = this.townRelationshipRulesService.applyCharacterRelationship(character, finalDelta, action);
             await manager.save(TownCharacter, character);
             updates.push(update);
@@ -1469,11 +1469,12 @@ export class TownService extends BaseService<TownSave> {
         return [...memoryEvents, ...relationshipEvents];
     }
 
-    private createPromiseReminderEvent(userId: string, saveId: string, character: TownCharacter, action: TownActionDto["action"] | "chat", day: number): TownEvent | null {
+    private createPromiseReminderEvent(userId: string, saveId: string, character: TownCharacter, action: TownActionDto["action"], day: number): TownEvent | null {
         if (!["visit", "chat", "decorate", "explore"].includes(action)) return null;
         const promises = Array.isArray(character.memory?.promises) ? character.memory.promises : [];
         const promise = promises[0];
         if (!promise) return null;
+        character.relationship = Math.min(100, character.relationship + 1);
         character.memory = {
             ...(character.memory ?? {}),
             relationshipLevel: this.townRelationshipRulesService.getRelationshipLevel(character.relationship),

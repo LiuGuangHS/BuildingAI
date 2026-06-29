@@ -407,38 +407,77 @@ button:disabled {
 .onboarding-panel {
     position: absolute;
     left: clamp(20px, 5vw, 72px);
-    top: clamp(104px, 18vh, 190px);
-    z-index: 4;
+    top: clamp(118px, 17vh, 170px);
+    z-index: 6;
     display: grid;
     gap: 12px;
     width: min(560px, calc(100% - 40px));
+    border: 2px solid rgba(255, 230, 178, 0.34);
+    border-radius: 28px;
+    padding: 18px;
+    background: linear-gradient(90deg, rgba(33, 18, 18, 0.72), rgba(33, 18, 18, 0.38) 78%, transparent);
+    box-shadow: 0 24px 60px rgba(18, 8, 28, 0.28);
+    backdrop-filter: blur(8px);
 }
 
 .onboarding-hotspots {
     position: absolute;
     inset: 0;
     z-index: 3;
+    pointer-events: none;
+}
+
+.onboarding-hotspots .building-hotspot,
+.onboarding-hotspots .npc-hotspot {
+    opacity: 0.88;
+    transform: scale(0.9);
 }
 
 .preview-hotspot {
     pointer-events: none;
 }
 
+.onboarding-hotspots .hotspot-restaurant {
+    left: auto;
+    right: 34%;
+    top: 18%;
+}
+
+.onboarding-hotspots .hotspot-florist {
+    right: 12%;
+    top: 29%;
+}
+
+.onboarding-hotspots .hotspot-square {
+    left: 50%;
+    top: 54%;
+}
+
+.onboarding-hotspots .npc-hotspot-0 {
+    left: 55%;
+    top: 30%;
+}
+
+.onboarding-hotspots .npc-hotspot-2 {
+    right: 24%;
+    top: 50%;
+}
+
 .onboarding-command-preview {
     position: absolute;
     left: clamp(20px, 5vw, 72px);
     bottom: clamp(22px, 6vw, 66px);
-    z-index: 5;
-    display: flex;
-    flex-wrap: wrap;
+    z-index: 6;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(110px, 1fr));
     gap: 9px;
-    max-width: min(520px, calc(100% - 40px));
+    max-width: min(560px, calc(100% - 40px));
 }
 
 .onboarding-command-card {
     display: grid;
     gap: 2px;
-    min-width: 96px;
+    min-width: 0;
     border: 2px solid rgba(255, 230, 178, 0.58);
     border-radius: 14px;
     padding: 9px 12px 10px;
@@ -3478,6 +3517,8 @@ button:disabled {
 
     .onboarding-panel {
         margin-top: 96px;
+        padding: 16px;
+        background: rgba(33, 18, 18, 0.68);
     }
 
     .onboarding-command-preview {

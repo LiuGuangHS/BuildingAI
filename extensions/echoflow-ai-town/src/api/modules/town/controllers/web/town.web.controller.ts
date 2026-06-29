@@ -19,7 +19,9 @@ export class TownWebController extends BaseController {
     constructor(
         private readonly townService: TownService,
         private readonly rateLimitService: ExtensionRateLimitService,
-    ) {}
+    ) {
+        super();
+    }
 
     @Post("saves")
     createSave(@Playground() user: UserPlayground, @Body() dto: CreateTownSaveDto) {

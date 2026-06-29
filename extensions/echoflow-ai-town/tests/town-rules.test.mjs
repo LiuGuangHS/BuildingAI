@@ -103,7 +103,7 @@ test("save removal keeps destructive controls in town archive language", () => {
 
 test("public plugin metadata introduces the town as a game instead of generic AI app chrome", () => {
     assert.match(townManifestSource, /"name": "乐园小镇"/);
-    assert.match(townManifestSource, /"description": "治愈系小镇经营叙事游戏/);
+    assert.match(townManifestSource, /"description": "治愈系小镇经营游戏/);
     assert.doesNotMatch(townManifestSource, /AI乐园小镇/);
     assert.doesNotMatch(townManifestSource, /AI 趣味玩法应用/);
     assert.match(townPackageSource, /"description": "Town life management narrative game extension"/);

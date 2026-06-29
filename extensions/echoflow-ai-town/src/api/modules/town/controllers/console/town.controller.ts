@@ -12,7 +12,9 @@ export class TownConsoleController extends BaseController {
     constructor(
         private readonly townService: TownService,
         private readonly townAiService: TownAiService,
-    ) {}
+    ) {
+        super();
+    }
 
     @Get("saves")
     getSaves(@Query() query: QueryTownSaveDto) {

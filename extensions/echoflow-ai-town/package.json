@@ -1,8 +1,8 @@
 {
     "name": "echoflow-ai-town",
     "version": "0.0.1",
-    "description": "AI 小镇经营叙事游戏插件，内置建筑/居民/事件/任务 catalog，AI 担任叙事导演与镇务参谋，支持居民记忆、日结反馈、行动循环与运营后台。",
-    "author": "EchoflowAI Teams",
+    "description": "Town life management narrative game extension",
+    "author": "EchoFlowAI Team",
     "private": true,
     "main": "./manifest.json",
     "module": "./manifest.json",
@@ -36,6 +36,7 @@
         "check-types": "tsc -p tsconfig.api.json --noEmit"
     },
     "dependencies": {
+        "@buildingai/base": "workspace:*",
         "@buildingai/cache": "workspace:*",
         "@buildingai/constants": "workspace:*",
         "@buildingai/core": "workspace:*",
@@ -57,7 +58,6 @@
     "devDependencies": {
         "@buildingai/eslint-config": "workspace:*",
         "@buildingai/typescript-config": "workspace:*",
-        "@buildingai/web-types": "workspace:*",
         "@types/react": "catalog:web",
         "@types/react-dom": "catalog:web",
         "concurrently": "catalog:dev",

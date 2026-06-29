@@ -90,18 +90,19 @@ export function normalizeTownContentPackState(state: unknown): TownContentPackSt
         ? source.seasonId as TownContentSeasonId
         : fallback.seasonId;
 
+    const fallbackStrategy = TOWN_CONTENT_PACK_MANIFEST.seedStrategy;
     const sourceStrategy = source.seedStrategy;
     const normalizedSeedStrategy = sourceStrategy && typeof sourceStrategy === "object"
         ? {
-            mode: sourceStrategy.mode === TOWN_CONTENT_PACK_MANIFEST.seedStrategy.mode ? sourceStrategy.mode : fallback.seedStrategy.mode,
+            mode: sourceStrategy.mode === fallbackStrategy.mode ? sourceStrategy.mode : fallbackStrategy.mode,
             shouldRun: sourceStrategy.shouldRun === "create-save" || sourceStrategy.shouldRun === "upgrade-normalize"
                 ? sourceStrategy.shouldRun
-                : fallback.seedStrategy.shouldRun,
+                : fallbackStrategy.shouldRun,
             idempotencyKey: typeof sourceStrategy.idempotencyKey === "string" && sourceStrategy.idempotencyKey.trim()
                 ? sourceStrategy.idempotencyKey
-                : fallback.seedStrategy.idempotencyKey,
+                : fallbackStrategy.idempotencyKey,
         }
-        : { ...fallback.seedStrategy };
+        : { ...fallbackStrategy };
 
     return {
         packId: source.packId === TOWN_CONTENT_PACK_MANIFEST.id ? source.packId : fallback.packId,
