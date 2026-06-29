@@ -3,13 +3,13 @@
         "echoflow-video": {
             "manifest": {
                 "identifier": "echoflow-video",
-                "name": "EchoFlow 视频生成",
+                "name": "视频工作台",
                 "version": "0.0.1",
-                "description": "多模型视频创作工作台，支持文生视频、图生视频、参考图生成、任务轮询、Webhook 终态保护与模型级计费。",
+                "description": "用文字或参考图生成视频，支持多模型选择、任务历史和结果查看。",
                 "icon": "/echoflow-video/static/logo.png",
                 "author": {
                     "avatar": "/echoflow-video/static/logo.png",
-                    "name": "EchoflowAI Teams",
+                    "name": "EchoFlowAI Team",
                     "homepage": ""
                 }
             },
@@ -20,13 +20,13 @@
         "echoflow-image": {
             "manifest": {
                 "identifier": "echoflow-image",
-                "name": "EchoFlow AI 绘画",
+                "name": "图像工作台",
                 "version": "0.0.1",
-                "description": "提示词润色、参考图生成、无限画布灵感白板与多协议图像模型接入的 AI 绘画工作台。",
+                "description": "生成、编辑和优化图片，适合封面、海报与营销素材。",
                 "icon": "/echoflow-image/static/logo.png",
                 "author": {
                     "avatar": "/echoflow-image/static/logo.png",
-                    "name": "EchoflowAI Teams",
+                    "name": "EchoFlowAI Team",
                     "homepage": ""
                 }
             },
@@ -53,13 +53,13 @@
         "echoflow-contract-generation": {
             "manifest": {
                 "identifier": "echoflow-contract-generation",
-                "name": "AI 合同工作台",
+                "name": "合同生成",
                 "version": "0.0.1",
-                "description": "基于 LLM 的合同起草、上传审查、条款编辑、风险提示、改写建议与 Word 导出一站式合同工作台。",
+                "description": "覆盖创业、劳动、租赁等场景，快速生成可编辑合同草稿。",
                 "icon": "/echoflow-contract-generation/static/icon.png",
                 "author": {
                     "avatar": "/echoflow-contract-generation/static/icon.png",
-                    "name": "EchoflowAI Teams",
+                    "name": "EchoFlowAI Team",
                     "homepage": ""
                 }
             },
@@ -70,13 +70,13 @@
         "echoflow-astrology-fortune": {
             "manifest": {
                 "identifier": "echoflow-astrology-fortune",
-                "name": "AI 星盘运势",
+                "name": "星盘运势",
                 "version": "0.0.1",
-                "description": "基于出生信息和个人档案生成每日运势、性格洞察、情感配对、事业财富与追问建议的 AI 星盘。",
+                "description": "输入出生信息，生成个人星盘、运势解读与提问建议。",
                 "icon": "/echoflow-astrology-fortune/static/icon.png",
                 "author": {
                     "avatar": "/echoflow-astrology-fortune/static/icon.png",
-                    "name": "EchoflowAI Teams",
+                    "name": "EchoFlowAI Team",
                     "homepage": ""
                 }
             },
@@ -89,16 +89,16 @@
                 "identifier": "echoflow-ai-town",
                 "name": "乐园小镇",
                 "version": "0.0.1",
-                "description": "治愈系 AI 小镇经营叙事游戏——经营、拜访居民、探索事件、AI 镇务参谋与记忆驱动的日常循环。",
+                "description": "治愈系小镇经营游戏，建造、装饰并经营你的专属小镇。",
                 "icon": "/echoflow-ai-town/static/icon.png",
                 "author": {
                     "avatar": "/echoflow-ai-town/static/icon.png",
-                    "name": "EchoflowAI Teams",
+                    "name": "EchoFlowAI Team",
                     "homepage": ""
                 }
             },
             "isLocal": true,
-            "enabled": true,
+            "enabled": false,
             "installedAt": "2026-06-14T00:00:00.000Z"
         }
     },

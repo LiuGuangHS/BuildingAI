@@ -92,7 +92,7 @@ export function normalizeNotificationData(data: Record<string, unknown>) {
     if (Buffer.byteLength(json, "utf8") > MAX_NOTIFICATION_DATA_BYTES) {
         throw HttpErrorFactory.badRequest("通知扩展数据过大");
     }
-    return JSON.parse(json) as Record<string, unknown>;
+    return data;
 }
 
 export function normalizeNotificationLinkUrl(linkUrl?: string | null) {

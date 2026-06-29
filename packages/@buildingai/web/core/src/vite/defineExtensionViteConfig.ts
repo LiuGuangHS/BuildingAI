@@ -80,6 +80,7 @@ export const defineExtensionViteConfig = (packageJson: { name: string }, config?
     const plugins = [react(), tailwindcss()];
     const babelModule = (() => {
         try {
+            require.resolve("babel-plugin-react-compiler");
             return require("@rolldown/plugin-babel");
         } catch {
             return null;

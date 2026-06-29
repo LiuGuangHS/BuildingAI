@@ -4,6 +4,7 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Dict } from "@buildingai/db/entities";
 import { Repository } from "@buildingai/db/typeorm";
 import { DictService } from "@buildingai/dict";
+import { safeJsonParse } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
@@ -110,25 +111,17 @@ export class WebsiteService extends BaseService<Dict> {
             return null as unknown as T;
         }
 
-        // 尝试解析为JSON
-        try {
-            // 判断是否可能是JSON
-            if (
-                (value.startsWith("{") && value.endsWith("}")) ||
-                (value.startsWith("[") && value.endsWith("]")) ||
-                value === "true" ||
-                value === "false" ||
-                value === "null" ||
-                !isNaN(Number(value))
-            ) {
-                return JSON.parse(value) as T;
-            }
-        } catch {
-            // 解析失败，忽略错误
-        }
+        const looksJsonLike =
+            (value.startsWith("{") && value.endsWith("}")) ||
+            (value.startsWith("[") && value.endsWith("]")) ||
+            value === "true" ||
+            value === "false" ||
+            value === "null" ||
+            !Number.isNaN(Number(value));
+        if (!looksJsonLike) return value as unknown as T;
 
-        // 如果不是JSON，返回原始字符串
-        return value as unknown as T;
+        const parsed = safeJsonParse<T>(value);
+        return parsed === undefined ? value as unknown as T : parsed;
     }
 
     /**

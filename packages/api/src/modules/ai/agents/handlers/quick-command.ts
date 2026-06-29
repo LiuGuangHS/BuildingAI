@@ -1,3 +1,4 @@
+import { safeJsonParse } from "@buildingai/extension-sdk";
 import type { QuickCommandConfig } from "@buildingai/types/ai/agent-config.interface";
 import { Injectable } from "@nestjs/common";
 import type { UIMessage } from "ai";
@@ -115,30 +116,26 @@ export class QuickCommandHandler {
     extractPlainTextFromReplyContent(replyContent: string | undefined): string {
         if (!replyContent?.trim()) return "";
         const trimmed = replyContent.trim();
-        try {
-            const parsed = JSON.parse(trimmed);
-            if (!Array.isArray(parsed)) return trimmed;
-            const collect = (nodes: unknown[]): string =>
-                nodes
-                    .map((node) => {
-                        if (node && typeof node === "object" && "children" in node) {
-                            const children = (node as { children?: unknown[] }).children;
-                            return Array.isArray(children)
-                                ? children
-                                      .map((c) =>
-                                          c && typeof c === "object" && "text" in c
-                                              ? String((c as { text?: string }).text ?? "")
-                                              : "",
-                                      )
-                                      .join("")
-                                : "";
-                        }
-                        return "";
-                    })
-                    .join("\n");
-            return collect(parsed) || trimmed;
-        } catch {
-            return trimmed;
-        }
+        const parsed = safeJsonParse<unknown>(trimmed);
+        if (!Array.isArray(parsed)) return trimmed;
+        const collect = (nodes: unknown[]): string =>
+            nodes
+                .map((node) => {
+                    if (node && typeof node === "object" && "children" in node) {
+                        const children = (node as { children?: unknown[] }).children;
+                        return Array.isArray(children)
+                            ? children
+                                  .map((c) =>
+                                      c && typeof c === "object" && "text" in c
+                                          ? String((c as { text?: string }).text ?? "")
+                                          : "",
+                                  )
+                                  .join("")
+                            : "";
+                    }
+                    return "";
+                })
+                .join("\n");
+        return collect(parsed) || trimmed;
     }
 }
