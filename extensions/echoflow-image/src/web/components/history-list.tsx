@@ -2,6 +2,7 @@ import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { TimeText } from "@buildingai/ui/components/ui/time-text";
+import { ConfirmDialog } from "@buildingai/ui/components/confirm-dialog";
 import { cn } from "@buildingai/ui/lib/utils";
 import { CopyPlus, HistoryIcon, ImageIcon, RefreshCcw, Trash2 } from "lucide-react";
 import { type KeyboardEvent, useState } from "react";
@@ -9,7 +10,6 @@ import { useNavigate } from "react-router-dom";
 
 import type { ImageGeneration } from "../services/types/generation";
 import { ImageGenerationBillingStatus, ImageGenerationStatus } from "../services/types/generation";
-import { ConfirmDialog } from "./confirm-dialog";
 import { resolveImageSrc } from "./image-utils";
 import { HistorySkeleton } from "./skeleton-card";
 

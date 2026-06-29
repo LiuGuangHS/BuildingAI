@@ -1,4 +1,6 @@
-import { Button } from "@buildingai/ui/components/ui/button";
+import { AlertTriangle } from "lucide-react";
+
+import { Button } from "./ui/button";
 import {
     Dialog,
     DialogContent,
@@ -6,10 +8,9 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@buildingai/ui/components/ui/dialog";
-import { AlertTriangle } from "lucide-react";
+} from "./ui/dialog";
 
-interface ConfirmDialogProps {
+export interface ConfirmDialogProps {
     open: boolean;
     title?: string;
     description?: string;

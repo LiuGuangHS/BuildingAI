@@ -4,12 +4,12 @@ import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { TimeText } from "@buildingai/ui/components/ui/time-text";
+import { ConfirmDialog } from "@buildingai/ui/components/confirm-dialog";
 import { ArrowLeft, RefreshCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import { ConfirmDialog } from "../components/confirm-dialog";
 import { ErrorState } from "../components/error-state";
 import { isSafeImageSrc } from "../components/image-utils";
 import { ResultGallery } from "../components/result-gallery";

@@ -1,14 +1,14 @@
 import { useI18n } from "@buildingai/i18n";
 import { cn } from "@buildingai/ui/lib/utils";
-import { formatDistanceToNow, type Locale } from "date-fns";
+import { format as formatDateFns, formatDistanceToNow, type Locale } from "date-fns";
 import { enUS, zhCN } from "date-fns/locale";
 import * as React from "react";
 
 type TimeLike = string | number | Date | null | undefined;
 
 const VARIANT_FORMATS = {
-  datetime: "YYYY-MM-DD HH:mm:ss",
-  date: "YYYY-MM-DD",
+  datetime: "yyyy-MM-dd HH:mm:ss",
+  date: "yyyy-MM-dd",
   time: "HH:mm:ss",
   relative: "relative", // Special marker for relative time
 } as const;
@@ -34,8 +34,8 @@ export interface TimeTextProps extends React.HTMLAttributes<HTMLSpanElement> {
   fallback?: React.ReactNode;
   /**
    * 预设格式快捷方式
-   * - "datetime": YYYY-MM-DD HH:mm:ss
-   * - "date": YYYY-MM-DD
+   * - "datetime": yyyy-MM-dd HH:mm:ss
+   * - "date": yyyy-MM-dd
    * - "time": HH:mm:ss
    * - "relative": 相对时间（如 "3分钟前"、"2小时前"、"1天前"）
    * @default "datetime"
@@ -43,14 +43,10 @@ export interface TimeTextProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: keyof typeof VARIANT_FORMATS;
   /**
    * 自定义格式字符串，优先级高于 variant
-   * 支持的占位符：
+   * 支持 date-fns 格式字符串；兼容旧占位符：
    * - YYYY: 四位年份
-   * - MM: 两位月份
    * - DD: 两位日期
-   * - HH: 两位小时（24小时制）
-   * - mm: 两位分钟
-   * - ss: 两位秒
-   * @example "YYYY/MM/DD" | "MM-DD HH:mm" | "YYYY年MM月DD日"
+   * @example "yyyy/MM/dd" | "MM-dd HH:mm" | "yyyy年MM月dd日"
    */
   format?: string;
 }
@@ -84,24 +80,8 @@ function parseToDate(value: TimeLike): Date | null {
   return null;
 }
 
-function pad(num: number): string {
-  return num < 10 ? `0${num}` : String(num);
-}
-
-/**
- * Format date using a format string with placeholders
- */
-function formatDate(date: Date, formatStr: string): string {
-  const tokens: Record<string, string> = {
-    YYYY: String(date.getFullYear()),
-    MM: pad(date.getMonth() + 1),
-    DD: pad(date.getDate()),
-    HH: pad(date.getHours()),
-    mm: pad(date.getMinutes()),
-    ss: pad(date.getSeconds()),
-  };
-
-  return formatStr.replace(/YYYY|MM|DD|HH|mm|ss/g, (match) => tokens[match] ?? match);
+function normalizeDateFnsFormat(formatStr: string): string {
+  return formatStr.replace(/YYYY/g, "yyyy").replace(/DD/g, "dd");
 }
 
 export const TimeText = React.forwardRef<HTMLSpanElement, TimeTextProps>(
@@ -121,8 +101,8 @@ export const TimeText = React.forwardRef<HTMLSpanElement, TimeTextProps>(
         });
       }
 
-      const formatStr = format ?? VARIANT_FORMATS[variant];
-      return formatDate(date, formatStr);
+      const formatStr = normalizeDateFnsFormat(format ?? VARIANT_FORMATS[variant]);
+      return formatDateFns(date, formatStr);
     }, [value, variant, format, currentLocale]);
 
     return (

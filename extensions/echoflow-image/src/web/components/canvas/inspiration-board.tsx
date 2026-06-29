@@ -7,6 +7,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@buildingai/ui/components/ui/card";
+import { ConfirmDialog } from "@buildingai/ui/components/confirm-dialog";
 import { cn } from "@buildingai/ui/lib/utils";
 import {
     AssetRecordType,
@@ -25,7 +26,6 @@ import { toast } from "sonner";
 import type { GeneratedImageRecord, ImageGeneration } from "../../services/types/generation";
 import { resolveImageSrc } from "../image-utils";
 import { createCanvasAssetId } from "../../lib/canvas-asset-id";
-import { ConfirmDialog } from "../confirm-dialog";
 
 interface InspirationBoardProps {
     generation?: ImageGeneration;

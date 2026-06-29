@@ -5,12 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@buildingai/ui/compone
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
+import { ConfirmDialog } from "@buildingai/ui/components/confirm-dialog";
 import { Ban, Film, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-import { ConfirmDialog } from "../../components/confirm-dialog";
 import { ConsolePage } from "../../components/console-page";
 import { getBillingLabel, getStatusLabel } from "../../lib/video-labels";
 import { ErrorState } from "../../components/error-state";

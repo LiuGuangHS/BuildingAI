@@ -1,13 +1,13 @@
 import { useDocumentHead } from "@buildingai/hooks";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
+import { ConfirmDialog } from "@buildingai/ui/components/confirm-dialog";
 import { Card, CardContent } from "@buildingai/ui/components/ui/card";
 import { CheckCircle2, Clock, Film, ServerCog, Settings, ShieldCheck, XCircle } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-import { ConfirmDialog } from "../../components/confirm-dialog";
 import { ConsolePage } from "../../components/console-page";
 import { ErrorState } from "../../components/error-state";
 import { HistoryList } from "../../components/history-list";
