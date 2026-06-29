@@ -40,6 +40,7 @@ import {
     canRecoverContractTask,
     isContractTaskBusyStatus,
     resolveContractTaskJobName,
+    resolveStaleContractTaskResolution,
 } from "./contract-task-recovery-rules";
 
 const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
@@ -78,11 +79,14 @@ const sectionSchema = z.object({
 });
 
 const riskSchema = z.object({
+    id: z.string().optional(),
+    sectionId: z.string().optional(),
     sectionTitle: z.string(),
     level: z.enum(["low", "medium", "high"]),
     issue: z.string(),
     suggestion: z.string(),
     replacementText: z.string().optional(),
+    quote: z.string().optional(),
 });
 
 const termSchema = z.object({ term: z.string(), explanation: z.string() });
@@ -109,6 +113,8 @@ const reviewSchema = z.object({
     legalTerms: z.array(termSchema),
     score: scoreSchema,
 });
+
+const uploadReviewSchema = contractSchema;
 
 const rewriteSchema = z.object({ content: z.string(), reason: z.string() });
 
@@ -145,7 +151,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     async onModuleInit() {
         await this.registerNotificationScenes();
         await this.recoverInterruptedGenerationTasks();
-        await this.failStaleGenerationTasks("合同生成任务超时，请重新提交");
+        await this.failStaleGenerationTasks();
     }
 
     private async registerNotificationScenes() {
@@ -437,11 +443,13 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
             await this.reserveTaskCreditsOnce(task, model.name);
             const content = await llmFileParser.parseAndFormat(fileUrl, { maxFileSize: UPLOAD_REVIEW_MAX_BYTES, timeout: UPLOAD_REVIEW_PARSE_TIMEOUT_MS });
             const result = await this.publicAiModelService.generateText(model.id, {
-                output: Output.object({ schema: reviewSchema }),
+                output: Output.object({ schema: uploadReviewSchema }),
                 prompt: this.buildUploadReviewPrompt(dto, content.slice(0, UPLOAD_REVIEW_MAX_CHARS)),
                 temperature: 0.12,
             });
             const output = result.output;
+            const sections = this.normalizeSections(output.sections);
+            if (sections.length === 0) throw new Error("AI contract upload review returned no sections");
 
             const savedTask = await this.taskRepo.manager.transaction(async (entityManager) => {
                 await entityManager.query(LOCK_TIMEOUT);
@@ -450,10 +458,13 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
                 if (!isContractTaskBusyStatus(currentTask.status)) return currentTask;
                 await entityManager.update(ContractGenerationTask, task.id, {
                     status: ContractGenerationStatus.DRAFT,
+                    title: output.title?.trim() || currentTask.title,
+                    summary: output.summary?.trim() || null,
+                    sections,
                     riskFindings: this.normalizeRisks(output.riskFindings),
                     legalTerms: this.normalizeTerms(output.legalTerms),
                     score: this.normalizeScore(output.score),
-                    providerMetadata: { ...(currentTask?.providerMetadata ?? task.providerMetadata ?? {}), provider: model.provider.provider, model: model.model, reviewedAt: new Date().toISOString(), sourceChars: content.length },
+                    providerMetadata: { ...(currentTask?.providerMetadata ?? task.providerMetadata ?? {}), provider: model.provider.provider, model: model.model, reviewedAt: new Date().toISOString(), sourceChars: content.length, sectionCount: sections.length },
                 });
                 const saved = (await entityManager.findOne(ContractGenerationTask, { where: { id: task.id } })) as ContractGenerationTask | null;
                 if (!saved) throw HttpErrorFactory.notFound("任务不存在或已删除");
@@ -501,25 +512,23 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
         }
     }
 
-    private async failStaleGenerationTasks(message: string) {
+    private async failStaleGenerationTasks() {
         const cutoff = new Date(Date.now() - STALE_TASK_PROCESSING_MS);
         try {
             const staleTasks = await this.taskRepo.find({
                 where: { status: In(CONTRACT_TASK_BUSY_STATUSES), updatedAt: LessThan(cutoff) },
                 take: 100,
             });
-            const recoverableTasks = staleTasks.filter((task) => resolveContractTaskJobName(task));
-            const unrecoverableTasks = staleTasks.filter((task) => !resolveContractTaskJobName(task));
-            for (const task of recoverableTasks) {
-                await this.refundTaskCreditsIfNeeded(task.id, message);
-                await this.markTaskFailedIfActive(task.id, ContractGenerationStatus.FAILED, message, "timeoutError");
+            let affected = 0;
+            for (const task of staleTasks) {
+                if (canRecoverContractTask(task, cutoff)) continue;
+                const resolution = resolveStaleContractTaskResolution(task.status);
+                if (!resolution) continue;
+                affected += 1;
+                await this.markTaskFailedIfActive(task.id, resolution.status as ContractGenerationStatus, resolution.message, resolution.errorKey);
             }
-            for (const task of unrecoverableTasks) {
-                await this.markTaskFailedIfActive(task.id, ContractGenerationStatus.FAILED, message, "timeoutError");
-            }
-            if (recoverableTasks.length) this.logger.warn(`Marked ${recoverableTasks.length} stale contract generation task(s) as failed`);
-            if (unrecoverableTasks.length) this.logger.warn(`Marked ${unrecoverableTasks.length} unrecoverable stale task(s) as failed`);
-            return { affected: recoverableTasks.length + unrecoverableTasks.length };
+            if (affected) this.logger.warn(`Marked ${affected} unrecoverable stale task(s) as failed`);
+            return { affected };
         } catch (error) {
             if ((error as { code?: string }).code === "42P01") {
                 this.logger.warn("Contract generation task table does not exist yet, skipping stale task cleanup");
@@ -876,7 +885,7 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     }
 
     private isTaskBusy(status: ContractGenerationStatus) {
-        return [ContractGenerationStatus.PENDING, ContractGenerationStatus.PROCESSING, ContractGenerationStatus.REVIEWING, ContractGenerationStatus.EXPORTING].includes(status);
+        return isContractTaskBusyStatus(status);
     }
 
     private async findActiveTaskForWrite(taskId: string, entityManager?: EntityManager) {
@@ -1376,7 +1385,16 @@ ${content}`;
     }
 
     private normalizeRisks(risks: ContractRiskFinding[]) {
-        return (Array.isArray(risks) ? risks : []).slice(0, MAX_PROMPT_LIST_ITEMS).map((risk) => ({ sectionTitle: String(risk.sectionTitle ?? "").trim().slice(0, 200), level: risk.level ?? "medium", issue: String(risk.issue ?? "").trim().slice(0, 1000), suggestion: String(risk.suggestion ?? "").trim().slice(0, 2000), replacementText: risk.replacementText ? String(risk.replacementText).trim().slice(0, MAX_SECTION_CHARS) : undefined })).filter((risk) => risk.sectionTitle && risk.issue && risk.suggestion);
+        return (Array.isArray(risks) ? risks : []).slice(0, MAX_PROMPT_LIST_ITEMS).map((risk, index) => ({
+            id: String(risk.id || `${index}:${risk.sectionTitle ?? ""}:${risk.issue ?? ""}`).trim().slice(0, 500),
+            sectionId: risk.sectionId ? String(risk.sectionId).trim().slice(0, 120) : undefined,
+            sectionTitle: String(risk.sectionTitle ?? "").trim().slice(0, 200),
+            level: risk.level ?? "medium",
+            issue: String(risk.issue ?? "").trim().slice(0, 1000),
+            suggestion: String(risk.suggestion ?? "").trim().slice(0, 2000),
+            replacementText: risk.replacementText ? String(risk.replacementText).trim().slice(0, MAX_SECTION_CHARS) : undefined,
+            quote: risk.quote ? String(risk.quote).trim().slice(0, 1000) : undefined,
+        })).filter((risk) => risk.sectionTitle && risk.issue && risk.suggestion);
     }
 
     private normalizeTerms(terms: ContractLegalTerm[]) {

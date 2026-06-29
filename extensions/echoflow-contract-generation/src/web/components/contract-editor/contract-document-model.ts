@@ -63,83 +63,6 @@ export function editableSectionsFromDocument(sections: DocumentSection[]): Contr
         }));
 }
 
-export type ContractPlateText = {
-    text?: string;
-    children?: ContractPlateText[];
-};
-
-export type ContractPlateNode = {
-    type?: string;
-    children?: ContractPlateText[];
-};
-
-export function documentSectionsToPlateValue(sections: DocumentSection[]): ContractPlateNode[] {
-    return sections.flatMap((section, index) => {
-        const title = section.title.trim() || `第 ${index + 1} 条`;
-        const contentLines = (section.content.trim() || "待补充条款内容。").split("\n");
-        return [
-            { type: "p", children: [{ text: `第 ${index + 1} 条 ${title}` }] },
-            ...contentLines.map((line) => ({ type: "p" as const, children: [{ text: line }] })),
-        ];
-    });
-}
-
-export function sectionContentToPlateValue(content: string): ContractPlateNode[] {
-    const lines = (content.trim() || "待补充条款内容。").split("\n");
-    return lines.map((line) => ({ type: "p", children: [{ text: line }] }));
-}
-
-export function plateValueToPlainText(value: ContractPlateNode[]): string {
-    return value.map((node) => getPlateNodeText(node)).join("\n").trim();
-}
-
-export function plateValueToContractSections(value: ContractPlateNode[], previousSections: ContractSection[]): ContractSection[] {
-    const parsed: ContractSection[] = [];
-    let currentTitle = "";
-    let currentLines: string[] = [];
-
-    function flushSection() {
-        const title = stripSectionNumber(currentTitle || `第 ${parsed.length + 1} 条`);
-        const content = currentLines.join("\n").trim();
-        if (!title && !content) return;
-        const previous = previousSections[parsed.length];
-        parsed.push({
-            id: previous?.id,
-            title: title || previous?.title || `第 ${parsed.length + 1} 条`,
-            content: content || "待补充条款内容。",
-            importance: previous?.importance,
-        });
-    }
-
-    for (const node of value) {
-        const text = getPlateNodeText(node).trim();
-        const isSectionBoundary = /^h[1-3]$/.test(node.type ?? "") || /^(?:第\s*)?\d+\s*(?:条|[.、])\s*\S+/.test(text);
-        if (isSectionBoundary) {
-            flushSection();
-            currentTitle = text;
-            currentLines = [];
-            continue;
-        }
-        if (text || currentTitle) currentLines.push(text);
-    }
-
-    flushSection();
-
-    if (parsed.length > 0) return parsed;
-
-    const plainText = value.map((node) => getPlateNodeText(node)).join("\n").trim();
-    if (!plainText) return previousSections.length > 0 ? previousSections : [];
-
-    return [
-        {
-            id: previousSections[0]?.id,
-            title: previousSections[0]?.title || "合同正文",
-            content: plainText,
-            importance: previousSections[0]?.importance,
-        },
-    ];
-}
-
 export function getDraftChecklist(template: ContractTemplate | undefined, variables: Record<string, string>): DraftCheckItem[] {
     if (!template) return [];
     return template.fields.map((field) => ({
@@ -166,9 +89,11 @@ export function getCompletionSummary(template: ContractTemplate | undefined, var
     };
 }
 
-export function getSectionRiskAnnotation(sectionTitle: string, risks: ContractRiskFinding[]) {
+export function getSectionRiskAnnotation(section: Pick<ContractSection, "id" | "title"> | string, risks: ContractRiskFinding[]) {
+    const sectionTitle = typeof section === "string" ? section : section.title;
+    const sectionId = typeof section === "string" ? undefined : section.id;
     const risk = risks
-        .filter((item) => sectionTitle.includes(item.sectionTitle) || item.sectionTitle.includes(sectionTitle))
+        .filter((item) => (item.sectionId && sectionId && item.sectionId === sectionId) || sectionTitle.includes(item.sectionTitle) || item.sectionTitle.includes(sectionTitle))
         .sort((left, right) => riskRank[right.level] - riskRank[left.level])[0];
     if (!risk) return { label: "AI 已识别", level: undefined, issue: "" };
     return {
@@ -218,14 +143,4 @@ function draftContentForTitle(title: string, variables: Record<string, string>) 
 function findVariable(variables: Record<string, string>, keywords: string[]) {
     const entry = Object.entries(variables).find(([label, value]) => keywords.some((keyword) => label.includes(keyword)) && value);
     return entry?.[1] ?? "";
-}
-
-function getPlateNodeText(node: ContractPlateNode | ContractPlateText): string {
-    const ownText = "text" in node ? node.text ?? "" : "";
-    const childText = node.children?.map((child) => getPlateNodeText(child)).join("") ?? "";
-    return ownText + childText;
-}
-
-function stripSectionNumber(title: string) {
-    return title.replace(/^\s*(第\s*)?\d+\s*[.、条]\s*/, "").trim();
 }

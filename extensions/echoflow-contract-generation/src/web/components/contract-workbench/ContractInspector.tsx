@@ -42,20 +42,24 @@ export function ContractInspector(props: {
     }), [props.canExport, props.rewritePreview, props.task?.riskFindings.length, props.versions.length]);
 
     return (
-        <section className="grid gap-2.5 rounded-lg border bg-card/95 p-3 shadow-sm">
+        <section className="contract-panel contract-review-panel grid gap-3">
+            <div className="contract-panel-head">
+                <h2>AI 法务助手</h2>
+                <p>批注、改写、版本和导出集中处理。</p>
+            </div>
             <Tabs defaultValue="risks" className="grid gap-2.5">
-                <TabsList className="w-full">
+                <TabsList className="contract-review-tabs w-full">
                     {tabs.map((tab) => (
                         <TabsTrigger key={tab.key} value={tab.key}>
                             {tab.label}{tab.badge ? <span className="ml-1 max-w-[54px] truncate rounded-full bg-primary/10 px-1.5 py-px text-[10px]">{tab.badge}</span> : null}
                         </TabsTrigger>
                     ))}
                 </TabsList>
-                <TabsContent value="risks" className="grid gap-2.5">
+                <TabsContent value="risks" className="contract-review-content grid gap-2.5">
                     <ContractRiskReasoningPanel task={props.task ?? null} onAcceptRisk={props.onAcceptRisk} onIgnoreRisk={props.onIgnoreRisk} onSelectSection={props.onSelectSection} />
                     <Button variant="outline" onClick={props.onReview} disabled={!props.canReview || props.reviewPending} loading={props.reviewPending}>重新审查</Button>
                 </TabsContent>
-                <TabsContent value="rewrite" className="grid gap-2.5">
+                <TabsContent value="rewrite" className="contract-review-content grid gap-2.5">
                     <Select value={props.rewriteMode} onValueChange={(value) => props.onRewriteModeChange(value as RewriteMode)} disabled={!props.canRewrite || props.rewritePending}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -70,7 +74,7 @@ export function ContractInspector(props: {
                     <Button variant="outline" onClick={props.onRewrite} disabled={!props.canRewrite || props.rewritePending} loading={props.rewritePending}>生成改写</Button>
                     <ContractRewriteCompare original={props.selectedSection?.content} preview={props.rewritePreview} onApply={props.onApplyRewrite} onCancel={props.onCancelRewrite} />
                 </TabsContent>
-                <TabsContent value="versions" className="grid gap-2.5">
+                <TabsContent value="versions" className="contract-review-content grid gap-2.5">
                     <div className="grid gap-2">
                         {props.versions.slice(0, 6).map((version) => (
                             <Button key={version.id} variant="outline" className="grid h-auto w-full justify-stretch whitespace-normal p-2.5 text-left" type="button" onClick={() => props.onRestoreVersion(version.id)}>
@@ -81,7 +85,7 @@ export function ContractInspector(props: {
                         {props.versions.length === 0 && <EmptyPanel>保存后会生成版本记录。</EmptyPanel>}
                     </div>
                 </TabsContent>
-                <TabsContent value="export" className="grid gap-2.5">
+                <TabsContent value="export" className="contract-review-content grid gap-2.5">
                     <div className="grid gap-2 rounded-lg border bg-muted/30 p-2.5">
                         <strong className="text-sm">{props.dirty ? "先保存修改" : props.canExport ? "可以导出" : "生成合同后可导出"}</strong>
                         <p className="text-xs text-muted-foreground">导出类型：{exportTypeText(props.exportType)}</p>

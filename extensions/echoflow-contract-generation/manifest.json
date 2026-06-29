@@ -1,14 +1,14 @@
 {
     "identifier": "echoflow-contract-generation",
-    "name": "AI 合同工作台",
+    "name": "合同生成",
     "type": "application",
     "version": "0.0.1",
     "icon": "/echoflow-contract-generation/static/icon.png",
-    "description": "基于 LLM 的合同起草、上传审查、条款编辑、风险提示、改写建议与 Word 导出一站式合同工作台。",
+    "description": "Word/WPS 风格合同编辑器，支持合同起草、AI 法务批注、条款改写与 Word 导出。",
     "homepage": "",
     "author": {
         "avatar": "/echoflow-contract-generation/static/icon.png",
-        "name": "EchoflowAI Teams",
+        "name": "EchoFlowAI Team",
         "homepage": ""
     },
     "changelog": [],

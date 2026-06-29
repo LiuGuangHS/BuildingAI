@@ -7,8 +7,6 @@ import { defineExtensionViteConfig } from "@buildingai/web-core/vite/extension";
 const require = createRequire(import.meta.url);
 const packageJson = require("./package.json");
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const plateReactEntry = require.resolve("platejs/react");
-
 export default defineExtensionViteConfig(packageJson, {
     root: __dirname,
     build: {
@@ -31,13 +29,6 @@ export default defineExtensionViteConfig(packageJson, {
                     return;
                 warn(warning);
             },
-            output: {
-                manualChunks(id) {
-                    if (id.includes("lucide-react")) {
-                        return "lucide";
-                    }
-                },
-            },
         },
     },
     resolve: {
@@ -48,10 +39,6 @@ export default defineExtensionViteConfig(packageJson, {
                     __dirname,
                     "../../node_modules/.pnpm/node_modules/react-router-dom/dist/index.mjs",
                 ),
-            },
-            {
-                find: /^platejs\/react$/,
-                replacement: plateReactEntry,
             },
             {
                 find: /^radix-ui$/,

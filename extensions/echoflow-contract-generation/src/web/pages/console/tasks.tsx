@@ -108,7 +108,7 @@ export default function ContractTasksConsolePage() {
                                         <span className="text-muted-foreground text-xs">{task.industry || "未分类"} / {task.contractType}</span>
                                         <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                                             <span>{formatDate(task.createdAt)}</span>
-                                            <span>风险 {task.riskFindings?.length ?? 0}</span>
+                                            <span>批注 {task.riskFindings?.length ?? 0}</span>
                                         </span>
                                     </span>
                                 </Button>
@@ -182,10 +182,19 @@ export default function ContractTasksConsolePage() {
                                         {detail.sections.length === 0 && <p>暂无条款内容。</p>}
                                     </div>
                                 </article>
+                                <article className="ec-subsection">
+                                    <h3>排障信息</h3>
+                                    <dl className="ec-detail-list">
+                                        <div><dt>模型 ID</dt><dd className="ec-mono">{detail.modelId || "-"}</dd></div>
+                                        <div><dt>Provider ID</dt><dd className="ec-mono">{detail.providerId || "-"}</dd></div>
+                                        <div><dt>导出 URL</dt><dd className="ec-mono">{detail.resultUrl || "-"}</dd></div>
+                                    </dl>
+                                    <pre>{JSON.stringify({ requestPayload: detail.requestPayload, providerMetadata: detail.providerMetadata }, null, 2)}</pre>
+                                </article>
                             </div>
 
                             <article className="ec-subsection">
-                                <h3>风险提示</h3>
+                                <h3>AI 法务批注</h3>
                                 <div className="ec-risk-list">
                                     {detail.riskFindings.map((risk, index) => (
                                         <div key={`${risk.sectionTitle}-${index}`}>
@@ -195,7 +204,7 @@ export default function ContractTasksConsolePage() {
                                             <em>{risk.suggestion}</em>
                                         </div>
                                     ))}
-                                    {detail.riskFindings.length === 0 && <p>暂无风险提示。</p>}
+                                    {detail.riskFindings.length === 0 && <p>暂无 AI 法务批注。</p>}
                                 </div>
                             </article>
                         </>

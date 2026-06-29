@@ -41,6 +41,23 @@ test("contract non-platform uploaded file URLs are DNS-checked before parsing", 
     assert.doesNotMatch(serviceSource, /url\.pathname\.startsWith\(`\/\$\{EXTENSION_ID\}\/uploads\/`\)|url\.pathname\.startsWith\("\/uploads\/"\)/);
 });
 
+test("contract upload review persists extracted contract content", () => {
+    assert.match(serviceSource, /const uploadReviewSchema = contractSchema/);
+    assert.match(serviceSource, /Output\.object\(\{ schema: uploadReviewSchema \}\)/);
+    assert.match(serviceSource, /title: output\.title\?\.trim\(\) \|\| currentTask\.title/);
+    assert.match(serviceSource, /summary: output\.summary\?\.trim\(\) \|\| null/);
+    assert.match(serviceSource, /sections,/);
+});
+
+test("contract stale cleanup leaves recoverable queue tasks to recovery", () => {
+    const match = serviceSource.match(/private async failStaleGenerationTasks[\s\S]*?private async claimTaskForRecovery/);
+    assert.ok(match, "failStaleGenerationTasks block should exist");
+    assert.match(match[0], /if \(canRecoverContractTask\(task, cutoff\)\) continue/);
+    assert.match(match[0], /resolveStaleContractTaskResolution\(task\.status\)/);
+    assert.doesNotMatch(match[0], /const recoverableTasks/);
+    assert.doesNotMatch(match[0], /refundTaskCreditsIfNeeded/);
+});
+
 test("contract failure notifications do not expose internal errors to users", () => {
     assert.match(serviceSource, /reason: "合同任务处理失败，请稍后重试或联系管理员。"/);
     assert.doesNotMatch(serviceSource, /refundError: task\.providerMetadata\?\.refundError/);

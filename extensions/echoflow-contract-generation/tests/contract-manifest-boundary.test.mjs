@@ -2,16 +2,23 @@ import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-    assertAbsentDeps,
-    assertDeclaredDeps,
-    mergePackageDeps,
-} from "../../test-utils/manifest-boundary.mjs";
+function mergePackageDeps(pkg) {
+    return { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+}
+
+function assertDeclaredDeps(deps, entries) {
+    for (const [name, message] of entries) assert.ok(deps[name], message);
+}
+
+function assertAbsentDeps(deps, names) {
+    for (const name of names) assert.equal(deps[name], undefined, `${name} should not be declared`);
+}
 
 const PACKAGE_FILE = new URL("../package.json", import.meta.url);
 const CONTRACT_MODULE_FILE = new URL("../src/api/modules/contract-generation/contract-generation.module.ts", import.meta.url);
 const CONTRACT_WEB_CONTROLLER_FILE = new URL("../src/api/modules/contract-generation/controllers/web/contract-generation.web.controller.ts", import.meta.url);
 const CONTRACT_SERVICE_FILE = new URL("../src/api/modules/contract-generation/services/contract-generation.service.ts", import.meta.url);
+const VITE_CONFIG_FILE = new URL("../vite.config.ts", import.meta.url);
 
 test("contract manifest declares direct runtime imports", async () => {
     const pkg = JSON.parse(await readFile(PACKAGE_FILE, "utf8"));
@@ -26,10 +33,14 @@ test("contract manifest declares direct runtime imports", async () => {
 });
 
 test("contract manifest does not keep unused template dependencies", async () => {
-    const pkg = JSON.parse(await readFile(PACKAGE_FILE, "utf8"));
-    const deps = mergePackageDeps(pkg);
+    const [pkgSource, viteSource] = await Promise.all([
+        readFile(PACKAGE_FILE, "utf8"),
+        readFile(VITE_CONFIG_FILE, "utf8"),
+    ]);
+    const deps = mergePackageDeps(JSON.parse(pkgSource));
 
-    assertAbsentDeps(deps, ["@buildingai/utils", "@buildingai/web-types"]);
+    assertAbsentDeps(deps, ["@buildingai/utils", "@buildingai/web-types", "platejs"]);
+    assert.doesNotMatch(viteSource, /platejs\/react/);
 });
 
 test("contract high-cost web actions use the extension SDK rate limiter", async () => {

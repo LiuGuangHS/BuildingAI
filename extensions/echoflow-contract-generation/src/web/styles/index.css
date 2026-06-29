@@ -12,100 +12,284 @@
     --contract-primary: var(--primary);
     --contract-primary-fg: var(--primary-foreground);
     --contract-danger: var(--destructive);
+    --contract-bg-soft: color-mix(in oklab, var(--muted) 52%, var(--background));
+    --contract-panel-shadow: 0 10px 28px color-mix(in oklab, var(--foreground) 5%, transparent);
+    min-height: 100%;
+    background: var(--contract-bg-soft);
     color: var(--contract-fg);
 }
 
-.contract-document-paper {
-    min-height: 620px;
-    border: 1px solid color-mix(in oklab, var(--contract-border) 84%, transparent);
-    border-radius: 8px;
+.contract-panel,
+.contract-document-frame {
+    border-color: color-mix(in oklab, var(--contract-border) 86%, transparent);
+    background: color-mix(in oklab, var(--contract-card) 96%, transparent);
+    box-shadow: var(--contract-panel-shadow);
+}
+
+.contract-panel {
+    border: 1px solid color-mix(in oklab, var(--contract-border) 86%, transparent);
+    border-radius: 12px;
+    padding: 14px;
+}
+
+.contract-panel-head h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+.contract-panel-head p {
+    margin: 4px 0 0;
+    color: var(--contract-muted-fg);
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.contract-taskbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    border-color: color-mix(in oklab, var(--contract-border) 84%, transparent);
+    backdrop-filter: blur(14px);
+}
+
+.contract-taskbar-main {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(280px, auto) auto;
+    align-items: center;
+    gap: 12px;
+}
+
+.contract-taskbar-signals {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(64px, 1fr));
+    gap: 6px;
+}
+
+.contract-taskbar-tools {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.contract-fact-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.contract-fact-chip {
+    display: grid;
+    max-width: 100%;
+    min-width: 0;
+    border: 1px solid var(--contract-border);
+    border-radius: 10px;
+    background: color-mix(in oklab, var(--contract-muted) 32%, transparent);
+    padding: 7px 9px;
+}
+
+.contract-fact-chip strong,
+.contract-fact-chip em {
+    display: block;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.contract-fact-chip strong {
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.contract-fact-chip em {
+    color: var(--contract-muted-fg);
+    font-size: 12px;
+    font-style: normal;
+}
+
+.contract-fact-chip[data-state="known"] {
+    border-color: color-mix(in oklab, var(--contract-primary) 18%, var(--contract-border));
+}
+
+.contract-fact-chip[data-state="missing"] {
+    border-color: color-mix(in oklab, #f59e0b 40%, var(--contract-border));
+    background: color-mix(in oklab, #f59e0b 8%, var(--contract-card));
+}
+
+.contract-fact-chip[data-state="missing"] strong {
+    color: #a16207;
+}
+
+.contract-intake-fields {
+    max-height: min(460px, calc(100vh - 360px));
+    scrollbar-width: thin;
+}
+
+.contract-document-frame {
+    overflow: hidden;
+}
+
+.contract-document-ribbon {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid var(--contract-border);
+    background: color-mix(in oklab, var(--contract-card) 96%, var(--contract-muted));
+    padding: 8px 10px;
+}
+
+.contract-ribbon-group,
+.contract-ribbon-actions {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.contract-ribbon-group strong {
+    font-size: 13px;
+}
+
+.contract-ribbon-group span {
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--contract-muted) 40%, transparent);
+    padding: 3px 8px;
+    color: var(--contract-muted-fg);
+    font-size: 11px;
+}
+
+.contract-document-editor-shell {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    min-height: 760px;
+}
+
+.contract-document-outline {
+    border-right: 1px solid var(--contract-border);
+    background: color-mix(in oklab, var(--contract-muted) 20%, transparent);
+    padding: 10px;
+}
+
+.contract-outline-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.contract-outline-head span {
+    color: var(--contract-muted-fg);
+}
+
+.contract-outline-list {
+    display: grid;
+    gap: 4px;
+}
+
+.contract-outline-item {
+    border: 1px solid transparent;
+}
+
+.contract-outline-item.is-active {
+    border-color: color-mix(in oklab, var(--contract-primary) 28%, var(--contract-border));
+    background: var(--contract-card);
+    color: var(--contract-fg);
+    box-shadow: inset 3px 0 0 var(--contract-primary);
+}
+
+.contract-document-canvas {
+    overflow: auto;
     background:
-        linear-gradient(90deg, color-mix(in oklab, var(--contract-border) 50%, transparent) 1px, transparent 1px) 56px 0 / 1px 100% no-repeat,
+        linear-gradient(color-mix(in oklab, var(--contract-border) 55%, transparent) 1px, transparent 1px) 0 0 / 24px 24px,
+        color-mix(in oklab, var(--contract-muted) 42%, var(--contract-bg));
+    padding: 30px;
+}
+
+.contract-document-paper {
+    width: min(100%, 860px);
+    min-height: 1120px;
+    margin: 0 auto;
+    border: 1px solid color-mix(in oklab, var(--contract-border) 84%, transparent);
+    background:
+        linear-gradient(90deg, color-mix(in oklab, var(--contract-border) 42%, transparent) 1px, transparent 1px) 72px 0 / 1px 100% no-repeat,
         var(--contract-card);
-    box-shadow: 0 14px 34px color-mix(in oklab, var(--contract-fg) 6%, transparent);
+    box-shadow: 0 22px 48px color-mix(in oklab, var(--contract-fg) 10%, transparent);
 }
 
 .contract-document-head {
-    padding: 24px 36px 16px 76px;
+    padding: 48px 56px 22px 104px;
 }
 
 .contract-document-head > span {
     color: var(--contract-primary);
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 800;
+    letter-spacing: 0.04em;
 }
 
 .contract-document-head h2 {
-    margin: 6px 0 0;
-    font-size: 24px;
-    font-weight: 700;
-    letter-spacing: 0;
+    margin: 10px 0 0;
+    font-size: 30px;
+    font-weight: 760;
+    letter-spacing: -0.02em;
 }
 
 .contract-document-head p {
-    margin: 6px 0 0;
+    margin: 8px 0 0;
     color: var(--contract-muted-fg);
-    font-size: 13px;
-    line-height: 1.55;
-}
-
-.contract-document-process {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
-    margin: 16px 0 0;
-    padding: 0;
-    list-style: none;
-}
-
-.contract-document-process li {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid var(--contract-border);
-    border-radius: 7px;
-    padding: 6px 7px;
-    color: var(--contract-muted-fg);
-    font-size: 11px;
-}
-
-.contract-document-process span {
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 999px;
-    background: var(--contract-muted);
-    color: var(--contract-fg);
-    font-size: 10px;
-    font-weight: 700;
-}
-
-.contract-document-process li[data-state="complete"],
-.contract-document-process li[data-state="active"] {
-    border-color: color-mix(in oklab, var(--contract-primary) 22%, var(--contract-border));
-    color: var(--contract-fg);
-}
-
-.contract-document-process li[data-state="complete"] span,
-.contract-document-process li[data-state="active"] span {
-    background: var(--contract-primary);
-    color: var(--contract-primary-fg);
+    font-size: 14px;
+    line-height: 1.6;
 }
 
 .contract-document-body {
-    padding: 0 36px 38px 76px;
+    padding: 0 56px 56px 104px;
+}
+
+.contract-clause-block {
+    position: relative;
+    border: 1px solid transparent;
+}
+
+.contract-clause-block.is-active {
+    border-color: color-mix(in oklab, var(--contract-primary) 22%, var(--contract-border));
+    background: color-mix(in oklab, var(--contract-primary) 4%, var(--contract-card));
+}
+
+.contract-clause-gutter {
+    position: absolute;
+    left: -18px;
+    top: 14px;
+    width: 4px;
+    height: calc(100% - 28px);
+    border-radius: 999px;
+    background: var(--contract-primary);
+}
+
+.contract-clause-gutter[data-level="high"] {
+    background: var(--contract-danger);
+}
+
+.contract-clause-gutter[data-level="medium"] {
+    background: #f59e0b;
 }
 
 .contract-section-ai-marker {
     border: 1px solid var(--contract-border);
     border-radius: 999px;
     padding: 2px 7px;
+    background: var(--contract-card);
     color: var(--contract-muted-fg);
     font-size: 11px;
-    font-weight: 650;
+    font-weight: 700;
 }
 
 .contract-section-ai-marker[data-level="high"] {
@@ -123,29 +307,95 @@
     color: var(--contract-primary);
 }
 
-.contract-plate-container {
-    min-width: 0;
-}
-
-.contract-plate-editor {
-    min-height: 86px;
+.contract-text-editor {
+    min-height: 96px;
+    width: 100%;
+    resize: vertical;
+    border: 0;
+    background: transparent;
     outline: none;
     color: var(--contract-fg);
-    font-size: 14px;
-    line-height: 1.8;
+    font-size: 15px;
+    line-height: 1.95;
     white-space: pre-wrap;
 }
 
-.contract-plate-editor [data-slate-placeholder="true"] {
+.contract-text-editor:disabled {
+    cursor: default;
+    opacity: 1;
+}
+
+.contract-text-editor::placeholder {
     color: var(--contract-muted-fg);
 }
 
-.contract-plate-editor p {
-    margin: 0 0 10px;
+.contract-ai-comment-card[data-level="high"] {
+    background: color-mix(in oklab, var(--contract-danger) 6%, var(--contract-card));
+}
+
+.contract-ai-comment-card[data-level="medium"] {
+    background: color-mix(in oklab, #f59e0b 7%, var(--contract-card));
+}
+
+@media (min-width: 1280px) {
+    .contract-intake-column,
+    .contract-review-column {
+        position: sticky;
+        top: 76px;
+        max-height: calc(100vh - 96px);
+        overflow: auto;
+        scrollbar-width: thin;
+    }
+}
+
+@media (max-width: 1279px) {
+    .contract-taskbar-main {
+        grid-template-columns: 1fr;
+    }
+
+    .contract-taskbar-tools {
+        justify-content: flex-start;
+    }
+
+    .contract-document-editor-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .contract-document-outline {
+        border-right: 0;
+        border-bottom: 1px solid var(--contract-border);
+    }
+
+    .contract-outline-list {
+        display: flex;
+        overflow-x: auto;
+        padding-bottom: 2px;
+    }
+
+    .contract-outline-item {
+        min-width: 170px;
+    }
 }
 
 @media (max-width: 820px) {
+    .contract-workbench {
+        padding: 10px;
+    }
+
+    .contract-taskbar-signals {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .contract-document-ribbon {
+        display: grid;
+    }
+
+    .contract-document-canvas {
+        padding: 12px;
+    }
+
     .contract-document-paper {
+        min-height: 560px;
         background: var(--contract-card);
     }
 
@@ -157,8 +407,8 @@
         padding: 0 18px 28px;
     }
 
-    .contract-document-process {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+    .contract-clause-gutter {
+        left: -8px;
     }
 }
 .ec-console-page {
@@ -220,7 +470,72 @@
 
 .ec-template-layout,
 .ec-task-layout {
-    grid-template-columns: 360px minmax(0, 1fr);
+    grid-template-columns: minmax(380px, 420px) minmax(0, 1fr);
+}
+
+.ec-template-item {
+    display: grid;
+    height: auto;
+    width: 100%;
+    justify-content: stretch;
+    gap: 8px;
+    padding: 12px 14px;
+    text-align: left;
+    white-space: normal;
+}
+
+.ec-template-item[data-selected="true"] {
+    border-color: color-mix(in oklab, var(--primary) 45%, var(--border));
+    background: color-mix(in oklab, var(--primary) 8%, var(--card));
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.ec-template-item-head {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.ec-template-item strong,
+.ec-template-item span,
+.ec-template-item p {
+    display: block;
+}
+
+.ec-template-item strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+.ec-template-item span,
+.ec-template-item p {
+    color: var(--muted-foreground);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.ec-template-item p {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.ec-advanced-panel {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: color-mix(in oklab, var(--muted) 24%, transparent);
+}
+
+.ec-advanced-panel summary {
+    cursor: pointer;
+    font-weight: 650;
 }
 
 .ec-detail-head {

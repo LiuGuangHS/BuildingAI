@@ -44,6 +44,18 @@ test("console-only task type carries admin troubleshooting fields separately", (
     assert.ok(source.includes("requestPayload?: Record<string, unknown> | null"));
 });
 
+test("contract risk findings support optional annotation anchors without exposing internals", () => {
+    const match = source.match(/export type ContractRiskFinding = \{([\s\S]*?)\n\};/);
+    assert.ok(match, "ContractRiskFinding type should exist");
+    const riskBlock = match[1];
+    for (const field of ["id?: string", "sectionId?: string", "quote?: string"]) {
+        assert.ok(riskBlock.includes(field), `${field} should remain optional`);
+    }
+    for (const forbidden of ["provider", "requestPayload", "modelId"]) {
+        assert.equal(new RegExp(`\\b${forbidden}\\b`).test(riskBlock), false);
+    }
+});
+
 test("web and console services use the matching task types and clients", () => {
     assert.match(webServiceSource, /apiHttpClient/);
     assert.doesNotMatch(webServiceSource, /consoleHttpClient/);

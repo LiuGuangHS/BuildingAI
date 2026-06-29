@@ -32,8 +32,8 @@ test("deriveContractWorkbenchState keeps the first viewport plugin-focused", () 
         dirty: false,
     });
 
-    assert.equal(state.kicker, "AI 合同");
-    assert.equal(state.title, "服务合同");
+    assert.equal(state.kicker, "合同编辑器");
+    assert.equal(state.title, "服务合同.docx");
     assert.equal(state.primaryAction.label, "补齐事实");
     assert.deepEqual(state.missingFacts.map((item) => item.label), ["乙方", "合同金额"]);
     assert.equal(JSON.stringify(state).includes("用户头像"), false);
@@ -72,7 +72,7 @@ test("deriveContractWorkbenchState exposes concrete AI signals after task result
         },
     });
 
-    assert.equal(state.title, "服务合同");
+    assert.equal(state.title, "服务合同.docx");
     assert.equal(state.aiSignals.some((item) => item.label === "高风险" && item.value === "1"), true);
     assert.equal(state.primaryAction.label, "导出结果");
     assert.equal(state.billingNote, "按后台价格组预扣 12 积分；失败按账务事实退回");

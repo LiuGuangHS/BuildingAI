@@ -73,11 +73,14 @@ export type ContractSection = {
 };
 
 export type ContractRiskFinding = {
+    id?: string;
+    sectionId?: string;
     sectionTitle: string;
     level: "low" | "medium" | "high";
     issue: string;
     suggestion: string;
     replacementText?: string;
+    quote?: string;
 };
 
 export type ContractLegalTerm = {

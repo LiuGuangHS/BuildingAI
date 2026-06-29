@@ -31,13 +31,42 @@ test("resolveContractTaskJobName only allows known queue job types", () => {
     assert.equal(rules.resolveContractTaskJobName(task({ providerMetadata: {} })), null);
 });
 
-test("canRecoverContractTask recovers only old busy tasks with payload and known job", () => {
+test("canRecoverContractTask recovers only old recoverable tasks with payload and known job", () => {
     assert.equal(rules.canRecoverContractTask(task(), cutoff, nowMs), true);
     assert.equal(rules.canRecoverContractTask(task({ status: "draft" }), cutoff, nowMs), false);
+    assert.equal(rules.canRecoverContractTask(task({ status: "reviewing" }), cutoff, nowMs), false);
+    assert.equal(rules.canRecoverContractTask(task({ status: "exporting" }), cutoff, nowMs), false);
     assert.equal(rules.canRecoverContractTask(task({ requestPayload: null }), cutoff, nowMs), false);
     assert.equal(rules.canRecoverContractTask(task({ updatedAt: new Date(nowMs - 5 * 60 * 1000) }), cutoff, nowMs), false);
     assert.equal(rules.canRecoverContractTask(task({ deletedAt: new Date(nowMs - 60_000) }), cutoff, nowMs), false);
     assert.equal(rules.canRecoverContractTask(task({ providerMetadata: { jobType: "unknown" } }), cutoff, nowMs), false);
+});
+
+test("contract busy statuses include interactive review and export", () => {
+    assert.equal(rules.isContractTaskBusyStatus("pending"), true);
+    assert.equal(rules.isContractTaskBusyStatus("processing"), true);
+    assert.equal(rules.isContractTaskBusyStatus("reviewing"), true);
+    assert.equal(rules.isContractTaskBusyStatus("exporting"), true);
+    assert.equal(rules.isContractTaskBusyStatus("draft"), false);
+});
+
+test("stale interactive tasks resolve to retryable states", () => {
+    assert.deepEqual(rules.resolveStaleContractTaskResolution("reviewing"), {
+        status: "draft",
+        errorKey: "lastReviewError",
+        message: "合同审查任务超时，请重新发起审查",
+    });
+    assert.deepEqual(rules.resolveStaleContractTaskResolution("exporting"), {
+        status: "export_failed",
+        errorKey: "lastExportError",
+        message: "合同导出任务超时，请重新导出",
+    });
+    assert.deepEqual(rules.resolveStaleContractTaskResolution("processing"), {
+        status: "failed",
+        errorKey: "timeoutError",
+        message: "合同生成任务超时，请重新提交",
+    });
+    assert.equal(rules.resolveStaleContractTaskResolution("draft"), null);
 });
 
 test("canRecoverContractTask respects recent recovery locks", () => {
@@ -61,6 +90,8 @@ test("canRecoverContractTask respects recent recovery locks", () => {
 
 test("canClaimContractTaskForProcessing avoids busy processing records with fresh locks", () => {
     assert.equal(rules.canClaimContractTaskForProcessing(task({ status: "pending" }), nowMs), true);
+    assert.equal(rules.canClaimContractTaskForProcessing(task({ status: "reviewing" }), nowMs), false);
+    assert.equal(rules.canClaimContractTaskForProcessing(task({ status: "exporting" }), nowMs), false);
     // 1 minute old: within 30-min processing lock → blocked
     assert.equal(
         rules.canClaimContractTaskForProcessing(

@@ -1,4 +1,5 @@
 import { Badge } from "@buildingai/ui/components/ui/badge";
+import { Button } from "@buildingai/ui/components/ui/button";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { uploadFile } from "@buildingai/services/shared";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -326,28 +327,33 @@ export default function ContractGenerationHomePage() {
     return (
         <ContractWorkbenchShell
             state={workbenchState}
+            topTools={
+                <>
+                    <ModelStatus config={config} />
+                    <TaskStatusBadge status={activeTask?.status ?? "draft"} />
+                    {dirty && <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">{activeTask ? "未保存" : "草稿"}</Badge>}
+                    <Button variant="outline" size="sm" onClick={handleSave} disabled={!canSave}>保存</Button>
+                    <Button variant="outline" size="sm" onClick={handleReview} disabled={!canReview || reviewMutation.isPending} loading={reviewMutation.isPending}>AI 审查</Button>
+                    <Button size="sm" onClick={handleExport} disabled={!canExport}>导出</Button>
+                </>
+            }
             intake={
                 <>
-                    <div className="flex flex-wrap items-center gap-1.5 max-sm:grid max-sm:grid-cols-2">
-                        <ContractTemplateDrawer
-                            templates={filteredTemplates}
-                            tasks={taskPage?.items ?? []}
-                            keyword={templateKeyword}
-                            selectedTemplate={selectedTemplate}
-                            disabled={!canGenerate}
-                            onKeywordChange={setTemplateKeyword}
-                            onSelectTemplate={selectTemplate}
-                            onSelectTask={setTask}
-                        />
-                        <ModelStatus config={config} />
-                        <TaskStatusBadge status={activeTask?.status ?? "draft"} />
-                        {dirty && <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">{activeTask ? "未保存" : "草稿"}</Badge>}
-                    </div>
-                        <ContractIntakeRail
-                            state={workbenchState}
-                            mode={mode}
-                            disabled={!canGenerate}
-                            onModeChange={setMode}
+                    <ContractTemplateDrawer
+                        templates={filteredTemplates}
+                        tasks={taskPage?.items ?? []}
+                        keyword={templateKeyword}
+                        selectedTemplate={selectedTemplate}
+                        disabled={!canGenerate}
+                        onKeywordChange={setTemplateKeyword}
+                        onSelectTemplate={selectTemplate}
+                        onSelectTask={setTask}
+                    />
+                    <ContractIntakeRail
+                        state={workbenchState}
+                        mode={mode}
+                        disabled={!canGenerate}
+                        onModeChange={setMode}
                         selectedTemplate={selectedTemplate}
                         variables={variables}
                         errors={fieldErrors}
@@ -365,12 +371,12 @@ export default function ContractGenerationHomePage() {
                         }}
                         onPromptChange={setPrompt}
                         onReviewFileChange={setReviewFile}
-                            onStanceChange={(value) => setStance(value as ContractStance)}
-                            onExportTypeChange={setExportType}
-                            onFillExample={() => fillExample(selectedTemplate, setVariables, setTitle, setPrompt)}
-                        />
-                    </>
-                }
+                        onStanceChange={(value) => setStance(value as ContractStance)}
+                        onExportTypeChange={setExportType}
+                        onFillExample={() => fillExample(selectedTemplate, setVariables, setTitle, setPrompt)}
+                    />
+                </>
+            }
             document={
                 <>
                     {message && <div className="mb-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm text-foreground">{message}</div>}
@@ -384,22 +390,12 @@ export default function ContractGenerationHomePage() {
                             documentRevision={documentRevision}
                             selectedSectionIndex={selectedSectionIndex}
                             draftEditable={!activeTask && canGenerate}
-                            rewriteMode={rewriteMode}
-                            rewritePreview={rewritePreview}
-                            rewritePending={rewriteMutation.isPending}
-                            versions={versions}
-                            reviewPending={reviewMutation.isPending}
-                            exportType={exportType}
                             dirty={dirty}
                             canSave={canSave}
                             canReview={canReview}
                             canExport={canExport}
                             onSelectSection={setSelectedSectionIndex}
                             onSectionsChange={replaceSections}
-                            onRewriteModeChange={setRewriteMode}
-                            onRewrite={handleRewrite}
-                            onApplyRewrite={applyRewritePreview}
-                            onCancelRewrite={() => setRewritePreview(null)}
                             onSave={handleSave}
                             onReview={handleReview}
                             onExport={handleExport}
@@ -502,8 +498,8 @@ function exampleValue(key: string, label: string, options?: string[]) {
     return `${label}示例内容`;
 }
 
-function getRiskKey(risk: { sectionTitle: string; issue: string }, index: number) {
-    return `${index}:${risk.sectionTitle}:${risk.issue}`;
+function getRiskKey(risk: { id?: string; sectionTitle: string; issue: string }, index: number) {
+    return risk.id || `${index}:${risk.sectionTitle}:${risk.issue}`;
 }
 
 function formatCredits(value?: number) {

@@ -136,16 +136,18 @@ export default function ContractTemplatesConsolePage() {
                     </CardHeader>
                     <CardContent className="grid gap-3">
                         {templates.map((template) => (
-                            <Button key={template.id} variant={editing?.id === template.id ? "secondary" : "outline"} className="h-auto w-full justify-start p-3 text-left" onClick={() => setEditing(template)} type="button">
-                                <div>
-                                    <strong className="block">{template.name}</strong>
-                                    <span className="block text-xs text-muted-foreground">{template.industry} / {template.contractType}</span>
+                            <Button key={template.id} variant="outline" className="ec-template-item" data-selected={editing?.id === template.id} onClick={() => setEditing(template)} type="button">
+                                <div className="ec-template-item-head">
+                                    <div className="min-w-0">
+                                        <strong>{template.name}</strong>
+                                        <span>{template.industry} / {template.contractType}</span>
+                                    </div>
+                                    <div className="flex shrink-0 gap-2">
+                                        <Badge variant={template.isActive ? "default" : "outline"}>{template.isActive ? "启用" : "停用"}</Badge>
+                                        {template.isBuiltin ? <Badge variant="outline">内置</Badge> : null}
+                                    </div>
                                 </div>
-                                <p className="my-2 line-clamp-2 text-left text-xs text-muted-foreground">{template.description}</p>
-                                <div className="flex gap-2">
-                                    <Badge variant={template.isActive ? "default" : "outline"}>{template.isActive ? "启用" : "停用"}</Badge>
-                                    {template.isBuiltin ? <Badge variant="outline">内置</Badge> : null}
-                                </div>
+                                <p>{template.description}</p>
                             </Button>
                         ))}
                     </CardContent>
@@ -172,28 +174,33 @@ export default function ContractTemplatesConsolePage() {
 
                         <TextareaField label="描述" value={form.description} onChange={(value) => setForm({ ...form, description: value })} />
 
-                    <section className="grid gap-3">
-                        <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div>
-                                <h3 className="text-base font-medium">高级字段 JSON</h3>
-                                <p className="text-sm text-muted-foreground">字段会渲染为用户端填写表单。结构错误时后端会拒绝保存。</p>
-                            </div>
-                            <Button variant="outline" onClick={formatFieldsJson}>格式化</Button>
+                    <details className="ec-advanced-panel">
+                        <summary>高级配置</summary>
+                        <div className="grid gap-5 pt-4">
+                            <section className="grid gap-3">
+                                <div className="flex flex-wrap items-start justify-between gap-4">
+                                    <div>
+                                        <h3 className="text-base font-medium">字段 JSON</h3>
+                                        <p className="text-sm text-muted-foreground">字段会渲染为用户端填写表单。结构错误时后端会拒绝保存。</p>
+                                    </div>
+                                    <Button variant="outline" onClick={formatFieldsJson}>格式化</Button>
+                                </div>
+                                <Textarea className="min-h-40 font-mono text-xs" value={fieldsText} onChange={(event) => setFieldsText(event.target.value)} aria-label="字段 JSON" />
+                            </section>
+
+                            <section className="grid gap-2">
+                                <h3 className="text-base font-medium">默认条款</h3>
+                                <Textarea className="min-h-32" value={sectionsText} onChange={(event) => setSectionsText(event.target.value)} aria-label="默认条款" />
+                                <p className="text-sm text-muted-foreground">每行一条，生成合同时作为默认条款结构。</p>
+                            </section>
+
+                            <section className="grid gap-2">
+                                <h3 className="text-base font-medium">AI 提示</h3>
+                                <Textarea className="min-h-32" value={form.promptTemplate ?? ""} onChange={(event) => setForm({ ...form, promptTemplate: event.target.value })} aria-label="AI 提示" />
+                                <p className="text-sm text-muted-foreground">用于约束生成风格、输出边界和业务注意事项。</p>
+                            </section>
                         </div>
-                        <Textarea className="min-h-40 font-mono text-xs" value={fieldsText} onChange={(event) => setFieldsText(event.target.value)} aria-label="高级字段 JSON" />
-                    </section>
-
-                    <section className="grid gap-2">
-                        <h3 className="text-base font-medium">默认条款</h3>
-                        <Textarea className="min-h-40" value={sectionsText} onChange={(event) => setSectionsText(event.target.value)} aria-label="默认条款" />
-                        <p className="text-sm text-muted-foreground">每行一条，生成合同时作为默认条款结构。</p>
-                    </section>
-
-                    <section className="grid gap-2">
-                        <h3 className="text-base font-medium">AI 提示</h3>
-                        <Textarea className="min-h-40" value={form.promptTemplate ?? ""} onChange={(event) => setForm({ ...form, promptTemplate: event.target.value })} aria-label="AI 提示" />
-                        <p className="text-sm text-muted-foreground">用于约束生成风格、输出边界和业务注意事项。</p>
-                    </section>
+                    </details>
 
                     <section className="flex items-center justify-between gap-4 rounded-md border p-4">
                         <div>

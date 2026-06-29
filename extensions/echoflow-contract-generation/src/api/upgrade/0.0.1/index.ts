@@ -14,17 +14,17 @@ export class Upgrade {
     private async ensureExtensionRecord(): Promise<void> {
         const extensionData = {
             icon: "/echoflow-contract-generation/static/icon.png",
-            name: "AI合同 | 多行业模板",
+            name: "合同生成",
             identifier: "echoflow-contract-generation",
             version: "0.0.1",
-            description: "面向企业法务、创业者和个人用户的 AI 合同起草与审查工具，支持多行业合同模板、在线编辑、风险提示、法律术语解释、合规检查和 Word 合同导出。",
+            description: "覆盖创业、劳动、租赁等场景，快速生成可编辑合同草稿。",
             type: 1,
             isLocal: true,
             status: "1",
             supportTerminal: [1],
             author: {
                 avatar: "/echoflow-contract-generation/static/icon.png",
-                name: "EchoflowAI Teams",
+                name: "EchoFlowAI Team",
                 homepage: "",
             },
         };

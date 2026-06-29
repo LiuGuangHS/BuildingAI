@@ -71,9 +71,9 @@ export function deriveContractWorkbenchState(options: {
     const sectionCount = options.task?.sections?.length ?? 0;
 
     return {
-        kicker: "AI 合同",
-        title: options.task?.title || options.template?.name || (options.mode === "review" ? "上传合同审查" : "新合同起草"),
-        subtitle: options.mode === "review" ? "上传文件后抽取条款、标注风险、生成改写建议。" : "先补合同事实，再生成可编辑条款和风险判断。",
+        kicker: "合同编辑器",
+        title: `${options.task?.title || options.template?.name || (options.mode === "review" ? "上传合同审查" : "新合同起草")}.docx`,
+        subtitle: options.task ? "已载入任务正文，可编辑、审查和导出。" : options.mode === "review" ? "导入已有合同，生成 AI 法务批注。" : "补齐事实后生成可编辑合同正文。",
         recognizedFacts,
         missingFacts,
         aiSignals: [
@@ -125,7 +125,7 @@ export function deriveContractInspectorTabs(options: {
     canExport: boolean;
 }): ContractInspectorTab[] {
     return [
-        { key: "risks", label: "风险", badge: options.riskCount ? String(options.riskCount) : undefined },
+        { key: "risks", label: "批注", badge: options.riskCount ? String(options.riskCount) : undefined },
         { key: "rewrite", label: "改写", badge: options.hasRewritePreview ? "新建议" : undefined },
         { key: "versions", label: "版本", badge: options.versionCount ? String(options.versionCount) : undefined },
         { key: "export", label: "导出", badge: options.canExport ? "可用" : undefined },

@@ -1,6 +1,6 @@
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
 
-import type { ContractGenerationTask, ContractRiskFinding, ContractSection } from "../../../db/entities";
+import type { ContractGenerationTask, ContractRiskFinding, ContractSection, RiskActions } from "../../../db/entities";
 
 function paragraph(text: string, options: { bold?: boolean; size?: number; heading?: (typeof HeadingLevel)[keyof typeof HeadingLevel]; alignment?: (typeof AlignmentType)[keyof typeof AlignmentType] } = {}) {
     return new Paragraph({
@@ -11,12 +11,16 @@ function paragraph(text: string, options: { bold?: boolean; size?: number; headi
     });
 }
 
-function riskParagraph(risk: ContractRiskFinding) {
+function riskParagraph(risk: ContractRiskFinding, index: number, actions: RiskActions = {}) {
     const label = risk.level === "high" ? "高风险" : risk.level === "medium" ? "中风险" : "低风险";
-    return paragraph(`${label}｜${risk.sectionTitle}：${risk.issue}。建议：${risk.suggestion}`);
+    const action = actions[risk.id || `${index}:${risk.sectionTitle}:${risk.issue}`]?.status;
+    const status = action === "accepted" ? "已采纳" : action === "ignored" ? "已忽略" : "待处理";
+    const quote = risk.quote ? `\n命中原文：${risk.quote}` : "";
+    const replacement = risk.replacementText ? `\n建议替换：${risk.replacementText}` : "";
+    return paragraph(`${label}｜${status}｜${risk.sectionTitle}\n问题：${risk.issue}\n建议：${risk.suggestion}${quote}${replacement}`);
 }
 
-export async function buildContractDocx(task: Pick<ContractGenerationTask, "title" | "summary" | "sections" | "riskFindings" | "legalTerms">, options: { exportType?: "contract" | "contract_with_report" | "risk_report"; includeRiskReport?: boolean } = {}) {
+export async function buildContractDocx(task: Pick<ContractGenerationTask, "title" | "summary" | "sections" | "riskFindings" | "legalTerms" | "riskActions">, options: { exportType?: "contract" | "contract_with_report" | "risk_report"; includeRiskReport?: boolean } = {}) {
     const sections = normalizeSections(task.sections);
     const exportType = options.exportType ?? (options.includeRiskReport ? "contract_with_report" : "contract");
     const children: Paragraph[] = exportType === "risk_report" ? [] : [
@@ -40,14 +44,14 @@ export async function buildContractDocx(task: Pick<ContractGenerationTask, "titl
     ];
 
     if (exportType === "risk_report") {
-        children.push(paragraph(`${task.title} - 风险报告`, { bold: true, size: 34, alignment: AlignmentType.CENTER }), paragraph(""));
+        children.push(paragraph(`${task.title} - AI 法务批注报告`, { bold: true, size: 34, alignment: AlignmentType.CENTER }), paragraph(""));
         if (!task.riskFindings?.length && !task.legalTerms?.length) {
-            children.push(paragraph("当前合同暂无风险提示或法律术语解释。"));
+            children.push(paragraph("当前合同暂无 AI 法务批注或法律术语解释。"));
         }
     }
 
     if ((exportType === "contract_with_report" || exportType === "risk_report") && task.riskFindings?.length) {
-        children.push(paragraph(""), paragraph("风险提示（内部参考）", { bold: true, heading: HeadingLevel.HEADING_2 }), ...task.riskFindings.map(riskParagraph));
+        children.push(paragraph(""), paragraph("AI 法务批注报告（内部参考）", { bold: true, heading: HeadingLevel.HEADING_2 }), ...task.riskFindings.map((risk, index) => riskParagraph(risk, index, task.riskActions ?? {})));
     }
 
     if ((exportType === "contract_with_report" || exportType === "risk_report") && task.legalTerms?.length) {

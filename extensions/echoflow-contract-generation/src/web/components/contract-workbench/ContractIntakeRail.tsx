@@ -55,7 +55,7 @@ export function ContractIntakeRail(props: {
     const inputDisabled = Boolean(props.disabled || props.isBusy || props.primaryActionPending);
 
     return (
-        <section className="grid gap-2.5 rounded-lg border bg-card/95 p-3 shadow-sm">
+        <section className="contract-panel contract-intake-panel grid gap-4">
             <Tabs value={props.mode} onValueChange={(value) => props.onModeChange(value as ContractWorkbenchMode)}>
                 <TabsList className="w-full">
                     <TabsTrigger value="draft" disabled={inputDisabled}>起草</TabsTrigger>
@@ -63,22 +63,22 @@ export function ContractIntakeRail(props: {
                 </TabsList>
             </Tabs>
 
-            <div className="grid gap-2">
-                <div>
-                    <h2 className="text-sm font-semibold tracking-normal">AI 依据</h2>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{props.state.billingNote}</p>
+            <div className="grid gap-2.5">
+                <div className="contract-panel-head">
+                    <h2>事实采集</h2>
+                    <p>{props.state.billingNote}</p>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="contract-fact-chips">
                     {props.state.recognizedFacts.slice(0, 5).map((fact) => (
-                        <span key={fact.key} className="grid max-w-full min-w-0 rounded-md border border-primary/20 bg-primary/5 px-2 py-1.5">
-                            <strong className="block max-w-[220px] truncate text-[11px] font-semibold text-primary">{fact.label}</strong>
-                            <em className="block max-w-[220px] truncate text-xs not-italic text-muted-foreground">{fact.value}</em>
+                        <span key={fact.key} className="contract-fact-chip" data-state="known">
+                            <strong>{fact.label}</strong>
+                            <em>{fact.value}</em>
                         </span>
                     ))}
                     {props.state.missingFacts.slice(0, 4).map((fact) => (
-                        <span key={fact.key} className="grid max-w-full min-w-0 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
-                            <strong className="block max-w-[220px] truncate text-[11px] font-semibold text-amber-700 dark:text-amber-300">{fact.label}</strong>
-                            <em className="block max-w-[220px] truncate text-xs not-italic text-muted-foreground">待补充</em>
+                        <span key={fact.key} className="contract-fact-chip" data-state="missing">
+                            <strong>{fact.label}</strong>
+                            <em>待补充</em>
                         </span>
                     ))}
                     {props.state.recognizedFacts.length === 0 && props.state.missingFacts.length === 0 && <EmptyPanel>选择模板或上传文件后显示 AI 依据。</EmptyPanel>}
@@ -86,7 +86,7 @@ export function ContractIntakeRail(props: {
             </div>
 
             {props.mode === "draft" && (
-                <div className="grid gap-2 max-h-[400px] overflow-y-auto pr-1">
+                <div className="contract-intake-fields grid gap-2 overflow-y-auto pr-1">
                     {requiredFields.map((field) => (
                         <TemplateCompactField
                             key={field.key}
@@ -105,22 +105,22 @@ export function ContractIntakeRail(props: {
             )}
 
             {props.mode === "review" && (
-                <div className="grid gap-2 rounded-lg border border-dashed border-primary/25 bg-primary/5 p-2.5">
+                <div className="grid gap-2 rounded-xl border border-dashed bg-muted/20 p-3">
                     <Label htmlFor={uploadId} className="text-sm font-semibold">上传合同</Label>
-                    <Input id={uploadId} className="bg-muted/30" type="file" accept=".doc,.docx,.pdf,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" onChange={(event) => props.onReviewFileChange(event.target.files?.[0] ?? null)} disabled={inputDisabled} />
+                    <Input id={uploadId} className="bg-background/70" type="file" accept=".doc,.docx,.pdf,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" onChange={(event) => props.onReviewFileChange(event.target.files?.[0] ?? null)} disabled={inputDisabled} />
                     <em className="text-xs not-italic text-muted-foreground">{props.reviewFile ? props.reviewFile.name : "Word / PDF / 文本"}</em>
                 </div>
             )}
 
             <div className="grid grid-cols-2 gap-2">
                 <Select value={props.stance} onValueChange={props.onStanceChange} disabled={inputDisabled}>
-                    <SelectTrigger className="bg-muted/30"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="bg-background/70"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {stanceOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                     </SelectContent>
                 </Select>
                 <Select value={props.exportType} onValueChange={(value) => props.onExportTypeChange(value as typeof props.exportType)} disabled={inputDisabled}>
-                    <SelectTrigger className="bg-muted/30"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="bg-background/70"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {exportTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
                     </SelectContent>

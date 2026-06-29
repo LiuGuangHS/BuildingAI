@@ -9,7 +9,7 @@ const serviceSource = readFileSync(
 
 test("contract admin config uses a whitelist view instead of spreading the stored config", () => {
     assert.match(serviceSource, /async getAdminConfig\(\) \{/);
-    assert.match(serviceSource, /return \{\n\s+id: config\.id,/);
+    assert.match(serviceSource, /return \{\r?\n\s+id: config\.id,/);
     assert.match(serviceSource, /metadata: config\.metadata \?\? null,/);
     assert.doesNotMatch(serviceSource, /return \{\n\s+\.\.\.config,/);
     assert.doesNotMatch(serviceSource, /\.\.\.config,/);
