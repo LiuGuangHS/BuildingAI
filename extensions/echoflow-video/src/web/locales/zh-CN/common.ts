@@ -15,7 +15,7 @@ export default {
     download: "下载",
   },
   generation: {
-    title: "AI 视频生成",
+    title: "视频工作台",
     prompt: "提示词",
     promptPlaceholder: "描述你想要生成的视频内容...",
     model: "模型",

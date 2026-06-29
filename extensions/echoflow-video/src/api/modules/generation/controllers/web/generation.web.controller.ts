@@ -5,7 +5,7 @@ import { Playground } from "@buildingai/decorators/playground.decorator";
 import { Public } from "@buildingai/decorators/public.decorator";
 import { ExtensionRateLimitService, type ExtensionRateLimitWindow } from "@buildingai/extension-sdk";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
-import { Body, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Delete, Get, Param, Post, Query } from "@nestjs/common";
 
 import { CreateVideoGenerationDto, OptimizePromptDto, QueryVideoGenerationDto, QueryVideoTemplateDto } from "../../dto";
 import { GenerationService } from "../../services/generation.service";
@@ -112,6 +112,14 @@ export class GenerationWebController extends BaseController {
         @Playground() user: UserPlayground,
     ) {
         return this.generationService.pollAndUpdateForWeb(id, user.id);
+    }
+
+    @Delete(":id")
+    async delete(
+        @Param("id", UUIDValidationPipe) id: string,
+        @Playground() user: UserPlayground,
+    ) {
+        return this.generationService.deleteOwnedById(id, user.id);
     }
 
     private async assertRateLimit(action: "generation" | "prompt-optimization", userId: string) {

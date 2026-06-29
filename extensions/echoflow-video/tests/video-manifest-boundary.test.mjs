@@ -2,11 +2,21 @@ import { access, readdir, readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-    assertAbsentDeps,
-    assertDeclaredDeps,
-    mergePackageDeps,
-} from "../../test-utils/manifest-boundary.mjs";
+function mergePackageDeps(pkg) {
+    return new Map(Object.entries({ ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies }));
+}
+
+function assertDeclaredDeps(deps, entries) {
+    for (const [name] of entries) {
+        assert.ok(deps.has(name), `expected dependency ${name}`);
+    }
+}
+
+function assertAbsentDeps(deps, names) {
+    for (const name of names) {
+        assert.ok(!deps.has(name), `unexpected dependency ${name}`);
+    }
+}
 
 const PACKAGE_FILE = new URL("../package.json", import.meta.url);
 const MANIFEST_FILE = new URL("../manifest.json", import.meta.url);
@@ -26,14 +36,15 @@ const GENERATION_SERVICE_FILE = new URL("../src/api/modules/generation/services/
 const MODEL_CONFIG_SERVICE_FILE = new URL("../src/api/modules/generation/services/model-config.service.ts", import.meta.url);
 const LEGACY_HAPPYHORSE_CLIENT_FILE = new URL("../src/api/modules/generation/services/happyhorse-client.ts", import.meta.url);
 const REUSE_PARAMS_STORAGE_FILE = new URL("../src/web/lib/reuse-params-storage.ts", import.meta.url);
+const VITE_CONFIG_FILE = new URL("../vite.config.ts", import.meta.url);
 
 test("video manifest declares direct runtime imports", async () => {
     const pkg = JSON.parse(await readFile(PACKAGE_FILE, "utf8"));
     const deps = mergePackageDeps(pkg);
 
     assertDeclaredDeps(deps, [
-        ["@tailwindcss/vite", "@tailwindcss/vite is directly imported by vite.config.ts"],
-        ["@vitejs/plugin-react", "@vitejs/plugin-react is directly imported by vite.config.ts"],
+        ["@buildingai/web-core", "vite.config.ts reuses the shared extension Vite config"],
+        ["vite", "vite CLI is used by dev:web and build:web scripts"],
         ["@playwright/test", "@playwright/test is directly imported by tests/e2e/video-plugin.spec.ts"],
         ["@buildingai/stores", "@buildingai/stores is directly imported by browser persistence helpers"],
         ["@nestjs/common", "@nestjs/common is directly imported by API modules"],
@@ -43,6 +54,15 @@ test("video manifest declares direct runtime imports", async () => {
         ["globals", "globals is directly imported by eslint.config.mjs"],
         ["tsup", "tsup Options is directly imported by tsup.config.ts"],
     ]);
+});
+
+test("video Vite config reuses the shared extension config", async () => {
+    const source = await readFile(VITE_CONFIG_FILE, "utf8");
+
+    assert.match(source, /defineExtensionViteConfig/);
+    assert.match(source, /@buildingai\/web-core\/vite\/extension/);
+    assert.doesNotMatch(source, /@tailwindcss\/vite/);
+    assert.doesNotMatch(source, /@vitejs\/plugin-react/);
 });
 
 test("video manifest, package, and local registry stay aligned", async () => {
@@ -146,20 +166,17 @@ test("video media validation uses main upload service boundary", async () => {
     assert.doesNotMatch(serviceSource, /fileRepository/, "plugin code should not keep a direct File repository field");
 });
 
-test("video removes the legacy HappyHorse-only client from the active protocol layer", async () => {
+test("video removes legacy provider clients from the active protocol layer", async () => {
     const [modelConfigSource, readmeSource] = await Promise.all([
         readFile(MODEL_CONFIG_SERVICE_FILE, "utf8"),
         readFile(README_FILE, "utf8"),
     ]);
 
-    await assert.rejects(
-        access(LEGACY_HAPPYHORSE_CLIENT_FILE),
-        /ENOENT/,
-        "the generic VideoGatewayClient should own active provider protocol calls",
-    );
-    assert.doesNotMatch(modelConfigSource, /happyhorse-client/);
-    assert.doesNotMatch(modelConfigSource, /defaultHappyHorseClientOptions/);
-    assert.doesNotMatch(readmeSource, /HappyHorseClient/);
+    await assert.rejects(access(LEGACY_HAPPYHORSE_CLIENT_FILE), /ENOENT/);
+    await assert.rejects(access(new URL("../src/api/modules/generation/services/video-gateway-client.ts", import.meta.url)), /ENOENT/);
+    await assert.rejects(access(new URL("../src/api/modules/generation/services/video-model-catalog.ts", import.meta.url)), /ENOENT/);
+    assert.doesNotMatch(modelConfigSource, /happyhorse-client|video-model-catalog|VideoGatewayClient/);
+    assert.doesNotMatch(readmeSource, /HappyHorseClient|VideoGatewayClient/);
 });
 
 test("video reuse params storage reuses main storage exports", async () => {

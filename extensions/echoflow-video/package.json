@@ -1,8 +1,8 @@
 {
     "name": "echoflow-video",
     "version": "0.0.1",
-    "description": "多模型视频生成与任务队列插件，内置 Seedance/Kling/HappyHorse 模型 catalog，支持计费、风控、Webhook 终态保护与运营后台。",
-    "author": "EchoflowAI Teams",
+    "description": "多模型视频生成插件，复用主站视频模型，支持计费、风控、提示词优化与运营后台。",
+    "author": "EchoFlowAI Team",
     "private": true,
     "main": "./manifest.json",
     "module": "./manifest.json",
@@ -23,18 +23,19 @@
     },
     "scripts": {
         "build:clean": "rimraf build .nuxt .output .temp",
-        "dev:web": "vite",
+        "dev:web": "vite --configLoader native",
         "dev:api": "cross-env NODE_ENV=development tsup --watch src/api",
+        "dev": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
         "build:api": "cross-env NODE_ENV=production tsup",
-        "build:web": "vite build",
-        "build:publish": "rimraf build .nuxt .output .temp && vite build && cross-env NODE_ENV=production tsup",
+        "build:web": "vite build --configLoader native",
+        "build:publish": "rimraf build .nuxt .output .temp && vite build --configLoader native && cross-env NODE_ENV=production tsup",
         "format": "prettier --write src",
-        "lint": "eslint src --quiet",
-        "lint:fix": "eslint src --fix",
-        "check-types": "vue-tsc --noEmit",
-        "test": "vue-tsc --noEmit && jest --runInBand --passWithNoTests",
+        "lint": "eslint src --quiet --no-error-on-unmatched-pattern",
+        "lint:fix": "eslint src --fix --no-error-on-unmatched-pattern",
+        "check-types": "tsc -p tsconfig.api.json --noEmit",
+        "test": "node --experimental-strip-types --test tests/*.test.mjs",
         "test:unit": "jest --runInBand --passWithNoTests",
-        "test:watch": "vue-tsc --noEmit --watch",
+        "test:e2e": "playwright test tests/e2e",
         "i18n:translate": "node ../../scripts/translate-i18n.mjs"
     },
     "dependencies": {
@@ -69,14 +70,13 @@
     },
     "devDependencies": {
         "@playwright/test": "catalog:dev",
-        "@tailwindcss/vite": "catalog:web",
         "@buildingai/eslint-config": "workspace:*",
         "@buildingai/typescript-config": "workspace:*",
         "@buildingai/web-types": "workspace:*",
         "@types/jest": "^29.5.14",
         "@types/react": "catalog:web",
         "@types/react-dom": "catalog:web",
-        "@vitejs/plugin-react": "^6.0.1",
+        "concurrently": "catalog:dev",
         "cross-env": "catalog:dev",
         "eslint": "catalog:dev",
         "eslint-plugin-react-refresh": "^0.4.26",
@@ -85,10 +85,8 @@
         "prettier": "catalog:dev",
         "rimraf": "catalog:dev",
         "ts-jest": "^29.3.1",
-        "ts-node": "^10.9.2",
         "tsup": "^8.5.1",
-        "vite": "catalog:web",
-        "vue-tsc": "catalog:dev"
+        "vite": "catalog:web"
     },
     "engine": {
         "buildingai": ">=25.1.0"

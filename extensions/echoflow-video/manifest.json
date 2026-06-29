@@ -1,14 +1,14 @@
 {
     "identifier": "echoflow-video",
-    "name": "EchoFlow 视频生成",
+    "name": "视频工作台",
     "type": "application",
     "version": "0.0.1",
-    "description": "多模型视频创作工作台，支持文生视频、图生视频、参考图生成、任务轮询、Webhook 终态保护与模型级计费。",
+    "description": "用文字或参考图生成视频，支持多模型选择、任务历史和结果查看。",
     "icon": "/echoflow-video/static/logo.png",
     "homepage": "",
     "author": {
         "avatar": "/echoflow-video/static/logo.png",
-        "name": "EchoflowAI Teams",
+        "name": "EchoFlowAI Team",
         "homepage": ""
     },
     "changelog": [],

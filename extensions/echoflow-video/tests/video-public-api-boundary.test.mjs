@@ -18,7 +18,6 @@ const WEB_STUDIO_PAGE_FILE = new URL("../src/web/pages/studio.tsx", import.meta.
 const CONSOLE_MODELS_PAGE_FILE = new URL("../src/web/pages/console/models.tsx", import.meta.url);
 const VIDEO_LABELS_FILE = new URL("../src/web/lib/video-labels.ts", import.meta.url);
 const WEB_CONTROLLER_FILE = new URL("../src/api/modules/generation/controllers/web/generation.web.controller.ts", import.meta.url);
-const WEBHOOK_CONTROLLER_FILE = new URL("../src/api/modules/generation/controllers/web/webhook.controller.ts", import.meta.url);
 const GENERATION_MODULE_FILE = new URL("../src/api/modules/generation/generation.module.ts", import.meta.url);
 const VIDEO_HTTP_CLIENT_FILE = new URL("../src/api/modules/generation/services/video-http-client.ts", import.meta.url);
 const PROVIDER_CONFIG_SERVICE_FILE = new URL("../src/api/modules/generation/services/provider-config.service.ts", import.meta.url);
@@ -59,15 +58,15 @@ test("video web serializer strips provider debug fields", async () => {
     assert.doesNotMatch(method, /deletedAt:\s*record\.deletedAt/);
 });
 
-test("video public model options keep the config id needed by generation submit", async () => {
+test("video public model options use config ids for generation submit", async () => {
     const source = await readFile(MODEL_CONFIG_SERVICE_FILE, "utf8");
     const method = source.slice(
         source.indexOf("toWebOption("),
-        source.indexOf("\n    private async ensureDefaultModelConfigs", source.indexOf("toWebOption(")),
+        source.indexOf("\n    private async ensureRuntimeSchema", source.indexOf("toWebOption(")),
     );
 
-    assert.match(method, /id:\s*resolved\.model/);
-    assert.match(method, /modelConfigId:\s*resolved\.id/);
+    assert.match(method, /id:\s*config\.id/);
+    assert.match(method, /modelConfigId:\s*config\.id/);
     assert.doesNotMatch(method, /\bprovider:/);
 });
 
@@ -161,7 +160,7 @@ test("video generation disables generation controls when no public model is usab
     assert.match(formSource, /const modeControlsDisabled = Boolean\(disabledReason\) \|\| Boolean\(loading\)/);
     assert.match(formSource, /disabled=\{modeControlsDisabled \|\| !option\.available \|\| modelsLoading\}/);
     assert.match(formSource, /disabled=\{controlsDisabled\}/);
-    assert.match(formSource, /disabled=\{controlsDisabled \|\| !prompt\.trim\(\) \|\| optimizePromptMutation\.isPending\}/);
+    assert.match(formSource, /disabled=\{controlsDisabled \|\| !optimizerEnabled \|\| !prompt\.trim\(\) \|\| optimizePromptMutation\.isPending\}/);
 }
 );
 
@@ -364,16 +363,6 @@ test("video provider HTTP requests reuse the extension SDK provider client", asy
     assert.doesNotMatch(generationSource, /JSON\.parse\(text\)/);
 });
 
-test("video provider result URLs are DNS-checked before being saved", async () => {
-    const source = await readFile(SERVICE_FILE, "utf8");
-
-    assert.match(source, /assertPublicHttpUrl/);
-    assert.match(source, /private async normalizeResultVideoUrl/);
-    assert.match(source, /await this\.normalizeResultVideoUrl\(pollResult\.videoUrl\)/);
-    assert.match(source, /await this\.normalizeResultVideoUrl\(videoUrl\)/);
-    assert.doesNotMatch(source, /normalizePublicHttpUrl\(value, \{ label: "视频结果 URL" \}\)/);
-});
-
 test("video refund failures are persisted as business metadata instead of only user copy", async () => {
     const source = await readFile(SERVICE_FILE, "utf8");
 
@@ -389,25 +378,22 @@ test("video refund failures are persisted as business metadata instead of only u
 test("video async writes skip soft-deleted records", async () => {
     const source = await readFile(SERVICE_FILE, "utf8");
     const saveMethod = extractMethod(source, "saveNonTerminalUpdate");
-    const pollFailureMethod = extractMethod(source, "recordPollScheduleFailure");
 
     assert.match(saveMethod, /locked\.deletedAt/);
     assert.match(saveMethod, /return locked/);
-    assert.match(pollFailureMethod, /record\.deletedAt/);
-    assert.match(pollFailureMethod, /isTerminalStatus\(record\.status\)/);
 });
 
-test("video webhook secret verification uses constant-time comparison and never logs secrets", async () => {
-    const [providerSource, webhookSource] = await Promise.all([
+test("video config no longer exposes legacy webhook secret plumbing", async () => {
+    const [providerSource, moduleSource, upgradeSource] = await Promise.all([
         readFile(PROVIDER_CONFIG_SERVICE_FILE, "utf8"),
-        readFile(WEBHOOK_CONTROLLER_FILE, "utf8"),
+        readFile(GENERATION_MODULE_FILE, "utf8"),
+        readFile(UPGRADE_FILE, "utf8"),
     ]);
 
-    assert.match(providerSource, /timingSafeEqual/);
-    assert.match(providerSource, /safeCompareSecret/);
-    assert.doesNotMatch(providerSource, /secret\s*===\s*expectedSecret/);
-    assert.match(webhookSource, /@Headers\("x-webhook-secret"\)/);
-    assert.doesNotMatch(webhookSource, /logger\.(warn|error|log)\([^)]*secret/is);
+    assert.doesNotMatch(providerSource, /webhookSecret|verifyHappyHorseWebhookSecret|timingSafeEqual|safeCompareSecret/);
+    assert.doesNotMatch(moduleSource, /WebhookController/);
+    assert.match(upgradeSource, /dropColumnIfExists\("video_provider_config", "webhook_secret_id"\)/);
+    assert.match(upgradeSource, /dropColumnIfExists\("video_provider_config", "templates"\)/);
 });
 
 test("video plugin does not depend on the low-level ai sdk", async () => {

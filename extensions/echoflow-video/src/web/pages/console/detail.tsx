@@ -220,8 +220,12 @@ export default function DetailPage() {
                                     variant="ghost"
                                     className="w-full"
                                     onClick={async () => {
-                                        await navigator.clipboard.writeText(videoUrl);
-                                        toast.success("视频链接已复制");
+                                        try {
+                                            await navigator.clipboard.writeText(videoUrl);
+                                            toast.success("视频链接已复制");
+                                        } catch {
+                                            toast.error("复制失败，请手动复制链接");
+                                        }
                                     }}
                                 >
                                     <Copy className="size-4" />
@@ -322,8 +326,12 @@ export default function DetailPage() {
                                             size="icon"
                                             className="size-5 shrink-0"
                                             onClick={async () => {
-                                                await navigator.clipboard.writeText(requestKey);
-                                                toast.success("已复制");
+                                                try {
+                                                    await navigator.clipboard.writeText(requestKey);
+                                                    toast.success("已复制");
+                                                } catch {
+                                                    toast.error("复制失败，请手动复制");
+                                                }
                                             }}
                                         >
                                             <Copy className="size-3" />

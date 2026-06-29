@@ -58,7 +58,17 @@ interface GenerationFormProps {
     models: VideoModelOption[];
     modelsLoading?: boolean;
     disabledReason?: string;
-    promptTemplates?: { label: string; prompt: string }[];
+    promptTemplates?: {
+        label: string;
+        prompt: string;
+        modelConfigId?: string;
+        defaultParams?: {
+            duration?: number;
+            resolution?: string;
+            ratio?: string;
+            watermark?: boolean;
+        };
+    }[];
     initialValues?: Partial<CreateVideoParams>;
     onSubmit: (data: CreateVideoParams) => Promise<void> | void;
 }
@@ -107,6 +117,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
     const controlsDisabled = Boolean(disabledReason) || Boolean(loading) || !selectedModel;
     const modeControlsDisabled = Boolean(disabledReason) || Boolean(loading);
     const modeHasNoCompatibleModels = models.length > 0 && compatibleModels.length === 0;
+    const optimizerEnabled = optimizerOptions?.enabled !== false && Boolean(optimizerOptions?.models?.length);
 
     const optimizePromptMutation = useWebOptimizePromptMutation({
         onSuccess: (result) => {
@@ -135,8 +146,8 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
         }
         if (selectedModel.id !== modelId) {
             setModelId(selectedModel.id);
+            applyModelDefaults(selectedModel);
         }
-        applyModelDefaults(selectedModel);
     }, [selectedModel?.id]);
 
     useEffect(() => {
@@ -164,11 +175,11 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
 
     useEffect(() => {
         if (!optimizerOptions?.models?.length) {
-            setOptimizerModelId("");
+            setPromptOptimizerModelId(undefined);
             return;
         }
-        const defaultModelId = optimizerOptions.defaultModelId || optimizerOptions.models[0]?.id || "";
-        setOptimizerModelId((current) =>
+        const defaultModelId = optimizerOptions.defaultModelId || optimizerOptions.models[0]?.id || undefined;
+        setPromptOptimizerModelId((current) =>
             current && optimizerOptions.models.some((model) => model.id === current)
                 ? current
                 : defaultModelId,
@@ -277,7 +288,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             originalPrompt,
             promptOptimizationSource,
             promptOptimizationStyle: promptOptimizationSource ? promptStyle : undefined,
-            promptOptimizerModelId,
+            promptOptimizerModelId: promptOptimizationSource ? promptOptimizerModelId : undefined,
             model: selectedModel.id,
             resolution,
             duration: Number(duration) || 5,
@@ -293,7 +304,29 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
         onSubmit(params);
     };
 
+    const applyTemplate = (template: (typeof templates)[number]) => {
+        setPrompt(template.prompt);
+        setOriginalPrompt(undefined);
+        setPromptOptimizationSource(undefined);
+        const nextModel = template.modelConfigId
+            ? models.find((model) => model.modelConfigId === template.modelConfigId)
+            : undefined;
+        if (nextModel && modelSupportsMode(nextModel, mode)) {
+            setModelId(nextModel.id);
+            applyModelDefaults(nextModel);
+        }
+        const defaults = template.defaultParams;
+        if (defaults?.resolution) setResolution(defaults.resolution);
+        if (defaults?.duration) setDuration(String(defaults.duration));
+        if (defaults?.ratio) setRatio(defaults.ratio);
+        if (typeof defaults?.watermark === "boolean") setWatermark(defaults.watermark);
+    };
+
     const handleOptimizePrompt = async () => {
+        if (!optimizerEnabled) {
+            toast.error("提示词优化暂不可用");
+            return;
+        }
         if (!prompt.trim()) {
             toast.error("请先输入提示词");
             return;
@@ -451,7 +484,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                disabled={controlsDisabled || !prompt.trim() || optimizePromptMutation.isPending}
+                                disabled={controlsDisabled || !optimizerEnabled || !prompt.trim() || optimizePromptMutation.isPending}
                                 onClick={() => {
                                     void handleOptimizePrompt();
                                 }}
@@ -465,6 +498,9 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
                             </Button>
                         </div>
                     </div>
+                    {optimizerOptions?.billingEnabled ? (
+                        <p className="text-xs text-muted-foreground">AI 优化提示词可能单独消耗算力；本地优化不扣费。</p>
+                    ) : null}
                     <Textarea
                         className="min-h-32 resize-y leading-7"
                         placeholder="描述主体、镜头、动作、风格和画面节奏，例如：清晨咖啡店里，手持镜头缓慢推近正在冒热气的拿铁..."
@@ -481,7 +517,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
                                     variant="outline"
                                     size="sm"
                                     disabled={controlsDisabled}
-                                    onClick={() => setPrompt(template.prompt)}
+                                    onClick={() => applyTemplate(template)}
                                 >
                                     {template.label}
                                 </Button>

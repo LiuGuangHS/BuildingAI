@@ -114,22 +114,6 @@ export interface VideoModelDefaultParams {
     watermark?: boolean;
 }
 
-export interface VideoModelEndpoint {
-    id?: string;
-    name: string;
-    secretId?: string;
-    secretName?: string;
-    baseUrlOverride?: string;
-    enabled: boolean;
-    priority: number;
-    requestTimeoutMs?: number;
-    testTimeoutMs?: number;
-    maxRetries?: number;
-    retryDelayMs?: number;
-}
-
-export type SaveVideoModelEndpointParams = VideoModelEndpoint;
-
 export interface VideoModelOption {
     id: string;
     modelConfigId?: string;
@@ -144,7 +128,9 @@ export interface VideoModelOption {
 
 export interface VideoModelConfig {
     id: string;
+    mainModelId: string;
     provider: string;
+    providerName: string;
     model: string;
     displayName: string;
     description?: string;
@@ -152,22 +138,19 @@ export interface VideoModelConfig {
     visibleToUser: boolean;
     capabilities: VideoModelCapabilities;
     defaultParams: VideoModelDefaultParams;
-    endpoints?: VideoModelEndpoint[];
     sortOrder: number;
     createdAt: string;
     updatedAt: string;
 }
 
 export interface SaveVideoModelConfigParams {
-    provider?: string;
-    model?: string;
+    mainModelId?: string;
     displayName?: string;
     description?: string;
     enabled?: boolean;
     visibleToUser?: boolean;
     capabilities?: VideoModelCapabilities;
     defaultParams?: VideoModelDefaultParams;
-    endpoints?: SaveVideoModelEndpointParams[];
     sortOrder?: number;
 }
 

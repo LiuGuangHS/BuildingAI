@@ -1,6 +1,6 @@
-# EchoFlow 视频生成
+# 视频工作台
 
-`echoflow-video` 是 EchoFlow 的视频生成插件。当前按固定模型目录接入 Seedance、Kling、HappyHorse 等视频能力；用户端负责生成、历史和结果查看，Console 负责模型接入点、计费、模板、风控、提示词优化、Webhook 和任务运维。
+`echoflow-video` 是 EchoFlow 的视频工作台插件。用户端用文字或参考图生成视频，支持多模型选择、任务历史和结果查看；Console 负责主站视频模型开关、计费、模板、风控、提示词优化和任务运维。
 
 文档维护规则：全仓公共边界、主系统二开、上游同步、组件化 UI 和验证规则维护在根目录 `AGENTS.md`；本 README 只维护 `echoflow-video` 的业务边界、能力状态、入口、异步生成/队列/计费/安全事实、验证命令和待办。临时分析、参考图说明、浏览器 QA checklist、外部项目快照或计划文档只作为施工材料，有效结论必须合并到 `AGENTS.md` 或本 README，不长期维护第二套插件规范；如果出现更好的队列、Secret、限流、视频协议或模型接入规范，也优先回写这两个长期入口，并从“下一步”移除已经落地的旧计划。
 
@@ -9,29 +9,28 @@
 | 维度 | 当前边界 |
 |---|---|
 | 产品形态 | 用户视频创作台 + 管理员视频运营台。 |
-| 模型来源 | 插件内置固定模型 catalog，管理员不新增协议模型或供应商。 |
-| 密钥来源 | 每个模型维护一组或多组主站 Secret 接入点，插件只保存引用和运行参数。 |
+| 模型来源 | 复用主站已启用的视频模型，插件只维护可见性、能力覆盖和默认参数。 |
+| 密钥来源 | 主站 AI Provider 管理密钥；插件不保存视频服务 API Key。 |
 | 计费 | 模型级计费规则随固定模型配置维护；独立计费页不作为默认维护入口。 |
-| 长流程 | 提交成功后通过主系统 `QueueModule` / BullMQ 安排自动延迟轮询，Webhook 和手动刷新走同一终态保护。 |
+| 长流程 | 提交后通过主站视频模型 SDK 同步得到结果并转存；超时任务由定时扫描回收。 |
 
 ## 当前能力
 
 | 能力 | 状态 | 说明 |
 |---|---|---|
 | 文生视频/图生视频 | ready | 根据固定模型能力收敛用户端参数和素材要求。 |
-| 模型目录 | ready | Seedance、Kling、HappyHorse 等 P0 模型由 catalog 维护协议和 capability。 |
-| 多接入点 | ready | 每个模型可绑定多组主站 Secret，支持优先级、超时、重试和 Base URL 覆盖。 |
+| 模型目录 | ready | Console 从主站 active video models 读取候选模型，插件保存运营配置。 |
+| 模型配置 | ready | 每个主站视频模型可配置用户可见性、能力覆盖、默认参数和排序。 |
 | 模型级计费 | ready | 按模型基础费用、时长、分辨率倍率和失败退款配置预估与扣费。 |
 | 提示词优化 | ready | 复用主站 LLM，优化扣费读取主站模型 `billingRule`。 |
-| Webhook | ready | Webhook Secret 通过主站 Secret 引用，字段支持 `webhookSecret` / `secret` / `token`。 |
-| 终态保护 | ready | Webhook、轮询、超时扫描和取消写回前重新加锁；已终态记录不被旧对象覆盖。 |
+| 终态保护 | ready | 超时扫描和取消写回前重新加锁；已终态记录不被旧对象覆盖。 |
 | 主站通知 | ready | 视频终态通知提交到主站通知中心，由平台多渠道投递。 |
 | 事务锁超时 | ready | 所有写操作事务开头执行 `SET LOCAL lock_timeout = 3000`，通过文件级常量 `LOCK_TIMEOUT` 统一管理（generation.service.ts 和 prompt-optimization.service.ts）。 |
 | 任务恢复 | ready | 实现 `onModuleInit` 启动恢复 + `@Cron("*/5 * * * *")` 定时 stale 扫描双路径，事务内悲观锁+CAS二次校验防止多实例重复入队。 |
 | Service 继承 | ready | GenerationService 继承 BaseService，复用 withTransaction 等通用能力。 |
 | 错误处理 | ready | 业务校验失败使用 HTTP 异常，Controller 层无 try/catch 吞异常。 |
 | 短视频制作 | reserved | Web/Console 均保留页面入口，但当前不是默认上线能力。 |
-| 真实供应商 smoke | pending | 仍需使用真实 Secret 覆盖提交、轮询、Webhook、失败退款和结果转存。 |
+| 真实供应商 smoke | pending | 仍需使用真实主站视频模型覆盖提交、失败退款和结果转存。 |
 
 ## 入口与页面
 
@@ -42,11 +41,11 @@
 | Web | `/extension/echoflow-video/:id` | `src/web/pages/detail.tsx` | 当前用户任务详情。 |
 | Web | `/extension/echoflow-video/studio` | `src/web/pages/studio.tsx` | 短视频制作 reserved 入口。 |
 | Console | `/console/` | `src/web/pages/console/index.tsx` | 运营概览。 |
-| Console | `/console/models` | `src/web/pages/console/models.tsx` | 固定模型、接入点和模型级计费。 |
+| Console | `/console/models` | `src/web/pages/console/models.tsx` | 主站视频模型运营配置和模型级计费入口。 |
 | Console | `/console/policies` | `src/web/pages/console/policies.tsx` | 风控限流。 |
 | Console | `/console/templates` | `src/web/pages/console/templates.tsx` | 模板预设。 |
 | Console | `/console/history` | `src/web/pages/console/history.tsx` | 全量任务历史。 |
-| Console | `/console/config` | `src/web/pages/console/config.tsx` | LLM 与回调 Secret。 |
+| Console | `/console/config` | `src/web/pages/console/config.tsx` | 提示词优化模型。 |
 | Console | `/console/studio` | `src/web/pages/console/studio.tsx` | 短视频制作 reserved 管理入口。 |
 
 路由由 `src/web/routes.tsx` 使用 `defineRouteOption()` 注册。
@@ -58,48 +57,43 @@
 | Web generation | `@ExtensionWebController("generation")` | 创建生成、查询任务、刷新状态。 |
 | Web billing | `@ExtensionWebController("billing")` | 用户端生成费用预估。 |
 | Web templates | `@ExtensionWebController("templates")` | 用户端模板读取。 |
-| Web webhook | `@ExtensionWebController("webhook")` | Provider 回调入口。 |
 | Console generation | `@ExtensionConsoleController("generation")` | 全量任务、详情、运维操作。 |
 | Console models | `@ExtensionConsoleController("models")` | 固定模型配置和接入点。 |
 | Console billing-rules | `@ExtensionConsoleController("billing-rules")` | 模型计费规则。 |
 | Console policies | `@ExtensionConsoleController("policies")` | 风控策略。 |
 | Console templates | `@ExtensionConsoleController("templates")` | 模板管理。 |
-| Console config | `@ExtensionConsoleController("config")` | 提示词优化模型与 Webhook Secret。 |
+| Console config | `@ExtensionConsoleController("config")` | 只维护提示词优化模型。 |
 
 关键服务：
 
 | 服务 | 说明 |
 |---|---|
-| `GenerationService` | 任务创建、余额预检、预扣、提交、轮询、Webhook 写回、退款和 public serializer。 |
-| `ModelConfigService` | 固定模型 catalog、用户可见性、接入点和 capability 收敛。 |
-| `ProviderConfigService` | 提示词优化模型、Webhook Secret 和配置审计。 |
-| `VideoGatewayClient` | 固定视频模型的统一上游协议适配、URL 安全校验和错误归一；默认网关地址来自模型 catalog，底层 JSON 请求复用 `@buildingai/extension-sdk` provider HTTP client。 |
+| `GenerationService` | 任务创建、余额预检、预扣、主站视频生成、结果转存、退款和 public serializer。 |
+| `ModelConfigService` | 主站视频模型列表、用户可见性和 capability 收敛。 |
+| `ProviderConfigService` | 提示词优化模型和配置审计。 |
 | `PromptOptimizationService` | 主站 LLM 提示词优化。 |
-| `processors/*` | 自动延迟轮询和队列处理。 |
 
 ## 主系统复用边界
 
 | 能力 | 当前实现 |
 |---|---|
-| Secret | 模型接入点和 Webhook Secret 复用主站 Secret；插件不保存业务 API Key。 |
-| Webhook Secret | HappyHorse Webhook 只从主站 Secret 解析期望值，缺失或错误签名只 ACK 不写业务状态；比较使用 SHA-256 digest + `timingSafeEqual`，日志不打印 Secret 或签名值。 |
-| Provider Config | 通过 `normalizeProviderConfig()` 解析 `apiKey`、`baseURL`、`webhookSecret` 等别名。 |
-| Base URL | 接入点保存时复用 `normalizePublicHttpUrl()` 和 `assertPublicHttpUrl()`；运行时凭据解析复用 `resolveProviderEndpointCredential()`，防止各插件重复维护公网校验。 |
+| Secret | 视频模型密钥由主站 AI Provider 维护；插件不保存业务 API Key。 |
+
 | 配置输出 | Console / Web 对外返回模型、接入点或管理配置时必须白名单组装字段，不要直接展开 `config` / `resolved` / `endpoint`，避免历史字段如 `apiKeyMasked`、旧兼容键或内部排障字段泄漏。 |
 | Billing | 使用 `ExtensionBillingModule` / `ExtensionBillingService` 做余额预检、预扣和失败退款；退款执行异常会写入 `rawResponse.metadata.refundError` / `refundFailedAt`，用户端只展示账务事实文案。 |
-| Queue | 使用主系统 `QueueModule` / BullMQ 安排自动轮询，减少用户页轮询依赖。 |
-| 模型运行保护 | 内置模型不能删除；模型有 `PENDING` / `PROCESSING` 任务时，Console 不能停用、隐藏或移除全部可用接入点，避免处理中任务失去轮询和结果写回能力。 |
-| 异步写回保护 | 轮询、Webhook、超时扫描和队列失败记录写回前通过事务锁重新读取记录；若记录已终态或已软删除，不再覆盖任务状态、raw 响应或状态时间线。 |
+| 超时回收 | 定时扫描长时间未更新的处理中任务，按失败路径退款并通知。 |
+| 模型运行保护 | 模型有 `PENDING` / `PROCESSING` 任务时，Console 不能停用或隐藏，避免处理中任务失去排障上下文。 |
+| 异步写回保护 | 超时扫描和运维写回前通过事务锁重新读取记录；若记录已终态或已软删除，不再覆盖任务状态、raw 响应或状态时间线。 |
 | Upload | 素材必须通过平台上传并提交 `fileId`；后端通过 `UploadModule` / `FileUploadService` 读取平台文件记录，不直接注入平台 `File` 仓储；运行时校验上传者、插件归属、软删除、大小、MIME 和平台文件 URL。 |
 | Notification | 通过 `ExtensionNotificationService` 注册 `echoflow-video.generation.succeeded` / `echoflow-video.generation.failed`，由主站通知中心管理场景、模板和渠道。 |
 | 构建依赖 | 已清理模板残留依赖；保留的 `@playwright/test` 只用于 e2e。依赖是否保留以是否能在源码或配置链路中找到实际用途为准。 |
-| Provider HTTP | `video-http-client.ts` 只保留视频业务错误文案和薄封装；JSON 请求、timeout、retry、endpoint 测试、JSON parse 和 raw payload 压缩解析复用 `requestProviderJson` / `testProviderJsonEndpoint` / `safeJsonParse`；provider 返回的视频结果 URL 写回前复用 `assertPublicHttpUrl()` 做 DNS 解析和公网校验。 |
+| Provider HTTP | `video-http-client.ts` 只保留视频业务错误文案和薄封装；通用 provider HTTP 能力复用 `@buildingai/extension-sdk`。 |
 | 限流 | 生成和提示词优化入口使用 `ExtensionRateLimitService`，底层复用主系统 Redis 计数；不保留插件级内存 Map 或本地限流服务。 |
 | 浏览器持久化 | 历史参数复用通过 `@buildingai/stores` 的 `getSessionStorage()` / `safeJsonParse()` / `safeJsonStringify()` 读写短期会话状态；插件不直接手写 `window.sessionStorage` 和 JSON 容错。 |
 | Console JSON | 模板默认参数编辑器复用 `@buildingai/stores` 的 `safeJsonParse`，不在 Web 运行时代码里保留裸 `JSON.parse`。 |
 | RootLayout | `main.tsx` 只挂载主系统扩展 `RootLayout`，不再重复创建 `QueryClientProvider`；页面内部缓存更新使用 `useQueryClient()` 读取宿主 query client。 |
 | UI | 用户端和 Console 优先使用主系统 Button、Card、Badge、Alert、Input、Textarea、Select、Switch、Label、Checkbox、Progress、Skeleton 等组件；生成表单、Console 模型页普通字段和模板能力 checkbox 复合行均已收敛到系统 `Label`，复合行通过 `id` / `htmlFor` 保留整行点击语义；基础错误态使用系统 `Alert` / `Button` 和轻量文本符号，不在常驻路径静态引入 `lucide-react`；插件 CSS 只保留系统样式导入和无法组件化的业务排版。 |
-| Manifest | `package.json` 声明运行时代码、构建配置和可运行测试资产直接 import 的包；`vite.config.ts` / `tsup.config.ts` / `eslint.config.mjs` 的 `@tailwindcss/vite`、`@vitejs/plugin-react`、`tsup`、`eslint`、`globals`，以及 `tests/e2e` 的 `@playwright/test` 不依赖根项目传递解析；`extensions/extensions.json` 的本地登记名与 `manifest.json` 保持一致。 |
+| Manifest | `package.json` 声明运行时代码、共享构建配置和可运行测试资产直接 import 的包；`vite.config.ts` 复用 `@buildingai/web-core/vite/extension`，`tsup.config.ts` / `eslint.config.mjs` 的 `tsup`、`eslint`、`globals`，以及 `tests/e2e` 的 `@playwright/test` 不依赖根项目传递解析；`extensions/extensions.json` 的本地登记名与 `manifest.json` 保持一致。 |
 
 ## 数据与安全
 
@@ -107,19 +101,17 @@
 |---|---|
 | 任务记录 | 保存 provider、taskId、模型快照、计费快照、状态时间线、失败分类和脱敏 raw 摘要。 |
 | 用户端返回 | public serializer 使用白名单字段，只返回用户可见任务、状态、账务、素材、参数和时间线；不返回 `taskId`、`adminRemark`、`rawRequest`、`rawResponse`、`billingRuleSnapshot`、`failureCategory` 或内部状态来源。 |
-| 接入点 | 只保存 `secretId`、`secretName`、Base URL 覆盖、启用状态、优先级、超时和重试。 |
-| Base URL 覆盖 | 保存时和运行时都拒绝本机、内网、保留地址、带凭据 URL 和非 http/https 协议；域名按 DNS 解析结果校验。 |
-| URL 校验 | HappyHorse Base URL 和 provider 结果 URL 拒绝本机、内网、凭据片段和非 http/https 协议。 |
-| Webhook | 未配置 Secret 时不信任公开回调；配置后校验主站 Secret 字段。 |
+| 模型配置 | 只保存主站视频模型 ID、展示覆盖、能力覆盖、默认参数、启用状态和排序。 |
+| URL 校验 | 用户素材 URL 拒绝本机、内网、凭据片段和非 http/https 协议；平台上传素材允许主站受控路径。 |
 | 删除保护 | 模型已有任务、计费、策略或模板引用时应停用而不是删除。 |
 
 ## 配置流程
 
-1. 在主站密钥管理创建视频服务 Secret，字段包含 `apiKey` 或 `api_key`，可选 `baseURL` / `baseUrl` / `base_url`。
-2. 在 Console `/models` 为固定模型绑定一组或多组 Secret 接入点，配置用户可见性、默认参数、模型级计费、超时、重试和优先级。
-3. 在 `/config` 选择提示词优化 LLM，并绑定 Webhook Secret。
+1. 在主站 AI Provider 中配置并启用视频模型。
+2. 在 Console `/models` 为主站视频模型配置用户可见性、默认参数、能力覆盖、模型级计费和排序。
+3. 在 `/config` 选择提示词优化 LLM。
 4. 在 `/policies` 配置 prompt、素材、并发、用户/IP/provider/model 等风控策略。
-5. 使用 `/history` 和任务详情复核提交、轮询、Webhook、失败退款、通知和状态时间线。
+5. 使用 `/history` 和任务详情复核提交、失败退款、通知和状态时间线。
 
 ## 用户端体验边界
 
@@ -141,9 +133,8 @@ pnpm --filter echoflow-video check-types
 pnpm --filter echoflow-video build:api
 pnpm --filter echoflow-video build:web
 pnpm --filter echoflow-video test
+pnpm --filter echoflow-video test:e2e # 需要 ADMIN_AUTH_TOKEN / WEB_USER_AUTH_TOKEN
 pnpm --filter echoflow-video build:publish
-node tests/video-public-api-boundary.test.mjs
-node tests/video-manifest-boundary.test.mjs
 ```
 
 | 项目 | 状态 |
@@ -151,16 +142,15 @@ node tests/video-manifest-boundary.test.mjs
 | 类型、构建与边界测试 | 本地按上述命令验证；测试桩需随主系统 SDK 导出同步。 |
 | Web public 边界 | 由 `tests/video-public-api-boundary.test.mjs` 约束 Web/Console 字段分离、RootLayout、SDK 限流、provider HTTP、public serializer 和常驻路径依赖。 |
 | 发布包边界 | 由 `tests/video-manifest-boundary.test.mjs` 约束 manifest/package/registry、发布 allowlist、静态资产和运行时目录排除。 |
-| 真实端到端 | 仍需真实 Secret、余额、存储、Redis/Worker 覆盖提交、轮询、Webhook、失败退款和通知。 |
+| 真实端到端 | 仍需真实主站视频模型、余额和存储覆盖提交、失败退款、转存和通知。 |
 | 主系统安装 | release zip 内容检查不等于安装完成；只有在主系统成功安装、迁移、重启并打开 Web/Console 后才能声明通过。 |
 
 ## 已知风险
 
 | 风险 | 影响 | 下一步 |
 |---|---|---|
-| 真实供应商未 smoke | 当前不能声明完整生产闭环。 | 准备 Secret、余额、存储和测试素材后逐模型验证。 |
+| 真实供应商未 smoke | 当前不能声明完整生产闭环。 | 准备主站视频模型、余额、存储和测试素材后逐模型验证。 |
 | 短视频制作 reserved | 页面存在但不是上线能力。 | 保持 reserved 文案和禁用路径，明确业务边界后再转正式功能。 |
-| 队列拓扑 | 真实 Redis/Worker 未覆盖时，自动轮询可靠性不能下结论。 | 做自动延迟轮询、重启恢复、重复执行、超时和软删除 smoke。 |
 | 真实上传边界 | 单测覆盖平台上传记录校验，仍需真实上传链路验证。 | 覆盖上传记录创建、归属、存储读取、历史素材重传和删除后提交。 |
 
 ## 后续完整开发任务
@@ -171,27 +161,13 @@ node tests/video-manifest-boundary.test.mjs
 
 | 任务 | 范围 | 具体步骤 | 验收 |
 |---|---|---|---|
-| 配置真实运行环境 | 主站 Console、Secret、测试用户、余额、Redis、存储 | 准备视频服务 Secret、Webhook Secret、测试用户余额、平台上传目录和 Redis Worker；确认 `echoflow-video` 已安装且 Console 可打开。 | 记录环境条件；缺 Secret、余额或 Redis 时不进入真实闭环验收。 |
-| 文生视频提交 | Web 工作台、`GenerationService`、provider client | 用一个 P0 文生模型提交 prompt，确认创建记录、预扣、入队、provider 返回 taskId、前端进入处理中。 | 用户端不暴露 taskId/raw response；Console 可看到脱敏排障字段。 |
+| 配置真实运行环境 | 主站 Console、测试用户、余额、存储 | 准备主站视频模型、测试用户余额和平台上传目录；确认 `echoflow-video` 已安装且 Console 可打开。 | 记录环境条件；缺主站视频模型、余额或存储时不进入真实闭环验收。 |
+| 文生视频提交 | Web 工作台、`GenerationService`、主站视频模型 | 用一个文生模型提交 prompt，确认创建记录、预扣、生成调用、结果转存和终态写回。 | 用户端不暴露 raw response；Console 可看到脱敏排障字段。 |
 | 图生/多参考图提交 | 平台上传、素材校验、Web 工作台 | 通过平台上传真实图片，分别验证首帧图生视频和多参考图；覆盖历史素材需重传路径。 | 上传归属、插件归属、MIME、大小和软删除校验在 provider 提交前生效。 |
-| 轮询成功写回 | BullMQ processor、状态查询、结果 URL 校验 | 等待自动延迟轮询拿到成功结果，确认 result URL 通过公网/DNS 校验后写回。 | 用户端播放/下载/复制/复用可用；详情页与首页状态一致。 |
-| Webhook 成功写回 | `webhook.controller.ts`、Webhook Secret | 使用真实或可复现的 provider 回调，验证签名正确时写成功，签名缺失/错误时只 ACK 不写业务状态。 | 日志不打印 Secret/签名；旧终态不会被覆盖。 |
 | 失败退款 | 计费、provider 失败、退款 metadata | 触发可控失败或模拟 provider 失败，确认失败状态、退款事实、退款异常 metadata 和用户端文案。 | 只按账务事实展示“已退款/等待核对/退款异常”，不承诺未验证闭环。 |
 | 通知投递 | 主站通知中心 | 成功和失败终态各触发一次 `echoflow-video.generation.*` 通知。 | 主站通知记录可查；投递失败只记录 skipped/failed，不回滚视频任务。 |
 
 验证命令和证据：端到端 smoke 后至少补充 `corepack pnpm --filter echoflow-video test`、`corepack pnpm --filter echoflow-video build:api`、`corepack pnpm --filter echoflow-video build:web`，并记录真实任务 ID、状态、账务事实和通知记录的脱敏摘要。
-
-### P1：Redis/Worker 拓扑 smoke
-
-| 任务 | 范围 | 具体步骤 | 验收 |
-|---|---|---|---|
-| 自动延迟轮询 | `processors/*`、BullMQ | 提交任务后关闭用户页面，只靠 Worker 轮询推进状态。 | 不依赖前端长轮询也能完成或失败。 |
-| 重启恢复 | API 服务、Worker、Redis | 任务处于 `PROCESSING` 时重启服务和 Worker，确认恢复扫描或延迟任务继续推进。 | 不重复扣费，不重复终态通知。 |
-| 重复执行保护 | Webhook、手动刷新、Worker | 对同一任务并发触发刷新、Webhook 和 Worker 轮询。 | 只有第一次合法终态写回；后续旧对象不覆盖 raw 响应、状态和账务。 |
-| 超时回收 | 超时扫描、失败分类 | 配置短超时任务，确认超时写失败和退款逻辑。 | 失败类型可在 Console 排查，用户端文案稳定。 |
-| 软删除保护 | 删除接口、异步写回 | 任务软删除后触发队列失败、轮询或 Webhook。 | 已删除记录不再被异步流程改回可见状态。 |
-
-阻塞条件：没有真实 Redis/Worker 或没有可控 provider 任务时，只能声明本地单测覆盖，不能声明拓扑 smoke 通过。
 
 ### P1：发布包安装 smoke
 
@@ -218,8 +194,7 @@ node tests/video-manifest-boundary.test.mjs
 | 任务 | 范围 | 要求 | 验收 |
 |---|---|---|---|
 | 真实上传 smoke | 平台上传、`normalizeAndValidateMedia()` | 覆盖真实上传记录创建、归属、存储读取、历史素材重传和删除后提交。 | 与现有行为测试一致，provider 提交前拦截非法素材。 |
-| provider URL 联调 | provider client、结果写回 | 用真实供应商 URL 覆盖 http(s)、跳转、DNS、公网校验和失败错误。 | 私网、本机、凭据 URL 不写入结果；失败可在 Console 排查。 |
-| 签名联调 | Webhook Secret | 覆盖真实 provider 签名算法、错误签名、重复回调和缺 Secret。 | 常量时间比较路径可用；日志脱敏。 |
+| provider URL 联调 | 素材 URL、结果转存 | 用真实上传与生成结果覆盖 http(s)、跳转、公网校验和失败错误。 | 私网、本机、凭据 URL 不进入生成；失败可在 Console 排查。 |
 | Public serializer 回归 | Web API、Console API | 每次新增字段后跑 public 边界测试并人工抽查响应。 | Web 不返回 `secretId`、Base URL、API Key、taskId、raw request/response 或 admin note。 |
 
 ### P3：短视频制作 reserved 转正式前置

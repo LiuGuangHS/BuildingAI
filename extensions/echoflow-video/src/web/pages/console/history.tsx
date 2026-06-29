@@ -18,6 +18,7 @@ import {
     useBatchCancelVideoMutation,
     useBatchMarkFailedMutation,
     useBatchRetryVideoMutation,
+    useConsoleVideoModelConfigsQuery,
     useDeleteVideoMutation,
     useVideoListQuery,
 } from "../../services/console";
@@ -43,6 +44,7 @@ export default function HistoryPage() {
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+    const { data: modelConfigData } = useConsoleVideoModelConfigsQuery({ page: 1, pageSize: 100 });
 
     const { data, isLoading, isError, refetch } = useVideoListQuery({
         page,
@@ -191,15 +193,11 @@ export default function HistoryPage() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">全部模型</SelectItem>
-                                <SelectItem value="doubao-seedance-2-0-260128">Seedance 2.0</SelectItem>
-                                <SelectItem value="doubao-seedance-1-5-pro-251215">Seedance 1.5 Pro</SelectItem>
-                                <SelectItem value="kling-text2video">可灵文生视频</SelectItem>
-                                <SelectItem value="kling-image2video">可灵图生视频</SelectItem>
-                                <SelectItem value="kling-multi-image2video">可灵多图参考</SelectItem>
-                                <SelectItem value="happyhorse-1.0-t2v">文生视频</SelectItem>
-                                <SelectItem value="happyhorse-1.0-i2v">图生视频</SelectItem>
-                                <SelectItem value="happyhorse-1.0-r2v">参考图生视频</SelectItem>
-                                <SelectItem value="happyhorse-1.0-video-edit">视频编辑</SelectItem>
+                                {(modelConfigData?.items ?? []).map((model) => (
+                                    <SelectItem key={model.id} value={model.model}>
+                                        {model.displayName || model.model}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                         <Input

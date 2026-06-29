@@ -1,5 +1,5 @@
 import { RedisModule, RedisService } from "@buildingai/cache";
-import { QueueModule, SecretModule, UploadModule } from "@buildingai/core/modules";
+import { SecretModule, UploadModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import {
     AiPublicModule,
@@ -7,7 +7,6 @@ import {
     ExtensionNotificationModule,
     ExtensionRateLimitService,
 } from "@buildingai/extension-sdk";
-import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
 
 import { BillingRuleController } from "./controllers/console/billing-rule.controller";
@@ -19,14 +18,11 @@ import { TemplateController } from "./controllers/console/template.controller";
 import { BillingWebController } from "./controllers/web/billing.web.controller";
 import { GenerationWebController } from "./controllers/web/generation.web.controller";
 import { TemplateWebController } from "./controllers/web/template.web.controller";
-import { WebhookController } from "./controllers/web/webhook.controller";
 import {
     generationModuleEntities,
     generationModuleProviders,
     GenerationService,
 } from "./services/generation.service";
-import { VideoPollProcessor } from "./processors/video-poll.processor";
-import { VIDEO_POLL_QUEUE } from "./services/video-poll-queue.constants";
 
 @Module({
     imports: [
@@ -37,8 +33,6 @@ import { VIDEO_POLL_QUEUE } from "./services/video-poll-queue.constants";
         SecretModule,
         UploadModule,
         RedisModule,
-        QueueModule,
-        BullModule.registerQueue({ name: VIDEO_POLL_QUEUE }),
     ],
     controllers: [
         GenerationController,
@@ -50,7 +44,6 @@ import { VIDEO_POLL_QUEUE } from "./services/video-poll-queue.constants";
         GenerationWebController,
         BillingWebController,
         TemplateWebController,
-        WebhookController,
     ],
     providers: [
         ...generationModuleProviders,
@@ -59,7 +52,6 @@ import { VIDEO_POLL_QUEUE } from "./services/video-poll-queue.constants";
             useFactory: (redisService: RedisService) => new ExtensionRateLimitService(redisService),
             inject: [RedisService],
         },
-        VideoPollProcessor,
     ],
     exports: [GenerationService],
 })

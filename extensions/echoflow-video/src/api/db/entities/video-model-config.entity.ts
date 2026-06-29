@@ -41,36 +41,19 @@ export interface VideoModelDefaultParams {
     watermark?: boolean;
 }
 
-export interface VideoModelEndpoint {
-    id?: string;
-    name: string;
-    secretId?: string;
-    secretName?: string;
-    baseUrlOverride?: string;
-    enabled: boolean;
-    priority: number;
-    requestTimeoutMs?: number;
-    testTimeoutMs?: number;
-    maxRetries?: number;
-    retryDelayMs?: number;
-}
-
 @ExtensionEntity()
 export class VideoModelConfig {
     @PrimaryGeneratedColumn("uuid")
     id: string;
 
-    @Column({ type: "varchar", length: 50, default: "happyhorse", comment: "Provider identifier" })
-    provider: string;
+    @Column({ type: "uuid", comment: "Main-system text-to-video model ID" })
+    mainModelId: string;
 
-    @Column({ type: "varchar", length: 100, unique: true, comment: "Provider model identifier" })
-    model: string;
+    @Column({ type: "varchar", length: 120, nullable: true, comment: "Display name override" })
+    displayNameOverride?: string | null;
 
-    @Column({ type: "varchar", length: 120, comment: "Display name" })
-    displayName: string;
-
-    @Column({ type: "text", nullable: true, comment: "Description" })
-    description?: string;
+    @Column({ type: "text", nullable: true, comment: "Description override" })
+    descriptionOverride?: string | null;
 
     @Column({ type: "boolean", default: true, comment: "Whether model is enabled" })
     enabled: boolean;
@@ -83,9 +66,6 @@ export class VideoModelConfig {
 
     @Column({ type: "jsonb", default: () => "'{}'", comment: "Default generation params" })
     defaultParams: VideoModelDefaultParams;
-
-    @Column({ type: "jsonb", default: () => "'[]'", comment: "Model-level API endpoints" })
-    endpoints: VideoModelEndpoint[];
 
     @Column({ type: "int", default: 0, comment: "Sort order" })
     sortOrder: number;

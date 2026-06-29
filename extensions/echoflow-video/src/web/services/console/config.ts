@@ -5,19 +5,10 @@ import { consoleHttpClient } from "../base";
 
 export interface ProviderConfig {
     provider: string;
-    webhookSecretConfigured: boolean;
-    webhookSecretId: string;
-    webhookSecretName: string;
     promptOptimizerEnabled: boolean;
     promptOptimizerModelId: string;
     promptOptimizerAllowedModelIds: string[];
-    templates?: PromptTemplate[];
     updatedAt?: string;
-}
-
-export interface PromptTemplate {
-    label: string;
-    prompt: string;
 }
 
 export interface PromptOptimizerModelOption {
@@ -49,14 +40,10 @@ export interface ProviderConfigAudit {
 }
 
 export interface UpdateProviderConfigParams {
-    webhookSecretId?: string;
-    webhookSecretName?: string;
-    clearWebhookSecret?: boolean;
     promptOptimizerEnabled?: boolean;
     promptOptimizerModelId?: string;
     clearPromptOptimizerModelId?: boolean;
     promptOptimizerAllowedModelIds?: string[];
-    templates?: PromptTemplate[];
 }
 
 export function useProviderConfigQuery(options?: QueryOptionsUtil<ProviderConfig>) {

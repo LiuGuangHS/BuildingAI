@@ -1,7 +1,69 @@
 import type { DataSource } from "@buildingai/db/typeorm";
 import { Logger } from "@nestjs/common";
 
-import { defaultVideoModelConfigs } from "../../modules/generation/services/model-config.service";
+
+const defaultVideoModelConfigs = [
+    {
+        provider: "echoflow-api",
+        model: "doubao-seedance-2-0-260128",
+        displayName: "Seedance 2.0",
+        description: "最新的文生视频基座模型",
+        enabled: true,
+        visibleToUser: true,
+        capabilities: { abilityTypes: ["text_to_video"], mediaTypes: [], duration: { allowedValues: [5, 10] }, resolutions: ["1280x720", "720x1280"], ratios: ["16:9", "9:16", "1:1"], fps: 24, format: "mp4" },
+        defaultParams: { duration: 5, resolution: "1280x720", ratio: "16:9", watermark: true },
+        endpoints: [],
+        sortOrder: 40,
+    },
+    {
+        provider: "echoflow-api",
+        model: "doubao-seedance-1-5-pro-251215",
+        displayName: "Seedance 1.5 Pro",
+        description: "兼容旧版本的文生视频基座模型",
+        enabled: true,
+        visibleToUser: true,
+        capabilities: { abilityTypes: ["text_to_video"], mediaTypes: [], duration: { allowedValues: [5, 10] }, resolutions: ["1280x720", "720x1280"], ratios: ["16:9", "9:16", "1:1"], fps: 24, format: "mp4" },
+        defaultParams: { duration: 5, resolution: "1280x720", ratio: "16:9", watermark: true },
+        endpoints: [],
+        sortOrder: 35,
+    },
+    {
+        provider: "echoflow-api",
+        model: "kling-text2video",
+        displayName: "Kling 文生视频",
+        description: "Kling 文生视频模型",
+        enabled: true,
+        visibleToUser: true,
+        capabilities: { abilityTypes: ["text_to_video"], mediaTypes: [], duration: { allowedValues: [5, 10] }, resolutions: ["1280x720", "720x1280"], ratios: ["16:9", "9:16", "1:1"], fps: 24, format: "mp4" },
+        defaultParams: { duration: 5, resolution: "1280x720", ratio: "16:9", watermark: true },
+        endpoints: [],
+        sortOrder: 30,
+    },
+    {
+        provider: "echoflow-api",
+        model: "kling-image2video",
+        displayName: "Kling 图生视频",
+        description: "Kling 图生视频模型",
+        enabled: true,
+        visibleToUser: true,
+        capabilities: { abilityTypes: ["first_frame_i2v"], mediaTypes: ["first_frame"], duration: { allowedValues: [5, 10] }, resolutions: ["1280x720", "720x1280"], ratios: ["16:9", "9:16", "1:1"], fps: 24, format: "mp4" },
+        defaultParams: { duration: 5, resolution: "1280x720", ratio: "16:9", watermark: true },
+        endpoints: [],
+        sortOrder: 25,
+    },
+    {
+        provider: "happyhorse",
+        model: "happyhorse-1.0-t2v",
+        displayName: "HappyHorse 文生视频",
+        description: "HappyHorse 文生视频模型",
+        enabled: true,
+        visibleToUser: true,
+        capabilities: { abilityTypes: ["text_to_video"], mediaTypes: [], duration: { allowedValues: [5, 10] }, resolutions: ["1280x720", "720x1280"], ratios: ["16:9", "9:16", "1:1"], fps: 24, format: "mp4" },
+        defaultParams: { duration: 5, resolution: "1280x720", ratio: "16:9", watermark: true },
+        endpoints: [],
+        sortOrder: 20,
+    },
+];
 
 const defaultVideoPromptTemplates = [
     {
@@ -73,6 +135,7 @@ export class Upgrade {
         await this.seedDefaultModels();
         await this.seedDefaultTemplates();
         await this.migrateProviderTemplates();
+        await this.dropColumnIfExists("video_provider_config", "templates");
         await this.ensureExtensionRecord();
         this.logger.log("Echoflow Video initial database setup completed");
     }
@@ -88,8 +151,6 @@ export class Upgrade {
             CREATE TABLE IF NOT EXISTS "echoflow_video"."video_provider_config" (
                 "id" uuid NOT NULL DEFAULT gen_random_uuid(),
                 "provider" varchar(50) NOT NULL DEFAULT 'happyhorse',
-                "webhook_secret_id" uuid,
-                "webhook_secret_name" varchar(120),
                 "prompt_optimizer_enabled" boolean NOT NULL DEFAULT true,
                 "prompt_optimizer_model_id" uuid,
                 "prompt_optimizer_allowed_model_ids" jsonb NOT NULL DEFAULT '[]',
@@ -100,8 +161,8 @@ export class Upgrade {
                 CONSTRAINT "uq_video_provider_config_provider" UNIQUE ("provider")
             )
         `);
-        await this.ensureColumn("video_provider_config", "webhook_secret_id", "uuid");
-        await this.ensureColumn("video_provider_config", "webhook_secret_name", "varchar(120)");
+        await this.dropColumnIfExists("video_provider_config", "webhook_secret_id");
+        await this.dropColumnIfExists("video_provider_config", "webhook_secret_name");
         await this.dropColumnIfExists("video_provider_config", "webhook_secret");
         await this.dataSource.query(`
             ALTER TABLE "echoflow_video"."video_provider_config"
@@ -539,17 +600,17 @@ export class Upgrade {
     private async ensureExtensionRecord(): Promise<void> {
         const extensionData = {
             icon: "/echoflow-video/static/logo.png",
-            name: "EchoFlow 视频生成",
+            name: "视频工作台",
             identifier: "echoflow-video",
             version: "0.0.1",
-            description: "面向创作者的 AI 视频生成工作台，支持文生视频、图生视频、视频编辑、任务历史和算力计费。",
+            description: "用文字或参考图生成视频，支持多模型选择、任务历史和结果查看。",
             type: 1,
             isLocal: true,
             status: "1",
             supportTerminal: [1],
             author: {
                 avatar: "/echoflow-video/static/logo.png",
-                name: "EchoflowAI Teams",
+                name: "EchoFlowAI Team",
                 homepage: "",
             },
         };

@@ -47,7 +47,7 @@ export function HistoryList({
     action,
 }: HistoryListProps) {
     const navigate = useNavigate();
-    const detailPath = (id: string) => detailBasePath ? `${detailBasePath}/${id}` : id;
+    const detailPath = (id: string) => detailBasePath ? `${detailBasePath.replace(/\/$/, "")}/${id}` : id;
     const handleReuse = (item: VideoGeneration) => {
         if (onReuse) {
             onReuse(item);

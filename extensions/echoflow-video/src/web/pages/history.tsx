@@ -6,10 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Film } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { ErrorState } from "../components/error-state";
 import { HistoryList } from "../components/history-list";
-import { useWebVideoListQuery, useWebVideoModelOptionsQuery } from "../services/web";
+import { useWebDeleteVideoMutation, useWebVideoListQuery, useWebVideoModelOptionsQuery } from "../services/web";
 import type { VideoGenerationBillingStatus, VideoGenerationStatus } from "../services/types/generation";
 
 export default function WebHistoryPage() {
@@ -37,6 +38,13 @@ export default function WebHistoryPage() {
         dateTo: dateTo || undefined,
         sortBy,
         sortOrder: "DESC",
+    });
+    const deleteMutation = useWebDeleteVideoMutation({
+        onSuccess: () => {
+            toast.success("删除成功");
+            refetch();
+        },
+        onError: (error) => toast.error(error.message || "删除失败"),
     });
 
     return (
@@ -117,7 +125,8 @@ export default function WebHistoryPage() {
                     <HistoryList
                         items={data?.items || []}
                         loading={isLoading}
-                        showDelete={false}
+                        showDelete
+                        onDelete={(id) => deleteMutation.mutate(id)}
                         detailBasePath="/"
                     />
                     {data && data.total > pageSize && (

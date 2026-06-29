@@ -1,14 +1,12 @@
 import { BaseService } from "@buildingai/base";
-import { SecretService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { PublicAiModelService, resolveProviderSecretValue } from "@buildingai/extension-sdk";
+import { PublicAiModelService } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
-import { createHash, timingSafeEqual } from "node:crypto";
 
-import { PromptTemplate, VideoProviderConfig } from "../../../db/entities/video-provider-config.entity";
+import { VideoProviderConfig } from "../../../db/entities/video-provider-config.entity";
 import { VideoConfigAudit } from "../../../db/entities/video-config-audit.entity";
 import { UpdateProviderConfigDto } from "../dto";
 
@@ -22,7 +20,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         @InjectRepository(VideoConfigAudit)
         private readonly auditRepository: Repository<VideoConfigAudit>,
         private readonly aiModelService: PublicAiModelService,
-        private readonly secretService: SecretService,
     ) {
         super(configRepository);
     }
@@ -32,9 +29,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         if (!config) {
             return {
                 provider: HAPPYHORSE_PROVIDER,
-                webhookSecretConfigured: false,
-                webhookSecretId: "",
-                webhookSecretName: "",
                 promptOptimizerEnabled: true,
                 promptOptimizerModelId: "",
                 promptOptimizerAllowedModelIds: [],
@@ -43,13 +37,9 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
 
         return {
             provider: config.provider,
-            webhookSecretConfigured: Boolean(config.webhookSecretId),
-            webhookSecretId: config.webhookSecretId ?? "",
-            webhookSecretName: config.webhookSecretName ?? "",
             promptOptimizerEnabled: config.promptOptimizerEnabled ?? true,
             promptOptimizerModelId: config.promptOptimizerModelId ?? "",
             promptOptimizerAllowedModelIds: config.promptOptimizerAllowedModelIds ?? [],
-            templates: config.templates || [],
             updatedAt: config.updatedAt,
         };
     }
@@ -58,14 +48,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         const existing = await this.findHappyHorseConfig();
         const config = existing ?? this.configRepository.create({ provider: HAPPYHORSE_PROVIDER });
 
-        if (dto.clearWebhookSecret) {
-            config.webhookSecretId = undefined;
-            config.webhookSecretName = undefined;
-        } else if (dto.webhookSecretId) {
-            await this.resolveWebhookSecret(dto.webhookSecretId);
-            config.webhookSecretId = dto.webhookSecretId;
-            config.webhookSecretName = dto.webhookSecretName?.trim() || dto.webhookSecretId;
-        }
         config.promptOptimizerEnabled =
             dto.promptOptimizerEnabled ?? config.promptOptimizerEnabled ?? true;
         if (dto.clearPromptOptimizerModelId) {
@@ -80,9 +62,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
             config.promptOptimizerAllowedModelIds = this.normalizeModelIds(dto.promptOptimizerAllowedModelIds);
         }
         await this.assertPromptOptimizerModelsUsable(config.promptOptimizerAllowedModelIds ?? []);
-        if (dto.templates) {
-            config.templates = this.normalizeTemplates(dto.templates);
-        }
         await this.configRepository.save(config);
         await this.writeAudit("provider_config_updated", config, operatorId);
         return this.getConsoleConfig();
@@ -128,30 +107,10 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
             }));
     }
 
-    async verifyHappyHorseWebhookSecret(secret?: string): Promise<boolean> {
-        const config = await this.findHappyHorseConfig();
-        const expectedSecret = config?.webhookSecretId
-            ? await this.tryResolveWebhookSecret(config.webhookSecretId)
-            : "";
-        if (!expectedSecret) {
-            return false;
-        }
-        return this.safeCompareSecret(secret, expectedSecret);
-    }
-
     private findHappyHorseConfig() {
         return this.configRepository.findOne({
             where: { provider: HAPPYHORSE_PROVIDER } as FindOptionsWhere<VideoProviderConfig>,
         });
-    }
-
-    private normalizeTemplates(templates: PromptTemplate[]): PromptTemplate[] {
-        return templates
-            .map((template) => ({
-                label: template.label.trim().slice(0, 80),
-                prompt: template.prompt.trim().slice(0, 1000),
-            }))
-            .filter((template) => template.label && template.prompt);
     }
 
     private normalizeModelIds(modelIds: string[]): string[] {
@@ -185,33 +144,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
         }
     }
 
-    private async resolveWebhookSecret(secretId: string): Promise<string> {
-        return resolveProviderSecretValue({
-            secretId,
-            field: "webhookSecret",
-            missingSecretMessage: "Webhook Secret 不存在或不可用",
-            missingValueMessage: "Webhook Secret 中未找到 webhookSecret/secret/token 字段",
-            secretConfigResolver: (id) => this.secretService.getConfigKeyValuePairs(id),
-        });
-    }
-
-    private async tryResolveWebhookSecret(secretId: string): Promise<string> {
-        try {
-            return await this.resolveWebhookSecret(secretId);
-        } catch {
-            return "";
-        }
-    }
-
-    private safeCompareSecret(actual: string | undefined, expected: string): boolean {
-        if (!actual || !expected) {
-            return false;
-        }
-        const actualDigest = createHash("sha256").update(actual).digest();
-        const expectedDigest = createHash("sha256").update(expected).digest();
-        return timingSafeEqual(actualDigest, expectedDigest);
-    }
-
     private async writeAudit(action: string, config: VideoProviderConfig, operatorId?: string): Promise<void> {
         await this.auditRepository.save(
             this.auditRepository.create({
@@ -219,9 +151,6 @@ export class ProviderConfigService extends BaseService<VideoProviderConfig> {
                 operatorId,
                 snapshot: {
                     provider: config.provider,
-                    webhookSecretConfigured: Boolean(config.webhookSecretId),
-                    webhookSecretId: config.webhookSecretId,
-                    webhookSecretName: config.webhookSecretName,
                     promptOptimizerEnabled: config.promptOptimizerEnabled,
                     promptOptimizerModelId: config.promptOptimizerModelId,
                     promptOptimizerAllowedModelIds: config.promptOptimizerAllowedModelIds ?? [],

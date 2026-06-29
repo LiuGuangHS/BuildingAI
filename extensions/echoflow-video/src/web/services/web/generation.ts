@@ -23,14 +23,6 @@ export interface ProviderPublicStatus {
     enabled: boolean;
 }
 
-const emptyPage = <T>(params?: QueryVideoParams): PaginatedResponse<T> => ({
-    items: [],
-    total: 0,
-    page: params?.page ?? 1,
-    pageSize: params?.pageSize ?? 10,
-    totalPages: 0,
-});
-
 async function quietly<T>(request: Promise<T>, fallback: T): Promise<T> {
     try {
         return await request;
@@ -44,7 +36,7 @@ async function quietly<T>(request: Promise<T>, fallback: T): Promise<T> {
 export function useWebVideoModelOptionsQuery(options?: QueryOptionsUtil<VideoModelOption[]>) {
     return useQuery<VideoModelOption[]>({
         queryKey: ["echoflow-video", "web", "models"],
-        queryFn: () => quietly(apiHttpClient.get<VideoModelOption[]>("/generation/options/models", { silent: true }), []),
+        queryFn: () => apiHttpClient.get<VideoModelOption[]>("/generation/options/models", { silent: true }),
         staleTime: 5 * 60 * 1000,
         ...options,
     });
@@ -66,7 +58,7 @@ export function useWebProviderStatusQuery(options?: QueryOptionsUtil<ProviderPub
 export function useWebPromptOptimizerOptionsQuery(options?: QueryOptionsUtil<PromptOptimizerOptions>) {
     return useQuery<PromptOptimizerOptions>({
         queryKey: ["echoflow-video", "web", "prompt-optimizer-options"],
-        queryFn: () => quietly(apiHttpClient.get<PromptOptimizerOptions>("/generation/prompt/options", { silent: true }), { enabled: false, billingEnabled: false, models: [] }),
+        queryFn: () => apiHttpClient.get<PromptOptimizerOptions>("/generation/prompt/options", { silent: true }),
         staleTime: 60 * 1000,
         ...options,
     });
@@ -78,8 +70,7 @@ export function useWebVideoListQuery(
 ) {
     return useQuery({
         queryKey: ["echoflow-video", "web", "generations", params],
-        queryFn: () =>
-            quietly(apiHttpClient.get<PaginatedResponse<VideoGeneration>>("/generation", { params, silent: true }), emptyPage<VideoGeneration>(params)),
+        queryFn: () => apiHttpClient.get<PaginatedResponse<VideoGeneration>>("/generation", { params, silent: true }),
         ...options,
     });
 }
@@ -147,6 +138,13 @@ export function useWebOptimizePromptMutation(
 ) {
     return useMutation<PromptOptimizationResult, Error, OptimizePromptParams>({
         mutationFn: (data) => apiHttpClient.post<PromptOptimizationResult>("/generation/prompt/optimize", data),
+        ...options,
+    });
+}
+
+export function useWebDeleteVideoMutation(options?: MutationOptionsUtil<{ success: boolean; message: string }, string>) {
+    return useMutation<{ success: boolean; message: string }, Error, string>({
+        mutationFn: (id) => apiHttpClient.delete<{ success: boolean; message: string }>(`/generation/${id}`),
         ...options,
     });
 }

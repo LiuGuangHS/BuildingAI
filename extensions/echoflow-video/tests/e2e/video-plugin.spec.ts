@@ -50,17 +50,18 @@ test.describe("Admin: Fixed Model Catalog", () => {
         expect(ids).toContain("kling-image2video");
     });
 
-    test("GET /config returns prompt optimizer and webhook config", async ({ request }) => {
+    test("GET /config returns prompt optimizer config", async ({ request }) => {
         const res = await request.get(consoleApi("/config"), {
             headers: adminHeaders,
         });
         expect(res.ok()).toBeTruthy();
         const body = await res.json();
-        expect(body).toHaveProperty("webhookSecretConfigured");
         expect(body).toHaveProperty("promptOptimizerEnabled");
+        expect(body).toHaveProperty("promptOptimizerAllowedModelIds");
         expect(body).not.toHaveProperty("apiKey");
         expect(body).not.toHaveProperty("baseUrl");
         expect(body).not.toHaveProperty("secretId");
+        expect(body).not.toHaveProperty("webhookSecretConfigured");
     });
 
     test("GET /config/health returns health status", async ({ request }) => {
@@ -213,29 +214,5 @@ test.describe("Admin: Batch & History", () => {
             headers: adminHeaders,
         });
         expect(res.status()).toBeGreaterThanOrEqual(400);
-    });
-});
-
-// ──────────────────────────────────────────────
-// Webhook Endpoint
-// ──────────────────────────────────────────────
-
-test.describe("Webhook", () => {
-    test("POST /api/webhook/happyhorse without body returns 200", async ({ request }) => {
-        const res = await request.post(webApi("/webhook/happyhorse"), {
-            data: {},
-        });
-        expect(res.ok()).toBeTruthy();
-        const body = await res.json();
-        expect(body.received).toBe(true);
-    });
-
-    test("POST /api/webhook/happyhorse with taskId returns 200", async ({ request }) => {
-        const res = await request.post(webApi("/webhook/happyhorse"), {
-            data: { task_id: "nonexistent-task-id", status: "failed" },
-        });
-        expect(res.ok()).toBeTruthy();
-        const body = await res.json();
-        expect(body.received).toBe(true);
     });
 });

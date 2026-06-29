@@ -1,21 +1,21 @@
+import path from "node:path";
+
 import { BaseService } from "@buildingai/base";
 import { ACTION } from "@buildingai/constants/shared/account-log.constants";
 import {
-    assertPublicHttpUrl,
     ExtensionBillingService,
     ExtensionNotificationService,
     normalizePublicHttpUrl,
+    PublicAiModelService,
     safeJsonParse,
 } from "@buildingai/extension-sdk";
-import { FileUploadService } from "@buildingai/core/modules";
+import { FileStorageService, FileUploadService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThanOrEqual, Like, MoreThanOrEqual, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { Cron } from "@buildingai/core/@nestjs/schedule";
-import type { Queue } from "bullmq";
 
 import {
     VideoGeneration,
@@ -37,13 +37,9 @@ import { PolicyService } from "./policy.service";
 import { PromptOptimizationService } from "./prompt-optimization.service";
 import { ProviderConfigService } from "./provider-config.service";
 import { TemplateService } from "./template.service";
-import { VideoGatewayClient } from "./video-gateway-client";
-import { VIDEO_POLL_JOB, VIDEO_POLL_QUEUE } from "./video-poll-queue.constants";
 
 const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
 
-const VIDEO_POLL_DELAY_MS = 15_000;
-const VIDEO_POLL_JOB_PREFIX = "video-poll";
 const EXTENSION_ID = "echoflow-video";
 
 @Injectable()
@@ -54,19 +50,25 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         @InjectRepository(VideoGeneration)
         private readonly generationRepository: Repository<VideoGeneration>,
         private readonly fileUploadService: FileUploadService,
+        private readonly fileStorageService: FileStorageService,
         private readonly billingService: ExtensionBillingService,
-        private readonly providerConfigService: ProviderConfigService,
+        private readonly aiModelService: PublicAiModelService,
         private readonly modelConfigService: ModelConfigService,
         private readonly billingRuleService: BillingRuleService,
         private readonly policyService: PolicyService,
         private readonly notificationService: ExtensionNotificationService,
-        @InjectQueue(VIDEO_POLL_QUEUE)
-        private readonly videoPollQueue: Queue,
     ) {
         super(generationRepository);
     }
 
     private scanningStale = false;
+
+    private async ensureGenerationSchema() {
+        await this.generationRepository.manager.query(`
+            ALTER TABLE "echoflow_video"."video_generation"
+            ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMP
+        `);
+    }
 
     async onModuleInit() {
         await this.notificationService.registerScenes(EXTENSION_ID, [
@@ -91,55 +93,8 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
                 linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
             },
         ]);
-        await this.recoverProcessingTasks();
+        await this.ensureGenerationSchema();
         await this.scanStaleProcessing();
-    }
-
-    private async recoverProcessingTasks() {
-        const recoveryCutoff = new Date(Date.now() - 5 * 60_000);
-        const records = await this.generationRepository.find({
-            where: {
-                status: VideoGenerationStatus.PROCESSING,
-                updatedAt: LessThanOrEqual(recoveryCutoff),
-            } as FindOptionsWhere<VideoGeneration>,
-            take: 50,
-        });
-        let recovered = 0;
-        for (const record of records) {
-            if (!record.taskId) continue;
-            try {
-                const claimed = await this.claimPollForRecovery(record.id, recoveryCutoff);
-                if (claimed) {
-                    await this.schedulePollJob(record.id, 0);
-                    recovered += 1;
-                }
-            } catch (error) {
-                this.logger.warn(`Failed to recover poll job for ${record.id}`, error);
-            }
-        }
-        if (recovered) {
-            this.logger.warn(`Recovered ${recovered} lost poll job(s) on startup`);
-        }
-    }
-
-    private async claimPollForRecovery(generationId: string, cutoff: Date) {
-        return this.generationRepository.manager.transaction(async (entityManager) => {
-            await entityManager.query(LOCK_TIMEOUT);
-            const generation = await entityManager.findOne(VideoGeneration, {
-                where: { id: generationId } as FindOptionsWhere<VideoGeneration>,
-                lock: { mode: "pessimistic_write" },
-            });
-            if (!generation || generation.status !== VideoGenerationStatus.PROCESSING || !generation.taskId) {
-                return null;
-            }
-            if (generation.updatedAt && generation.updatedAt > cutoff) {
-                return null;
-            }
-            await entityManager.update(VideoGeneration, generation.id, {
-                updatedAt: new Date(),
-            });
-            return generation;
-        });
     }
 
     @Cron("*/5 * * * *")
@@ -157,14 +112,8 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
     }
 
     /**
-     * Submit a video generation task through the model-level API endpoint.
-     *
-     * Flow:
-     * 1. Validate input
-     * 2. Create DB record (status = PROCESSING)
-     * 3. Submit to the configured video endpoint
-     * 4. Save taskId
-     * 5. Return record
+     * Generate a video through the main-site AI model provider.
+     * The plugin keeps validation, billing, history, notification, and storage.
      */
     async createAndSubmit(dto: CreateVideoGenerationDto, userId: string) {
         const modelConfig = await this.modelConfigService.findEnabledByModel(dto.model);
@@ -207,9 +156,6 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             throw HttpErrorFactory.badRequest("可用算力不足，请充值后重试");
         }
 
-        const { endpoint, apiKey, baseUrl } = await this.modelConfigService.resolveRuntimeEndpoint(modelConfig);
-        const client = new VideoGatewayClient(modelConfig, endpoint, apiKey, baseUrl);
-
         // Create DB record
         const record = this.generationRepository.create({
             userId,
@@ -242,7 +188,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             statusEvents: [
                 this.makeStatusEvent(
                     VideoGenerationStatus.PENDING,
-                    "任务已创建，等待提交到视频接口",
+                    "任务已创建，等待统一视频生成服务处理",
                     "web",
                 ),
             ],
@@ -303,64 +249,55 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         }
 
         try {
-            const result = await client.submitTask({
-                model,
-                prompt,
-                media,
-                parameters: generationParams,
-            });
-
-            saved.taskId = result.taskId;
             saved.status = VideoGenerationStatus.PROCESSING;
+            saved.progress = 20;
+            this.appendStatusEvent(saved, VideoGenerationStatus.PROCESSING, "统一视频生成服务处理中", "provider");
+            await this.generationRepository.save(saved);
+
+            const result = await this.generateWithProvider(saved, modelConfig);
+            const stored = await this.storeResultVideo(saved.id, result.video);
+
+            saved.status = VideoGenerationStatus.SUCCEEDED;
+            saved.videoUrl = stored.url;
             saved.rawRequest = this.compactRawPayload(result.rawRequest);
             saved.rawResponse = this.compactRawPayload(result.rawResponse);
-            saved.progress = 20;
-            this.appendStatusEvent(saved, VideoGenerationStatus.PROCESSING, "任务已提交到视频接口", "provider");
-            await this.generationRepository.save(saved);
-            await this.scheduleInitialPollOrFail(saved, userId);
-
-            this.logger.log(`Video generation ${saved.id} submitted: taskId=${result.taskId}`);
-            return saved;
+            saved.progress = 100;
+            saved.completedAt = new Date();
+            this.appendStatusEvent(saved, VideoGenerationStatus.SUCCEEDED, "视频生成完成", "provider");
+            const completed = await this.generationRepository.save(saved);
+            await this.notifyTerminalStatus(completed);
+            return completed;
         } catch (error) {
-            if (saved.failureCategory === "queue") {
-                throw error;
-            }
-            // Submission failed
             saved.status = VideoGenerationStatus.FAILED;
             saved.errorMessage = this.truncateText(
-                error instanceof Error ? error.message : "任务提交失败",
+                error instanceof Error ? error.message : "视频生成失败",
                 2000,
             );
             saved.failureCategory = this.classifyFailure(error);
+            saved.progress = 100;
             saved.completedAt = new Date();
-            this.appendStatusEvent(saved, VideoGenerationStatus.FAILED, "任务提交失败", "provider");
-            await this.refundIfNeeded(saved, userId, "视频任务提交失败自动退款");
+            this.appendStatusEvent(saved, VideoGenerationStatus.FAILED, "视频生成失败", "provider");
+            await this.refundIfNeeded(saved, userId, "视频生成失败自动退款");
             await this.generationRepository.save(saved);
-            this.logger.error(`Video generation ${saved.id} submission failed`, error);
+            await this.notifyTerminalStatus(saved);
+            this.logger.error(`Video generation ${saved.id} failed`, error);
             throw error;
         }
     }
 
-    /**
-     * Poll the provider task status and update the DB record.
-     * Returns the updated record. If the task has reached a terminal state
-     * (succeeded/failed), the record is finalized.
-     */
     async pollAndUpdate(id: string, userId: string) {
-        const record = await this.findOwnedById(id, userId);
-        return this.pollRecord(record, userId);
+        return this.findOwnedById(id, userId);
     }
 
     async pollAndUpdateForWeb(id: string, userId: string) {
         return this.toPublicGeneration(await this.pollAndUpdate(id, userId));
     }
 
-    async pollAnyAndUpdate(id: string, options: { scheduleNext?: boolean } = {}) {
-        const record = await this.findGenerationById(id);
-        return this.pollRecord(record, record.userId, options);
+    async pollAnyAndUpdate(id: string) {
+        return this.findGenerationById(id);
     }
 
-    /** Batch poll all pending/processing tasks. Returns summary. */
+    /** Return a summary of current local video task states. */
     async batchPollAndUpdate(statusFilter?: "pending" | "processing", limit = 50) {
         const take = Math.min(Math.max(Number(limit) || 50, 1), 100);
         const where: Record<string, unknown> = {
@@ -375,33 +312,16 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             take,
         });
 
-        let succeeded = 0;
-        let failed = 0;
-        let stillProcessing = 0;
-        const updated: VideoGeneration[] = [];
-
-        for (const record of records) {
-            try {
-                const result = await this.pollRecord(record, record.userId);
-                updated.push(result);
-                if (result.status === VideoGenerationStatus.SUCCEEDED) succeeded++;
-                else if (result.status === VideoGenerationStatus.FAILED) failed++;
-                else stillProcessing++;
-            } catch {
-                stillProcessing++;
-            }
-        }
-
         return {
             total: records.length,
-            succeeded,
-            failed,
-            stillProcessing,
-            updated: updated.slice(0, 20),
+            succeeded: records.filter((item) => item.status === VideoGenerationStatus.SUCCEEDED).length,
+            failed: records.filter((item) => item.status === VideoGenerationStatus.FAILED).length,
+            stillProcessing: records.filter((item) => !isTerminalStatus(item.status)).length,
+            updated: records.slice(0, 20),
         };
     }
 
-    /** Health check: verify DB connectivity and model endpoint completeness. */
+    /** Health check: verify DB connectivity and model configuration completeness. */
     async healthCheck() {
         const activeTasks = await this.generationRepository.count({
             where: {
@@ -412,101 +332,15 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         const enabledModels = modelList.items.filter((model) => model.enabled && model.visibleToUser);
         const modelCompleteness = await this.modelConfigService.getConfigCompleteness();
         const recentFailureStats = await this.getRecentFailureStats();
-        const missingEndpointModels = enabledModels.filter((model) => {
-            const endpoints = model.endpoints ?? [];
-            return !endpoints.some((endpoint) => endpoint.enabled && endpoint.secretId);
-        });
 
         return {
-            status: missingEndpointModels.length === 0 ? "ok" : "attention",
+            status: modelCompleteness.complete ? "ok" : "attention",
             enabledModelCount: enabledModels.length,
             modelCompleteness,
-            missingEndpointModels: missingEndpointModels.map((model) => model.model),
             activeTasks,
             recentFailures: recentFailureStats,
             checkedAt: new Date().toISOString(),
         };
-    }
-
-    private async pollRecord(record: VideoGeneration, userId: string, options: { scheduleNext?: boolean } = {}) {
-        // If already in a terminal state, just return
-        if (isTerminalStatus(record.status)) {
-            return record;
-        }
-
-        if (!record.taskId) {
-            record.status = VideoGenerationStatus.FAILED;
-            record.errorMessage = "任务 ID 丢失，无法轮询";
-            record.failureCategory = "provider_task_missing";
-            record.completedAt = new Date();
-            this.appendStatusEvent(record, VideoGenerationStatus.FAILED, "任务 ID 丢失，无法轮询", "system");
-            await this.refundIfNeeded(record, userId, "视频任务 ID 丢失自动退款");
-            const saved = await this.saveNonTerminalUpdate(record);
-            await this.notifyTerminalStatus(saved);
-            await this.scheduleNextPollIfNeeded(saved, options);
-            return saved;
-        }
-
-        const modelConfig = await this.modelConfigService.findEnabledByModel(record.model);
-        const { endpoint, apiKey, baseUrl } = await this.modelConfigService.resolveRuntimeEndpoint(modelConfig);
-        const client = new VideoGatewayClient(modelConfig, endpoint, apiKey, baseUrl);
-
-        try {
-            const pollResult = await client.pollTask(record.taskId);
-
-            // Update raw response on every poll for debugging
-            record.rawResponse = this.compactRawPayload(pollResult.rawResponse);
-
-            if (isSuccessStatus(pollResult.status)) {
-                const videoUrl = await this.normalizeResultVideoUrl(pollResult.videoUrl);
-                if (videoUrl) {
-                    record.status = VideoGenerationStatus.SUCCEEDED;
-                    record.videoUrl = videoUrl;
-                    record.progress = 100;
-                    record.completedAt = new Date();
-                    this.appendStatusEvent(record, VideoGenerationStatus.SUCCEEDED, "视频生成完成", "provider");
-                } else {
-                    record.status = VideoGenerationStatus.FAILED;
-                    record.errorMessage = "视频任务完成但未返回有效视频地址";
-                    record.failureCategory = "provider_missing_output";
-                    record.progress = 100;
-                    record.completedAt = new Date();
-                    this.appendStatusEvent(record, VideoGenerationStatus.FAILED, record.errorMessage, "provider");
-                    await this.refundIfNeeded(record, userId, "视频生成结果缺失自动退款");
-                }
-            } else if (isFailedStatus(pollResult.status)) {
-                record.status = VideoGenerationStatus.FAILED;
-                record.errorMessage = `视频任务失败: status=${pollResult.status}`;
-                record.failureCategory = "provider_failed";
-                record.progress = 100;
-                record.completedAt = new Date();
-                this.appendStatusEvent(record, VideoGenerationStatus.FAILED, record.errorMessage, "provider");
-                await this.refundIfNeeded(record, userId, "视频生成失败自动退款");
-            } else {
-                record.progress = Math.max(record.progress ?? 20, 35);
-            }
-            // else: still processing, keep status as-is
-
-            const saved = await this.saveNonTerminalUpdate(record);
-            await this.notifyTerminalStatus(saved);
-            await this.scheduleNextPollIfNeeded(saved, options);
-            return saved;
-        } catch (error) {
-            this.logger.error(`Poll failed for generation ${record.id}`, error);
-            if (options.scheduleNext && !isTerminalStatus(record.status) && record.taskId) {
-                const message = error instanceof Error ? error.message : String(error);
-                this.appendStatusEvent(
-                    record,
-                    record.status,
-                    this.truncateText(`自动轮询失败，将稍后重试: ${message}`, 500),
-                    "system",
-                );
-                const saved = await this.generationRepository.save(record);
-                await this.scheduleNextPollIfNeeded(saved, options);
-                return saved;
-            }
-            throw error;
-        }
     }
 
     async list(query: QueryVideoGenerationDto, userId?: string) {
@@ -761,56 +595,90 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         return { success: true, message: "删除成功" };
     }
 
-    /** Find a generation record by provider taskId. */
-    async findByTaskId(taskId: string) {
-        return this.generationRepository.findOne({
-            where: { taskId } as FindOptionsWhere<VideoGeneration>,
+    private async generateWithProvider(record: VideoGeneration, modelConfig: ResolvedVideoModelConfig) {
+        const media = record.media ?? [];
+        const firstFrame = media.find((item) => item.type === "first_frame");
+        if (media.some((item) => item.type !== "first_frame") || media.filter((item) => item.type === "first_frame").length > 1) {
+            throw HttpErrorFactory.badRequest("当前统一视频生成链路仅支持文生视频或单首帧图生视频");
+        }
+
+        const prompt = firstFrame
+            ? { text: record.prompt, image: firstFrame.url }
+            : record.prompt;
+        const result = await this.aiModelService.generateVideo(modelConfig.mainModelId, {
+            prompt,
+            duration: record.parameters?.duration,
+            resolution: this.toSdkResolution(record.parameters?.resolution),
+            aspectRatio: this.toSdkAspectRatio(record.parameters?.ratio),
+            fps: modelConfig.capabilities?.fps,
+            providerOptions: {
+                [modelConfig.provider]: {
+                    watermark: record.parameters?.watermark,
+                    audio_setting: record.parameters?.audio_setting,
+                },
+            },
         });
+
+        return {
+            video: result.video,
+            rawRequest: {
+                model: modelConfig.model,
+                prompt: record.prompt,
+                media,
+                parameters: record.parameters,
+            },
+            rawResponse: {
+                videoCount: result.videos.length,
+                warnings: result.warnings,
+                responses: result.responses,
+                providerMetadata: result.providerMetadata,
+                apiMode: "ai-sdk-video",
+            },
+        };
     }
 
-    /** Process a webhook status update for a task. */
-    async processWebhookUpdate(taskId: string, status: string, videoUrl?: string) {
-        const record = await this.findByTaskId(taskId);
-        if (!record) {
-            this.logger.warn(`Webhook for unknown taskId: ${taskId}`);
-            return null;
-        }
+    private async storeResultVideo(
+        generationId: string,
+        video: { uint8Array: Uint8Array; mediaType?: string },
+    ) {
+        const mimeType = video.mediaType || "video/mp4";
+        const extension = this.extensionForVideoMimeType(mimeType);
+        const now = new Date();
+        const year = String(now.getFullYear());
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const relativePath = path.posix.join("generated", year, month, `${generationId}.${extension}`);
+        const buffer = Buffer.from(video.uint8Array);
 
-        if (isTerminalStatus(record.status)) {
-            return record;
-        }
+        await this.fileStorageService.saveBuffer(
+            buffer,
+            {
+                path: path.posix.dirname(relativePath),
+                fileName: path.posix.basename(relativePath),
+                fullPath: relativePath,
+            },
+            { extensionId: EXTENSION_ID },
+        );
 
-        if (isSuccessStatus(status)) {
-            const normalizedVideoUrl = await this.normalizeResultVideoUrl(videoUrl);
-            if (normalizedVideoUrl) {
-                record.status = VideoGenerationStatus.SUCCEEDED;
-                record.videoUrl = normalizedVideoUrl;
-                record.progress = 100;
-                record.completedAt = new Date();
-                this.appendStatusEvent(record, VideoGenerationStatus.SUCCEEDED, "视频回调成功", "webhook");
-            } else {
-                record.status = VideoGenerationStatus.FAILED;
-                record.errorMessage = "视频回调成功但未返回有效视频地址";
-                record.failureCategory = "provider_missing_output";
-                record.progress = 100;
-                record.completedAt = new Date();
-                this.appendStatusEvent(record, VideoGenerationStatus.FAILED, record.errorMessage, "webhook");
-                await this.refundIfNeeded(record, record.userId, "视频回调结果缺失自动退款");
-            }
-        } else if (isFailedStatus(status)) {
-            record.status = VideoGenerationStatus.FAILED;
-            record.errorMessage = `视频回调: status=${status}`;
-            record.failureCategory = "provider_webhook_failed";
-            record.progress = 100;
-            record.completedAt = new Date();
-            this.appendStatusEvent(record, VideoGenerationStatus.FAILED, record.errorMessage, "webhook");
-            await this.refundIfNeeded(record, record.userId, "视频生成失败自动退款");
-        }
+        return {
+            url: `/echoflow-video/uploads/${relativePath}`,
+            mimeType,
+            path: relativePath,
+            size: buffer.byteLength,
+        };
+    }
 
-        const saved = await this.saveNonTerminalUpdate(record);
-        await this.notifyTerminalStatus(saved);
-        this.logger.log(`Webhook processed: taskId=${taskId} status=${saved.status}`);
-        return saved;
+    private toSdkResolution(value?: string) {
+        return /^\d+x\d+$/.test(value ?? "") ? value as `${number}x${number}` : undefined;
+    }
+
+    private toSdkAspectRatio(value?: string) {
+        return /^\d+:\d+$/.test(value ?? "") ? value as `${number}:${number}` : undefined;
+    }
+
+    private extensionForVideoMimeType(mimeType: string) {
+        if (mimeType.includes("webm")) return "webm";
+        if (mimeType.includes("quicktime")) return "mov";
+        return "mp4";
     }
 
     private validateMediaForModelConfig(modelConfig: ResolvedVideoModelConfig, media: VideoMediaItem[]) {
@@ -897,7 +765,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
 
         if (!isPlatformUpload) {
             try {
-                normalizePublicHttpUrl(value, { label: "媒体素材 URL" });
+                normalizePublicHttpUrl(value);
             } catch {
                 throw HttpErrorFactory.badRequest("媒体素材 URL 不允许指向本机或内网地址");
             }
@@ -952,31 +820,6 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         );
 
         return normalized;
-    }
-
-    private async normalizeResultVideoUrl(raw?: string) {
-        const value = raw?.trim();
-        if (!value) {
-            return undefined;
-        }
-
-        let url: URL;
-        try {
-            url = new URL(value);
-        } catch {
-            return undefined;
-        }
-
-        if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
-            return undefined;
-        }
-        try {
-            await assertPublicHttpUrl(value, { label: "视频结果 URL" });
-        } catch {
-            return undefined;
-        }
-
-        return url.toString();
     }
 
     private async hasBillingLog(
@@ -1090,82 +933,6 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         }
     }
 
-    private async scheduleNextPollIfNeeded(record: VideoGeneration, options: { scheduleNext?: boolean }) {
-        if (!options.scheduleNext || isTerminalStatus(record.status) || !record.taskId) {
-            return;
-        }
-        try {
-            await this.schedulePollJob(record.id, VIDEO_POLL_DELAY_MS);
-        } catch (error) {
-            await this.failPollScheduling(record, record.userId, error);
-        }
-    }
-
-    private async schedulePollJob(id: string, delayMs: number) {
-        try {
-            await this.videoPollQueue.add(
-                VIDEO_POLL_JOB,
-                { id },
-                {
-                    jobId: `${VIDEO_POLL_JOB_PREFIX}-${id}-${Date.now()}`,
-                    delay: Math.max(delayMs, 0),
-                    attempts: 1,
-                    removeOnComplete: true,
-                    removeOnFail: false,
-                },
-            );
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Schedule video poll ${id} failed: ${message}`, error);
-            await this.recordPollScheduleFailure(id, message);
-            throw HttpErrorFactory.badRequest("视频任务轮询入队失败，请稍后重试");
-        }
-    }
-
-    private async scheduleInitialPollOrFail(record: VideoGeneration, userId: string) {
-        try {
-            await this.schedulePollJob(record.id, VIDEO_POLL_DELAY_MS);
-        } catch (error) {
-            await this.failPollScheduling(record, userId, error);
-        }
-    }
-
-    private async failPollScheduling(record: VideoGeneration, userId: string, error: unknown) {
-        const latest = await this.generationRepository.findOne({
-            where: { id: record.id } as FindOptionsWhere<VideoGeneration>,
-        });
-        const failed = latest ?? record;
-        if (isTerminalStatus(failed.status)) {
-            throw error;
-        }
-        failed.status = VideoGenerationStatus.FAILED;
-        failed.errorMessage = "视频任务轮询入队失败，请稍后重试";
-        failed.failureCategory = "queue";
-        failed.progress = 100;
-        failed.completedAt = new Date();
-        this.appendStatusEvent(failed, VideoGenerationStatus.FAILED, failed.errorMessage, "system");
-        await this.refundIfNeeded(failed, userId, "视频任务入队失败自动退款");
-        const saved = await this.generationRepository.save(failed);
-        await this.notifyTerminalStatus(saved);
-        throw error;
-    }
-
-    private async recordPollScheduleFailure(id: string, message: string) {
-        const record = await this.generationRepository.findOne({
-            where: { id } as FindOptionsWhere<VideoGeneration>,
-        });
-        if (!record || record.deletedAt || isTerminalStatus(record.status)) {
-            return;
-        }
-        this.appendStatusEvent(
-            record,
-            record.status,
-            this.truncateText(`自动轮询队列入队失败: ${message}`, 500),
-            "system",
-        );
-        await this.generationRepository.save(record);
-    }
-
     private async notifyTerminalStatus(record: VideoGeneration) {
         if (!isTerminalStatus(record.status)) return;
 
@@ -1209,7 +976,6 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
 
             locked.status = record.status;
             locked.billingStatus = record.billingStatus;
-            locked.taskId = record.taskId;
             locked.videoUrl = record.videoUrl;
             locked.errorMessage = record.errorMessage;
             locked.failureCategory = record.failureCategory;
@@ -1272,7 +1038,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
     private makeStatusEvent(
         status: VideoGenerationStatus,
         message?: string,
-        source: "web" | "console" | "provider" | "webhook" | "system" = "system",
+        source: "web" | "console" | "provider" | "system" = "system",
     ) {
         return {
             status,
@@ -1286,7 +1052,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         record: VideoGeneration,
         status: VideoGenerationStatus,
         message?: string,
-        source: "web" | "console" | "provider" | "webhook" | "system" = "system",
+        source: "web" | "console" | "provider" | "system" = "system",
     ) {
         record.statusEvents = [...(record.statusEvents ?? []), this.makeStatusEvent(status, message, source)];
     }
@@ -1384,14 +1150,6 @@ export const generationModuleProviders = [
     PromptOptimizationService,
 ];
 
-function isSuccessStatus(status: string): boolean {
-    return ["succeeded", "success", "SUCCEEDED", "completed", "complete"].includes(status);
-}
-
-function isFailedStatus(status: string): boolean {
-    return ["failed", "cancelled", "canceled", "FAILED", "CANCELED", "error"].includes(status);
-}
-
 function isTerminalStatus(status: string): boolean {
-    return isSuccessStatus(status) || isFailedStatus(status);
+    return ["succeeded", "success", "SUCCEEDED", "completed", "complete", "failed", "cancelled", "canceled", "FAILED", "CANCELED", "error"].includes(status);
 }

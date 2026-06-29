@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { ErrorState } from "../components/error-state";
 import { GenerationForm } from "../components/generation-form";
 import { HistoryList } from "../components/history-list";
 import { VideoResult } from "../components/video-result";
@@ -27,17 +28,24 @@ export default function AIVideoIndexPage() {
     const [formInitialValues, setFormInitialValues] = useState<Partial<CreateVideoParams>>();
     const navigate = useNavigate();
 
-    const { data: models = [], isLoading: modelsLoading } = useWebVideoModelOptionsQuery();
-    const { data: templateData } = useWebVideoTemplatesQuery({ page: 1, pageSize: 20 });
+    const {
+        data: models = [],
+        isLoading: modelsLoading,
+        isError: modelsError,
+        refetch: refetchModels,
+    } = useWebVideoModelOptionsQuery();
+    const { data: templateData, isError: templatesError, refetch: refetchTemplates } = useWebVideoTemplatesQuery({ page: 1, pageSize: 20 });
     const {
         data: historyData,
         isLoading: historyLoading,
+        isError: historyError,
+        refetch: refetchHistory,
     } = useWebVideoListQuery({ page: 1, pageSize: 6 });
 
     const createMutation = useWebCreateVideoMutation();
     const { data: currentGeneration } = useWebVideoStatusQuery(currentId);
     const availableModelCount = models.length;
-    const disabledReason = !modelsLoading && availableModelCount === 0
+    const disabledReason = !modelsError && !modelsLoading && availableModelCount === 0
         ? "视频生成功能暂未开放，请稍后再来。"
         : undefined;
 
@@ -87,6 +95,12 @@ export default function AIVideoIndexPage() {
 
     return (
         <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-3 md:p-4">
+            {modelsError ? (
+                <ErrorState title="加载生成规格失败" message="无法读取视频生成配置，请登录后重试。" onRetry={() => refetchModels()} />
+            ) : null}
+            {templatesError ? (
+                <ErrorState title="加载模板失败" message="无法读取视频模板。" onRetry={() => refetchTemplates()} />
+            ) : null}
             <div className="flex flex-col gap-3 rounded-lg border bg-background/80 p-4 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0">
                     <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight md:text-2xl">
@@ -100,7 +114,7 @@ export default function AIVideoIndexPage() {
                 <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3 md:w-auto">
                     <Badge variant={availableModelCount ? "default" : "secondary"} className="gap-1.5 px-2.5 py-1">
                         <Sparkles className="size-3.5" />
-                        {modelsLoading ? "读取生成规格" : availableModelCount ? `${availableModelCount} 个规格可用` : "暂未开放"}
+                        {modelsLoading ? "读取生成规格" : modelsError ? "读取失败" : availableModelCount ? `${availableModelCount} 个规格可用` : "暂未开放"}
                     </Badge>
                     <Badge variant="outline" className="gap-1.5 px-2.5 py-1">
                         <RefreshCw className="size-3.5" />
@@ -122,6 +136,8 @@ export default function AIVideoIndexPage() {
                     promptTemplates={(templateData?.items ?? []).map((item) => ({
                         label: item.title,
                         prompt: item.prompt,
+                        modelConfigId: item.modelConfigId,
+                        defaultParams: item.defaultParams,
                     }))}
                     initialValues={formInitialValues}
                     onSubmit={handleSubmit}
@@ -134,9 +150,12 @@ export default function AIVideoIndexPage() {
                 />
             </div>
 
+            {historyError ? (
+                <ErrorState title="加载最近生成失败" message="无法读取最近的视频生成记录。" onRetry={() => refetchHistory()} />
+            ) : null}
             <HistoryList
                 items={historyData?.items || []}
-                loading={historyLoading}
+                loading={historyLoading && !historyError}
                 showDelete={false}
                 detailBasePath=""
                 variant="strip"

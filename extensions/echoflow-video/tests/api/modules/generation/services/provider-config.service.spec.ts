@@ -21,19 +21,14 @@ const mockAiModelService = {
     listActiveLlmModels: jest.fn(),
 };
 
-const mockSecretService = {
-    getConfigKeyValuePairs: jest.fn(),
-};
-
 function makeService(): ProviderConfigService {
-    return new ProviderConfigService(mockConfigRepo as any, mockAuditRepo as any, mockAiModelService as any, mockSecretService as any);
+    return new ProviderConfigService(mockConfigRepo as any, mockAuditRepo as any, mockAiModelService as any);
 }
 
 function makeConfig(overrides: Partial<VideoProviderConfig> = {}): VideoProviderConfig {
     return {
         id: "cfg-001",
         provider: "happyhorse",
-        templates: [],
         promptOptimizerEnabled: true,
         promptOptimizerAllowedModelIds: [],
         createdAt: new Date("2026-01-01"),
@@ -68,59 +63,22 @@ beforeEach(() => {
             },
         },
     ]);
-    mockSecretService.getConfigKeyValuePairs.mockResolvedValue({
-        webhookSecret: { value: "secret-123", required: true },
-    });
 });
 
 describe("ProviderConfigService", () => {
-    it("returns prompt optimizer and webhook config when no provider config exists", async () => {
+    it("returns prompt optimizer config when no provider config exists", async () => {
         mockConfigRepo.findOne.mockResolvedValue(null);
 
         const result = await makeService().getConsoleConfig();
 
         expect(result).toMatchObject({
             provider: "happyhorse",
-            webhookSecretConfigured: false,
-            webhookSecretId: "",
-            webhookSecretName: "",
             promptOptimizerEnabled: true,
+            promptOptimizerModelId: "",
             promptOptimizerAllowedModelIds: [],
         });
-    });
-
-    it("requires a configured webhook secret before trusting public callbacks", async () => {
-        mockConfigRepo.findOne.mockResolvedValue(makeConfig({ webhookSecretId: undefined }));
-
-        const verified = await makeService().verifyHappyHorseWebhookSecret(undefined);
-
-        expect(verified).toBe(false);
-    });
-
-    it("verifies webhook secret through main-system Secret", async () => {
-        mockConfigRepo.findOne.mockResolvedValue(makeConfig({ webhookSecretId: "33333333-3333-4333-8333-333333333333" }));
-
-        await expect(makeService().verifyHappyHorseWebhookSecret("secret-123")).resolves.toBe(true);
-        await expect(makeService().verifyHappyHorseWebhookSecret("wrong")).resolves.toBe(false);
-        expect(mockSecretService.getConfigKeyValuePairs).toHaveBeenCalledWith("33333333-3333-4333-8333-333333333333");
-    });
-
-    it("stores only webhook Secret reference on update", async () => {
-        const existing = makeConfig();
-        mockConfigRepo.findOne.mockResolvedValue(existing);
-        mockConfigRepo.save.mockImplementation(async (value) => value);
-
-        await makeService().updateConsoleConfig({
-            webhookSecretId: "33333333-3333-4333-8333-333333333333",
-            webhookSecretName: "HappyHorse 回调",
-        });
-
-        expect(mockConfigRepo.save).toHaveBeenCalledWith(
-            expect.objectContaining({
-                webhookSecretId: "33333333-3333-4333-8333-333333333333",
-                webhookSecretName: "HappyHorse 回调",
-            }),
-        );
+        expect(result).not.toHaveProperty("webhookSecretId");
+        expect(result).not.toHaveProperty("templates");
     });
 
     it("writes sanitized audit record with operator id on update", async () => {
@@ -135,10 +93,15 @@ describe("ProviderConfigService", () => {
                 action: "provider_config_updated",
                 operatorId: "admin-001",
                 snapshot: expect.objectContaining({
-                    webhookSecretConfigured: false,
-                    webhookSecretId: undefined,
+                    provider: "happyhorse",
                     promptOptimizerEnabled: false,
+                    promptOptimizerAllowedModelIds: [],
                 }),
+            }),
+        );
+        expect(mockAuditRepo.save).toHaveBeenCalledWith(
+            expect.not.objectContaining({
+                snapshot: expect.objectContaining({ webhookSecretId: expect.anything() }),
             }),
         );
     });
@@ -189,7 +152,7 @@ describe("ProviderConfigService", () => {
         );
     });
 
-    it("normalizes prompt templates and model pool without touching model endpoint credentials", async () => {
+    it("normalizes model pool without touching model endpoint credentials", async () => {
         const existing = makeConfig();
         mockConfigRepo.findOne.mockResolvedValue(existing);
         mockConfigRepo.save.mockImplementation(async (value) => value);
@@ -199,13 +162,11 @@ describe("ProviderConfigService", () => {
                 "11111111-1111-4111-8111-111111111111",
                 "11111111-1111-4111-8111-111111111111",
             ],
-            templates: [{ label: "  开场  ", prompt: "  一段电影感开场  " }],
         });
 
         expect(mockConfigRepo.save).toHaveBeenCalledWith(
             expect.objectContaining({
                 promptOptimizerAllowedModelIds: ["11111111-1111-4111-8111-111111111111"],
-                templates: [{ label: "开场", prompt: "一段电影感开场" }],
             }),
         );
     });
