@@ -109,7 +109,7 @@ export class ExtensionConsoleController extends BaseController {
 
         await this.dictService.set(DICT_KEYS.PLATFORM_SECRET, platformSecret, {
             group: DICT_GROUP_KEYS.APPLICATION,
-            description: "BuildingAI platform secret",
+            description: "EchoFlowAI platform secret",
         });
 
         return true;

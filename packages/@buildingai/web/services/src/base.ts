@@ -1,3 +1,4 @@
+import { BusinessCode } from "@buildingai/constants/shared/business-code.constant";
 import { createHttpClient, createStandardApiParser, type HttpError } from "@buildingai/http";
 import { useAuthStore } from "@buildingai/stores";
 import type { AxiosError } from "axios";
@@ -14,9 +15,30 @@ export function generateWebApiBase() {
     return `${base}${import.meta.env.VITE_APP_WEB_API_PREFIX || "/api"}`;
 }
 
+const BUSINESS_ERROR_MESSAGES: Record<string, Record<string, string>> = {
+    "zh-CN": {
+        [BusinessCode.LOGIN_FAILED]: "账号或密码错误，请检查后重试",
+    },
+    "en-US": {
+        [BusinessCode.LOGIN_FAILED]: "Invalid account or password.",
+    },
+};
+
+function getLocale() {
+    return localStorage.getItem("buildingai-ui-locale") || navigator.language || "zh-CN";
+}
+
+function getBusinessErrorMessage(code?: unknown) {
+    const locale = getLocale().startsWith("zh") ? "zh-CN" : "en-US";
+    return BUSINESS_ERROR_MESSAGES[locale]?.[String(code)];
+}
+
+function getHttpErrorMessage(error: HttpError): string {
+    return getBusinessErrorMessage(error.code) || error.message || "请求失败";
+}
+
 function handleHttpError(error: HttpError): void {
-    const message = error.message || "Bad request";
-    toast.error(message);
+    toast.error(getHttpErrorMessage(error));
 }
 
 async function handleAuthError(error: unknown): Promise<void> {

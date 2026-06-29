@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI, type GoogleGenerativeAIProvider } from "@ai-sdk/google";
-import type { EmbeddingModelV3, LanguageModelV3 } from "@ai-sdk/provider";
+import type { EmbeddingModelV3, Experimental_VideoModelV3, LanguageModelV3 } from "@ai-sdk/provider";
 
 import type { AIProvider, BaseProviderSettings, ProviderModelInfo } from "../../types";
 
@@ -25,6 +25,10 @@ class GoogleProviderImpl implements AIProvider {
 
     embeddingModel(modelId: string): EmbeddingModelV3 {
         return this.baseProvider.embeddingModel(modelId);
+    }
+
+    video(modelId: string): Experimental_VideoModelV3 {
+        return this.baseProvider.video(modelId);
     }
 
     async listModels(): Promise<ProviderModelInfo[]> {

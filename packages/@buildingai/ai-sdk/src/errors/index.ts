@@ -56,6 +56,7 @@ export type ProviderCapability =
     | "speech"
     | "transcription"
     | "image"
+    | "video"
     | "moderation"
     | "rerank";
 

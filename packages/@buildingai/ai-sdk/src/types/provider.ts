@@ -6,6 +6,7 @@ import type {
     RerankingModelV3,
     SpeechModelV3,
     TranscriptionModelV3,
+    Experimental_VideoModelV3,
 } from "@ai-sdk/provider";
 
 import type { ModerationModelV1 } from "./moderation";
@@ -23,6 +24,7 @@ export interface AIProvider extends Partial<ProviderV3> {
     languageModel(modelId: string): LanguageModelV3;
     embeddingModel?(modelId: string): EmbeddingModelV3;
     image?(modelId: string): ImageModelV3;
+    video?(modelId: string): Experimental_VideoModelV3;
     speech?(modelId: string): SpeechModelV3;
     transcription?(modelId: string): TranscriptionModelV3;
     rerank?(modelId: string): RerankingModelV3;

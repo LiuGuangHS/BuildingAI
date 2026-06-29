@@ -1,6 +1,7 @@
 import type {
     EmbeddingModelV3,
     ImageModelV3,
+    Experimental_VideoModelV3,
     LanguageModelV3,
     RerankingModelV3,
     SpeechModelV3,
@@ -39,6 +40,10 @@ export interface ProviderImageConfig {
     model: ImageModelV3;
 }
 
+export interface ProviderVideoConfig {
+    model: Experimental_VideoModelV3;
+}
+
 export interface ProviderModerationConfig {
     model: ModerationModelV1;
 }
@@ -56,12 +61,13 @@ type InferModelType<T extends string> =
 
 export type CallableProvider = Omit<
     AIProvider,
-    "image" | "speech" | "transcription" | "moderation" | "rerank"
+    "image" | "video" | "speech" | "transcription" | "moderation" | "rerank"
 > & {
     <T extends string>(modelId: T): InferModelType<T>;
     speech(modelId: string): ProviderSpeechConfig;
     transcription(modelId: string): ProviderTranscriptionConfig;
     image(modelId: string): ProviderImageConfig;
+    video(modelId: string): ProviderVideoConfig;
     moderation(modelId: string): ProviderModerationConfig;
     rerank(modelId: string): ProviderRerankConfig;
     listModels(): Promise<ProviderModelInfo[]>;
@@ -79,6 +85,7 @@ export function getProvider<T extends BaseProviderSettings = BaseProviderSetting
     if (provider.speech) caps.push("speech");
     if (provider.transcription) caps.push("transcription");
     if (provider.image) caps.push("image");
+    if (provider.video) caps.push("video");
     if (provider.moderation) caps.push("moderation");
     if (provider.rerank) caps.push("rerank");
     const capabilities = createCapabilities(caps);
@@ -103,6 +110,7 @@ export function getProvider<T extends BaseProviderSettings = BaseProviderSetting
             p.transcription!(id),
         ),
         image: createMethod("image", "image", (p, id) => p.image!(id)),
+        video: createMethod("video", "video", (p, id) => p.video!(id)),
         moderation: createMethod("moderation", "moderation", (p, id) => p.moderation!(id)),
         rerank: createMethod("rerank", "rerank", (p, id) => p.rerank!(id)),
     };
@@ -194,6 +202,19 @@ export function getProviderForImage<T extends BaseProviderSettings = BaseProvide
     }
     return (modelId: string): ProviderImageConfig => ({
         model: provider.image!(modelId),
+    });
+}
+
+export function getProviderForVideo<T extends BaseProviderSettings = BaseProviderSettings>(
+    providerName: string,
+    settings?: T,
+): (modelId: string) => ProviderVideoConfig {
+    const provider = getProviderFromRegistry(providerName, settings);
+    if (!provider.video) {
+        throw new ProviderCapabilityError(providerName, "video");
+    }
+    return (modelId: string): ProviderVideoConfig => ({
+        model: provider.video!(modelId),
     });
 }
 

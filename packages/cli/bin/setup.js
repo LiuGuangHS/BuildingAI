@@ -73,7 +73,7 @@ async function runPredeploy() {
  */
 async function printStartupInfo(startTime) {
     const packageJsonPath = path.join(rootDir, "package.json");
-    let projectName = "BuildingAI";
+    let projectName = "EchoFlowAI";
     let projectVersion = "unknown";
 
     // Try to read project info from package.json
@@ -184,7 +184,7 @@ async function waitForApiReady({ maxAttempts = 30, interval = 2000 } = {}) {
  * Show completion message after setup
  */
 function showCompletionMessage() {
-    Logger.success("Setup", "BuildingAI project setup completed!");
+    Logger.success("Setup", "EchoFlowAI project setup completed!");
 }
 
 /**
@@ -192,7 +192,7 @@ function showCompletionMessage() {
  */
 async function main() {
     const startTime = Date.now();
-    Logger.info("Setup", "Starting BuildingAI project setup...");
+    Logger.info("Setup", "Starting EchoFlowAI project setup...");
 
     try {
         // Run predeploy script to prepare the project

@@ -46,14 +46,23 @@ let PublicAiModelService = PublicAiModelService_1 = class PublicAiModelService {
         }
         return model;
     }
-    async listActiveLlmModels(take = 100) {
+    async listActiveModelsByType(modelType, take = 100) {
         const models = await this.aiModelRepository.find({
-            where: { modelType: "llm", isActive: true },
+            where: { modelType, isActive: true },
             relations: ["provider"],
             order: { sortOrder: "DESC", createdAt: "DESC" },
             take: Math.min(Math.max(Number(take) || 100, 1), 200),
         });
         return models.filter((model) => model.provider?.isActive !== false);
+    }
+    async listActiveLlmModels(take = 100) {
+        return this.listActiveModelsByType("llm", take);
+    }
+    async listActiveImageModels(take = 100) {
+        return this.listActiveModelsByType("text-to-image", take);
+    }
+    async listActiveVideoModels(take = 100) {
+        return this.listActiveModelsByType("text-to-video", take);
     }
     /**
      * Get provider config
@@ -79,10 +88,14 @@ let PublicAiModelService = PublicAiModelService_1 = class PublicAiModelService {
         const provider = (0, ai_sdk_1.getProvider)(model.provider.provider, config);
         return provider;
     }
-    async generateText(modelId, params) {
+    async getUsableModelProvider(modelId) {
         const model = await this.getModelInfo(modelId);
         const providerConfig = (0, provider_config_1.normalizeProviderConfig)(await this.getProviderConfig(modelId));
         const provider = (0, ai_sdk_1.getProvider)(model.provider.provider, providerConfig);
+        return { model, provider };
+    }
+    async generateText(modelId, params) {
+        const { model, provider } = await this.getUsableModelProvider(modelId);
         if (!provider.supports("language")) {
             throw new Error("The ai model does not support text generation.");
         }
@@ -91,6 +104,32 @@ let PublicAiModelService = PublicAiModelService_1 = class PublicAiModelService {
             model: provider(model.model).model,
         };
         return (0, ai_sdk_1.generateTextWithUsage)(request, { model: model.model });
+    }
+    async generateImage(modelId, params) {
+        const { model, provider } = await this.getUsableModelProvider(modelId);
+        if (model.modelType !== "text-to-image") {
+            throw new Error("The ai model is not a text-to-image model.");
+        }
+        if (!provider.supports("image")) {
+            throw new Error("The ai model provider does not support image generation.");
+        }
+        return (0, ai_sdk_1.generateImage)({
+            ...params,
+            model: provider.image(model.model).model,
+        });
+    }
+    async generateVideo(modelId, params) {
+        const { model, provider } = await this.getUsableModelProvider(modelId);
+        if (model.modelType !== "text-to-video") {
+            throw new Error("The ai model is not a text-to-video model.");
+        }
+        if (!provider.supports("video")) {
+            throw new Error("The ai model provider does not support video generation.");
+        }
+        return (0, ai_sdk_1.experimental_generateVideo)({
+            ...params,
+            model: provider.video(model.model).model,
+        });
     }
 };
 exports.PublicAiModelService = PublicAiModelService;

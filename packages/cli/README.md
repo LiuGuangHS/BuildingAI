@@ -175,12 +175,18 @@ buildingai pm2:reload
 
 ### 开发环境
 
-开发环境推荐使用热重载模式:
+开发环境推荐使用本地 Node.js 热重载；Docker 通常只保留 Postgres/Redis，避免 Docker node 与本地 API 抢占 4090：
 
 ```bash
-cd packages/api
-pnpm dev
+# 根目录并行启动前后端
+pnpm dev:main
+
+# 或分开启动
+pnpm dev:api
+pnpm dev:web
 ```
+
+如果使用 Docker 提供数据库和 Redis，先用 `docker ps` 确认宿主端口，并同步 `.env` 的 `DB_PORT`、`REDIS_PORT`。本地管理员密码可直接在本地库重置；先确认用户表中的 root 账号，不要猜默认 `admin`。
 
 如果需要测试 PM2,CLI 会自动使用项目本地的 PM2(无需全局安装):
 

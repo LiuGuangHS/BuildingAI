@@ -4,6 +4,7 @@ import {
     cohere,
     custom,
     deepseek,
+    fal,
     giteeAi,
     google,
     hunyuan,
@@ -37,6 +38,7 @@ class ProviderRegistry {
     private registerDefaults(): void {
         this.register("openai", openai, "OpenAI GPT 系列模型");
         this.register("deepseek", deepseek, "DeepSeek 深度求索");
+        this.register("fal", fal, "fal.ai 图片/视频模型");
         this.register("zhipuai", zhipuai, "智谱AI GLM 系列模型");
         this.register("moonshot", moonshot, "月之暗面 Kimi");
         this.register("siliconflow", siliconflow, "硅基流动");

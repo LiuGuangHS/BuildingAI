@@ -100,7 +100,7 @@ export class Migration1781539200000 implements MigrationInterface {
                     "delivery"."payload" ->> 'sourceId'
                 )
             FROM "notification"
-            WHERE "delivery"."notification_id" = "notification"."id"
+            WHERE "delivery"."notification_id"::uuid = "notification"."id"
         `);
         await queryRunner.query(`
             WITH ranked AS (

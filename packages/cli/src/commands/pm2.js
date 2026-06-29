@@ -111,7 +111,7 @@ export async function startApi(skipExistCheck = false) {
 
         Logger.info(
             "Start Service",
-            `Starting BuildingAI API service${noDaemon ? " (no-daemon mode)" : ""}...`,
+            `Starting EchoFlowAI API service${noDaemon ? " (no-daemon mode)" : ""}...`,
         );
 
         if (!checkApiDist()) process.exit(1);
@@ -184,7 +184,7 @@ export async function startApi(skipExistCheck = false) {
  */
 export async function stopApi() {
     try {
-        Logger.info("Stop Service", "Stopping BuildingAI API service...");
+        Logger.info("Stop Service", "Stopping EchoFlowAI API service...");
 
         const exists = await checkProcessExists(PM2_APP_NAME);
         if (!exists) {
@@ -209,7 +209,7 @@ export async function stopApi() {
  */
 export async function restartApi() {
     try {
-        Logger.info("Restart Service", "Restarting BuildingAI API service...");
+        Logger.info("Restart Service", "Restarting EchoFlowAI API service...");
 
         const exists = await checkProcessExists(PM2_APP_NAME);
 
@@ -235,7 +235,7 @@ export async function restartApi() {
  */
 export async function reloadApi() {
     try {
-        Logger.info("Reload Service", "Reloading BuildingAI API service (zero downtime)...");
+        Logger.info("Reload Service", "Reloading EchoFlowAI API service (zero downtime)...");
 
         await executePm2Command(["reload", PM2_APP_NAME]);
 
@@ -254,7 +254,7 @@ export async function reloadApi() {
  */
 export async function deleteApi() {
     try {
-        Logger.info("Remove Process", "Removing BuildingAI API PM2 process...");
+        Logger.info("Remove Process", "Removing EchoFlowAI API PM2 process...");
 
         await executePm2Command(["delete", PM2_APP_NAME]);
 

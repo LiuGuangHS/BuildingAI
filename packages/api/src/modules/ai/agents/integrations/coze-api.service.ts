@@ -1,4 +1,5 @@
 import { HttpErrorFactory } from "@buildingai/errors";
+import { requestProviderJson } from "@buildingai/extension-sdk";
 import type { ThirdPartyIntegrationConfig } from "@buildingai/types/ai/agent-config.interface";
 import { Injectable, Logger } from "@nestjs/common";
 
@@ -138,18 +139,15 @@ export class CozeApiService {
 
         for (const candidate of candidates) {
             try {
-                const response = await fetch(candidate.url, {
+                const payload = await requestProviderJson(candidate.url, {
                     method: candidate.method,
-                    headers: this.buildHeaders(apiKey),
+                    headers: this.buildHeaders(apiKey) as Record<string, string>,
                     body: candidate.body ? JSON.stringify(candidate.body) : undefined,
-                });
-
-                if (!response.ok) {
-                    lastError = `HTTP ${response.status}`;
-                    continue;
-                }
-
-                const payload = (await response.json()) as Record<string, any>;
+                    timeoutMs: 30_000,
+                    maxRetries: 0,
+                    serviceLabel: "Coze",
+                    badRequestLabel: "获取 Coze 智能体信息失败",
+                }) as Record<string, any>;
                 const data = this.unwrapResponse<Record<string, any>>(payload);
                 return this.mapBotInfo(data, botId);
             } catch (error) {

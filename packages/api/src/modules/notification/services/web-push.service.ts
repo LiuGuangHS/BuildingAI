@@ -83,6 +83,10 @@ function normalizeVapidSubject(value?: string | null) {
     const trimmed = value?.trim();
     if (!trimmed) return null;
 
+    if (/^mailto:[^@\s]+@[^@\s]+$/i.test(trimmed)) {
+        return trimmed;
+    }
+
     try {
         const url = new URL(trimmed);
         if (url.protocol !== "http:" && url.protocol !== "https:") return null;
@@ -231,9 +235,6 @@ export class WebPushService {
             await assertSafePushEndpoint(subscription.endpoint);
             const keys = await this.getVapidKeys();
             const vapidSubject = await this.getVapidSubject();
-            if (!vapidSubject) {
-                throw new Error("Web Push VAPID subject requires site URL");
-            }
             webPush.setVapidDetails(vapidSubject, keys.publicKey, keys.privateKey);
 
             await webPush.sendNotification(
@@ -283,6 +284,8 @@ export class WebPushService {
 
     private async getVapidSubject() {
         const siteUrl = await this.dictService.get<string>("url", "", "webinfo");
-        return normalizeVapidSubject(siteUrl) || normalizeVapidSubject(process.env.APP_DOMAIN);
+        return normalizeVapidSubject(siteUrl)
+            || normalizeVapidSubject(process.env.APP_DOMAIN)
+            || "mailto:webpush@echoflow.cn";
     }
 }

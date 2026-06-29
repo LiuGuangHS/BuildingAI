@@ -47,6 +47,8 @@ export {
     type CustomProviderSettings,
     deepseek,
     type DeepSeekProviderSettings,
+    fal,
+    type FalProviderSettings,
     giteeAi,
     type GiteeAIProviderSettings,
     google,
@@ -121,6 +123,7 @@ export {
     getProviderForEmbedding,
     getProviderForImage,
     getProviderForModeration,
+    getProviderForVideo,
     getProviderForRerank,
     getProviderForSpeech,
     getProviderForText,
@@ -132,6 +135,7 @@ export {
     type ProviderRerankConfig,
     type ProviderSpeechConfig,
     type ProviderTranscriptionConfig,
+    type ProviderVideoConfig,
 } from "./utils/get-provider";
 export * from "./utils/mcp";
 export * from "./utils/text-with-usage";

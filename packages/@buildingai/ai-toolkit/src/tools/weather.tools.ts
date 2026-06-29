@@ -65,8 +65,8 @@ async function geocodeCity(
             `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=${language}`,
             {
                 headers: {
-                    "User-Agent": "buildingai/1.0 (buildingai@buildingai.com)",
-                    Referer: "https://buildingai.com",
+                    "User-Agent": "echoflowai/1.0 (support@echoflow.cn)",
+                    Referer: "https://echoflow.cn",
                 },
             },
             1,

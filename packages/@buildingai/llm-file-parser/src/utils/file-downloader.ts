@@ -23,7 +23,7 @@ export async function downloadFile(
         const response = await fetch(url, {
             signal: controller.signal,
             headers: {
-                "User-Agent": "BuildingAI-LLMFileParser/1.0",
+                "User-Agent": "EchoFlowAI-LLMFileParser/1.0",
             },
         });
 

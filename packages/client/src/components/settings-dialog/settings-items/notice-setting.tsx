@@ -44,6 +44,19 @@ function serializeSubscription(subscription: PushSubscription) {
   };
 }
 
+function toBytes(source: BufferSource) {
+  if (source instanceof ArrayBuffer) return new Uint8Array(source);
+  return new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+}
+
+function usesApplicationServerKey(subscription: PushSubscription, key: Uint8Array) {
+  const existingKey = subscription.options.applicationServerKey;
+  if (!existingKey) return false;
+
+  const bytes = toBytes(existingKey);
+  return bytes.length === key.length && bytes.every((value, index) => value === key[index]);
+}
+
 const NoticeSetting = () => {
   const { isLogin } = useAuthStore((state) => state.authActions);
   const { websiteConfig } = useConfigStore((state) => state.config);
@@ -70,12 +83,15 @@ const NoticeSetting = () => {
   );
   const subscribeMutation = useSubscribeNotificationPushMutation({
     onSuccess: () => toast.success("应用通知已开启"),
+    onError: (error: Error) => toast.error(error.message || "开启应用通知失败"),
   });
   const unsubscribeMutation = useUnsubscribeNotificationPushMutation({
     onSuccess: () => toast.success("应用通知已关闭"),
+    onError: (error: Error) => toast.error(error.message || "关闭应用通知失败"),
   });
   const testMutation = useCreateTestNotificationMutation({
-    onSuccess: () => toast.success("测试通知已发送"),
+    onSuccess: () => toast.success("测试通知已发送，请留意系统通知"),
+    onError: (error: Error) => toast.error(error.message || "发送测试通知失败"),
   });
   const updatePreferencesMutation = useUpdateNotificationPreferencesMutation({
     onSuccess: () => toast.success("通知偏好已保存"),
@@ -105,14 +121,20 @@ const NoticeSetting = () => {
       return;
     }
 
+    const applicationServerKey = urlBase64ToUint8Array(publicKey);
     const registration = await navigator.serviceWorker.ready;
     const existing = await registration.pushManager.getSubscription();
+    const canReuseExisting = Boolean(existing && usesApplicationServerKey(existing, applicationServerKey));
+    if (existing && !canReuseExisting) {
+      await existing.unsubscribe();
+    }
     const subscription =
-      existing ??
-      (await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      }));
+      existing && canReuseExisting
+        ? existing
+        : await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey,
+          });
 
     await subscribeMutation.mutateAsync(serializeSubscription(subscription));
   };
@@ -130,6 +152,14 @@ const NoticeSetting = () => {
     } else {
       void disablePush();
     }
+  };
+
+  const handleTestNotification = () => {
+    if (!enabled) {
+      toast.error("请先开启浏览器通知");
+      return;
+    }
+    testMutation.mutate();
   };
 
   const handleSceneChange = (sceneCode: string, checked: boolean) => {
@@ -184,9 +214,9 @@ const NoticeSetting = () => {
           <Button
             variant="ghost"
             size="sm"
-            disabled={!isLogin()}
+            disabled={!isLogin() || !enabled}
             loading={testMutation.isPending}
-            onClick={() => testMutation.mutate()}
+            onClick={handleTestNotification}
           >
             <Send className="size-4" />
             发送测试

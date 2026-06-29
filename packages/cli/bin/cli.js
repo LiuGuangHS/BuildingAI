@@ -26,11 +26,11 @@ const __dirname = path.dirname(__filename);
 
 const program = new Command();
 
-program.name("buildingai").description("BuildingAI CLI tool").version("0.0.1");
+program.name("buildingai").description("EchoFlowAI CLI tool").version("0.0.1");
 
 program
     .command("setup")
-    .description("Set up the BuildingAI project environment")
+    .description("Set up the EchoFlowAI project environment")
     .action(() => {
         // Invoke setup.js (executable under ESM as well)
         const setupProcess = spawn("node", [path.join(__dirname, "setup.js")], {

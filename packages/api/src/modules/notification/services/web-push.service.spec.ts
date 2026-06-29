@@ -1,7 +1,17 @@
 import { lookup } from "node:dns/promises";
 import type { LookupAddress } from "node:dns";
 
+import { WebPushService } from "./web-push.service";
 import { assertSafePushEndpoint } from "./web-push-endpoint.util";
+
+jest.mock("web-push", () => ({
+    __esModule: true,
+    default: {
+        generateVAPIDKeys: () => ({ publicKey: "public-key", privateKey: "private-key" }),
+        setVapidDetails: jest.fn(),
+        sendNotification: jest.fn(),
+    },
+}));
 
 jest.mock("@buildingai/errors", () => ({
     HttpErrorFactory: {
@@ -25,6 +35,40 @@ const mockedLookup = lookup as jest.MockedFunction<typeof lookup>;
 const mockLookupAddresses = (addresses: LookupAddress[]) => {
     mockedLookup.mockResolvedValue(addresses as unknown as Awaited<ReturnType<typeof lookup>>);
 };
+
+function createWebPushService(siteUrl: string | null, appDomain?: string) {
+    const dictService = {
+        get: jest.fn(async (key: string, fallback: unknown) => (key === "url" ? siteUrl : fallback)),
+        set: jest.fn(),
+    };
+    const service = new WebPushService(
+        {} as ConstructorParameters<typeof WebPushService>[0],
+        dictService as unknown as ConstructorParameters<typeof WebPushService>[1],
+    );
+    const getSubject = () =>
+        (service as unknown as { getVapidSubject: () => Promise<string> }).getVapidSubject();
+
+    return {
+        getSubject,
+        withAppDomain: async () => {
+            const original = process.env.APP_DOMAIN;
+            if (appDomain === undefined) {
+                delete process.env.APP_DOMAIN;
+            } else {
+                process.env.APP_DOMAIN = appDomain;
+            }
+            try {
+                return await getSubject();
+            } finally {
+                if (original === undefined) {
+                    delete process.env.APP_DOMAIN;
+                } else {
+                    process.env.APP_DOMAIN = original;
+                }
+            }
+        },
+    };
+}
 
 describe("assertSafePushEndpoint", () => {
     beforeEach(() => {
@@ -63,5 +107,25 @@ describe("assertSafePushEndpoint", () => {
         await expect(assertSafePushEndpoint("https://fcm.googleapis.com/fcm/send/test")).rejects.toThrow(
             "不能指向本机或内网",
         );
+    });
+});
+
+describe("WebPushService VAPID subject", () => {
+    it("uses configured site URL first", async () => {
+        const { getSubject } = createWebPushService("https://ai.example.com/app");
+
+        await expect(getSubject()).resolves.toBe("https://ai.example.com");
+    });
+
+    it("falls back to APP_DOMAIN", async () => {
+        const { withAppDomain } = createWebPushService("", "https://ai.example.com");
+
+        await expect(withAppDomain()).resolves.toBe("https://ai.example.com");
+    });
+
+    it("keeps web push working when no domain is configured", async () => {
+        const { withAppDomain } = createWebPushService("");
+
+        await expect(withAppDomain()).resolves.toBe("mailto:webpush@echoflow.cn");
     });
 });

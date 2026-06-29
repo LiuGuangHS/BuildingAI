@@ -51,7 +51,7 @@ import { AuthWebController } from "./controller/web/auth.controller";
             imports: [ConfigModule],
             inject: [ConfigService],
             useFactory: () => ({
-                secret: process.env.JWT_SECRET || "BuildingAI",
+                secret: process.env.JWT_SECRET || "EchoFlowAI",
                 signOptions: {
                     expiresIn: (process.env.JWT_EXPIRES_IN as StringValue) || "24h",
                 },

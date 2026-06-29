@@ -8,4 +8,4 @@ export const messages: LocaleMessages = {
   "zh-CN": zhCN,
 };
 
-export const defaultLocale = "en-US";
+export const defaultLocale = "zh-CN";

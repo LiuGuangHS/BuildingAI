@@ -4,6 +4,7 @@
 
 - [核心边界](#核心边界)
 - [文档治理](#文档治理)
+- [整合优化收口](#整合优化收口)
 - [主系统二开决策](#主系统二开决策)
 - [官方依据](#官方依据)
 - [工作区配置](#工作区配置)
@@ -56,7 +57,25 @@
 | 更新时机 | 发现更好的插件开发规范、组件使用约束、安全边界、验证流程、宿主集成经验或用户端文案规则时，及时更新本文件；发现插件特有经验时更新该插件 README。 |
 | 计划粒度 | 插件 README 的后续任务必须能直接驱动开发，至少包含范围、文件、验收、验证命令和阻塞条件；不要只写“优化 UI”“继续完善”“做 smoke”这类不可执行句子。 |
 
-插件 README 的“下一步”只记录仍真实存在的产品、技术、验证缺口和执行顺序；已经通过代码、测试或浏览器验证落地的临时任务要合并进“当前能力/验证”并从待办里移除或标记已落地，避免旧计划长期误导后续开发。每次完成设计、开发、浏览器 QA、构建发布或审查修复后，都要同步检查对应 README 的“当前能力”“开发与验证”“已知风险”“下一步”是否仍准确；如果临时文档、旧计划或外部参考与 `AGENTS.md` / README 冲突，以 `AGENTS.md` / README 为准并立即收口修正。
+插件 README 的“下一步”只记录仍真实存在的产品、技术、验证缺口和执行顺序；已经通过代码、测试或浏览器验证落地的临时任务要合并进“当前能力/验证”并从待办里移除或标记已落地，避免旧计划长期误导后续开发。每次完成设计、开发、浏览器 QA、构建发布或审查修复后，都要同步检查对应 README 的“当前能力”“开发与验证”“已知风险”“下一步”是否仍准确；如果临时文档、旧计划或外部参考与 `AGENTS.md` / README 冲突，以 `AGENTS.md` / README 为准并立即收口修正。交付前必须把文档同步作为完成条件之一；若本次改动不需要更新 README/AGENTS，交付说明要明确写“文档无需更新”的原因。
+
+## 整合优化收口
+
+当前 EchoFlow 插件已经形成稳定骨架：根 `AGENTS.md` 只沉淀跨插件共性，插件 README 只写本插件差异、当前状态、验证证据、真实风险和可执行下一步；不要在每个 README 里重复整套通用规范长文。发现五个插件都在重复的规则，优先上提到本节或对应主系统/SDK 章节，再让 README 只保留插件自己的例外和证据。
+
+| 方向 | 收口规则 |
+|---|---|
+| 事实源 | 全仓规则归 `AGENTS.md`，插件事实归 README，测试锁边界；不要让 `docs/`、计划、截图说明或外部参考继续承担事实源。 |
+| 元信息 | `manifest.json`、`package.json`、`extensions/extensions.json` 和安装记录保持 identifier/name/version/icon/author/engine 一致；用户可见 name/description 使用业务语境，不用泛 AI 壳。 |
+| Web/Console | Web serializer 默认白名单 public 字段；Console 才能展示排障字段、raw payload、Provider、Secret、任务 ID、管理员备注或退款异常。 |
+| 前端外壳 | 插件默认是主系统 iframe + RootLayout 内的业务面板；不重复账号、导航、余额、全局统计、完整 App Header 或营销 Hero。 |
+| UI/CSS | Button/Card/Tabs/Dialog/Label/Alert/Skeleton/Progress 等先用主系统组件和 Tailwind；CSS 只保留业务画布、正文编辑器、媒体预览、游戏舞台和响应式兜底。 |
+| 异步链路 | 付费或长流程默认接主系统计费、限流、队列、通知和锁内终态保护；失败退款按账务事实说话，不在 README 或用户端提前宣称闭环。 |
+| 安全 helper | JSON、Provider HTTP、Base URL、公网 URL、下载、Storage、Rate Limit、Billing、Notification 优先用公开 SDK/helper；不要为了 import 好看在插件内包一层无业务差异的转口。 |
+| 测试 | 边界测试优先锁 public/private 字段、manifest/package/registry、脚本、发布包、关键禁词和核心语义；普通文案不要大面积逐字复刻，避免测试脆弱化。 |
+| 下一步 | README 待办必须包含范围、文件/入口、步骤、验收和阻塞条件；已 ready 的事实移到“当前能力/验证”，不要在“下一步”重复。 |
+
+适合继续上提到共享 SDK/测试工具的重复项：manifest/package/registry 一致性 helper、public serializer 白名单 helper、release allowlist 检查、队列恢复/终态保护/退款归因骨架，以及 SSRF/Provider URL 安全测试 helper。只有两三个插件重复但业务细节不同的逻辑，先写 AGENTS 规则，不急着抽象代码。
 
 ## 主系统二开决策
 
@@ -67,7 +86,7 @@
 | 插件业务边界 | EchoFlow 具体业务默认落在 `extensions/echoflow-*`。主系统不得承载插件私有默认场景、私有模型协议、私有业务表或私有运营内容；发现后迁回插件注册、seed、catalog 或安装流程。 |
 | 主系统服务复用 | 主系统公共模块复用复杂服务时，优先导入提供完整依赖并导出该服务的模块；不要在消费模块里重新裸声明 `AuthService`、计费、通知、Secret、上传、队列等带仓储、权限或外部依赖的服务，避免编译通过但 Nest 启动时 DI 缺依赖。 |
 | SDK 能力 | 主系统新增或修复插件 SDK 能力时，同步源码导出、公开 exports、`dist` 类型产物和调用方验证；插件不得引用只存在于源码但未进入公开 exports 的符号。 |
-| 品牌兜底 | 用户可见的主系统通知、PWA、设置页和站点名 fallback 使用 `EchoFlowAI`。内部协议名、兼容事件名和历史 channel 字符串可保留 `buildingai:*`，除非另有迁移方案。 |
+| 品牌兜底 | 用户可见的主系统通知、PWA、设置页、CLI/Docker 启动文案和站点名 fallback 使用 `EchoFlowAI`；中文公开文案默认使用中文，可按 i18n 切换，不把英文后端错误直透给用户。Web Push 兜底 subject 使用 `mailto:webpush@echoflow.cn`。内部协议名、包名、兼容事件名和历史 channel 字符串可保留 `buildingai:*` / `@buildingai/*`，除非另有迁移方案；只改用户可见的 BuildingAI/上游品牌，不重命名通用 `logo.png`、`logo-full.png` 这类资产文件。 |
 | 二开版本 | EchoFlow 主系统二开版本使用合法 semver 预发布号，例如 `26.1.2-rc.2`；不要使用 `26.1.2rc` 或 `+echoflow.N` 这类升级器不稳定或过长的版本。 |
 
 上游同步前按以下清单复核：确认 `upstream` 只读和 `remote.upstream.pushurl=DISABLED_DO_NOT_PUSH_TO_UPSTREAM`；对主系统 diff 分类为官方恢复、EchoFlow 公共能力、插件私有业务、构建/品牌资产；插件业务如果出现在 `packages/` 或主系统 seed，必须记录平台公共性原因，没有公共性就迁回插件；合并后运行通知边界测试、SDK build、客户端 build 和相关插件 check-types/build。
@@ -79,11 +98,19 @@
 - 文档入口：`https://doc.buildingai.cc/7949221m0`
 - 二开教程：`https://doc.buildingai.cc/8849389m0`
 - 插件与框架：`https://doc.buildingai.cc/75445077f0`
+- 技术规范：`https://doc.buildingai.cc/7977534m0`
 - 应用开发：`https://doc.buildingai.cc/7977732m0`
+- 本地开发：`https://doc.buildingai.cc/7977674m0`（若证书或索引不可用，按官方“框架开发/技术规范/前端开发”相邻文档与本仓库脚本核对）
 - Extension SDK：`https://doc.buildingai.cc/8555126m0`
-- 插件清单、后端、前端、计费、AI、Seeds、Upgrade、构建发布：`https://doc.buildingai.cc/8555110m0` 起的插件文档组
+- 插件模板结构：`https://doc.buildingai.cc/7977761m0`
+- 插件前端开发：`https://doc.buildingai.cc/8555121m0`
 - 插件前端组件与工具：`https://doc.buildingai.cc/8593532m0`
 - 插件后端工具与封装：`https://doc.buildingai.cc/8593545m0`
+- 插件计费接入：`https://doc.buildingai.cc/8555133m0`
+- 插件升级开发：`https://doc.buildingai.cc/8556434m0`
+- 插件构建与发布：`https://doc.buildingai.cc/8555193m0`
+- 插件打包发布：`https://doc.buildingai.cc/7977779m0`
+- AI SDK：`https://doc.buildingai.cc/8560157m0`
 
 开发插件前优先对照官方文档、`templates/extension-starter/`、`extensions/simple-blog/` 和相关 SDK 参考。
 
@@ -94,7 +121,7 @@
 | 主题 | 规则 |
 |---|---|
 | catalog 版本 | 公共依赖版本通过 `catalogs`（`api`、`dev`、`web`）统一管理。插件 `package.json` 必须用 `catalog:api`/`catalog:dev`/`catalog:web` 引用，禁止硬编码版本号或在插件里维护独立版本。 |
-| catalog 新增 | 新增 catalog 条目前先检查是否已有同名条目；多个插件需要同一新依赖时，先加 catalog 再让插件引用；单插件私有依赖（如 echoflow-image 的 `tldraw`、echoflow-contract-generation 的 `docx`、`platejs`）可直接硬编码版本，不进 catalog。 |
+| catalog 新增 | 新增 catalog 条目前先检查是否已有同名条目；多个插件需要同一新依赖时，先加 catalog 再让插件引用；单插件私有依赖（如 echoflow-image 的 `tldraw`、echoflow-contract-generation 的 `docx`）可直接硬编码版本，不进 catalog。 |
 | catalog 分组 | `catalog:api` 放 NestJS/BullMQ/后端运行时依赖；`catalog:web` 放 React/Vue/前端 UI/构建依赖；`catalog:dev` 放类型检查、测试、格式化、CLI 工具等跨前后端的开发依赖。`vite` 同时出现在 `catalog:dev` 和 `catalog:web` 时版本保持一致。 |
 | pnpm 配置位置 | pnpm 10+ 不再读取根 `package.json` 的 `pnpm.overrides`、`pnpm.peerDependencyRules`、`pnpm.onlyBuiltDependencies` 字段，这些必须全部在 `pnpm-workspace.yaml` 中维护；新增或调整时写清原因和预期移除时机。根 `package.json` 顶层 npm 标准 `overrides` 字段 pnpm 仍读取，但新条目优先写入 `pnpm-workspace.yaml` 统一管理。 |
 | overrides 强制版本 | `pnpm-workspace.yaml` 的 `overrides` 会全局强制版本（例如 `vite: 8.0.0`、`zod: ^4.3.6`），添加时必须注释说明原因（主系统要求、安全修复、peer dep 冲突等），并在主系统版本升级后复核是否仍有必要。overrides 版本与对应 catalog 版本不一致时，overrides 生效，会覆盖 catalog 版本——此时需同步更新 catalog 或注释说明差异原因。 |
@@ -196,7 +223,7 @@ EchoFlow 业务插件 devDependencies 最小基线（`catalog:*` 版本由 pnpm-
 | Controller | Web API 用 `@ExtensionWebController()`，Console API 用 `@ExtensionConsoleController()`。 |
 | 装饰器 | 插件 Controller/Entity 装饰器从 `@buildingai/core/decorators` 导入；通用装饰器如 `Public`、`Playground`、`BuildFileUrl`、`SkipTransform` 从 `@buildingai/decorators` 导入。 |
 | 依赖 | 优先使用 `@buildingai/extension-sdk`、`@buildingai/base`、`@buildingai/core/decorators`、`@buildingai/decorators`、`@buildingai/db`、`@buildingai/dto`、`@buildingai/pipe`、`@buildingai/errors`、`@buildingai/utils`。 |
-| SDK 导出 | 主系统新增或修复插件 SDK 能力时，同步源码导出、`dist` 类型产物和调用方验证；插件不得引用只存在于源码但未进入公开 exports 的符号。 |
+| SDK 导出 | 主系统新增或修复插件 SDK 能力时，同步源码导出、`dist` 类型产物、公开 exports 和调用方验证；插件不得引用只存在于源码但未进入公开 exports 的符号。 |
 | 依赖收口 | 插件依赖与 devDependency 必须在源码或配置链路中找到实际用途；像 `vite-tsconfig-paths`、`babel-plugin-react-compiler` 这类模板残留，如果只是在 `package.json` 里挂着而没有被 `tsconfig` / `vite` / `test` 引用，就应清理。 |
 | Provider HTTP | 上游模型 JSON/text 请求优先复用 `@buildingai/extension-sdk` 的 `requestProviderText` / `requestProviderJson` / `testProviderJsonEndpoint` / `normalizeProviderBaseUrl` / `safeJsonParse`；外部 http(s) 二进制资源下载优先复用 `downloadPublicHttpUrl()` 的 DNS 绑定、跳转、超时和大小限制；插件只保留协议组装、业务错误文案、能力映射、MIME/扩展名和业务文件规则。 |
 | SDK Helper 引用 | 插件内多个文件需要 `safeJsonParse`、`buildDefinedWhere`、URL 校验、provider HTTP、下载器、限流、计费或通知 helper 时，调用方直接从 `@buildingai/extension-sdk`、`@buildingai/extension-sdk/utils/pure` 或主系统公开包导入；不要通过某个插件薄封装文件顺带转口，避免源码可用但公开导出或类型产物断裂。纯解析、序列化、view-model 或测试边界文件优先用 `utils/pure`；已经依赖 Nest/DB/AI 模块的业务 service 可以继续用 SDK 根入口，不为 import 美化制造无意义 churn。 |
@@ -233,7 +260,7 @@ EchoFlow 业务插件 devDependencies 最小基线（`catalog:*` 版本由 pnpm-
 |---|---|
 | 入口 | 前端入口放 `src/web/main.tsx`。 |
 | 路由 | 优先用 `@buildingai/web-core` 的 `defineRouteOption()`；复杂 Console 管理端使用 `consoleRoutes` + `consoleMenus` 多页面。 |
-| HTTP | 优先用 `@buildingai/services` 的 `createPluginHttpClients()`，Web 调 Web API，Console 调 Console API。 |
+| HTTP | 优先用 `@buildingai/services` 的 `createPluginHttpClients()`，Web 调 Web API，Console 调 Console API；不要在插件里手写 `/extension/{id}`、`/api`、`/consoleapi` 前缀拼接，避免 iframe、开发端口和生产 base path 分裂。 |
 | Service | 建议分为 `src/web/services/web/`、`src/web/services/console/`、`src/web/services/types/`。 |
 | React Query | 插件入口和自建 `queryClient` 优先从 `@buildingai/services` 使用已公开导出的 `QueryClient` / `QueryClientProvider`；`useQuery`、`useMutation` 等 hook 若主系统尚未公开再导出，可继续从 `@tanstack/react-query` 导入，不为此 patch 主系统。 |
 | 浏览器持久化/JSON | 插件需要 `localStorage` / `sessionStorage` 或 Web 运行时 JSON 容错解析时，优先从 `@buildingai/stores` 使用 `getLocalStorage()` / `getSessionStorage()` / `safeJsonParse()` / `safeJsonStringify()`；Console JSON 配置编辑器也走共享安全解析，不在插件运行时代码里重复手写存储适配和裸 `JSON.parse` 容错。 |
@@ -264,6 +291,8 @@ EchoFlow 业务插件 devDependencies 最小基线（`catalog:*` 版本由 pnpm-
 设计/实现过程中的草稿计划、参考图、浏览器 QA checklist、临时截图说明和一次性分析文档只作为执行辅助；交付前把仍有效的规范、边界、验证结论、设计取舍和剩余风险合并进 `AGENTS.md` 或对应插件 `README.md`，并清理本人创建的临时脚本和临时文档，避免长期维护第二套散落文档。参考图可以保留为插件静态发布资产或 README 事实的一部分，但不能成为 README 之外的长期任务看板。插件 README 应记录该插件的业务边界、AI/计费/安全能力状态、前端嵌入约束、验证命令和当前缺口；根 `AGENTS.md` 只沉淀跨插件通用规则。浏览器 QA 检查 React lazy route 或 Suspense 页面时，必须等待 loading/skeleton 结束并确认业务标题/关键文案出现后再判断视觉状态；短暂骨架态不能当作白屏或通过证据。浏览器 QA 还必须先用 HTTP 或页面标题确认当前端口服务确实属于被测插件，例如根路径、HTML title、Vite base 和业务文案都匹配 `identifier`；不要把其他插件占用的 dev server、主系统登录跳转错误页或浏览器 `data:` 错误页当作当前插件的视觉证据。
 
 Docker 验证若主站 node 容器长时间未监听端口，先区分业务启动错误和宿主挂载阻塞：检查 PM2 error 日志、API 进程状态、`/proc/<pid>/wchan` 和 `/proc/net/tcp`。若进程处于 `D` 状态且 `wchan` 为 `p9_client_rpc`，这是 Docker Desktop / WSL 访问 Windows 工作区挂载的内核等待，不能归因于插件业务逻辑或 Nest DI；应记录为环境验证阻塞，待 Docker/WSL/文件挂载恢复后再做浏览器 E2E。
+
+浏览器/preview 验证前必须确认 preview server 属于当前会话和当前项目页面：用 `preview_list`、页面 title、URL、关键业务文案和端口一起确认；如果 4090/4091 被其他会话占用，不要继续拿该页面当证据，先说明阻塞或换端口配置。
 
 ## Web 与 Console 双入口
 
@@ -336,7 +365,8 @@ AI 修复重试、格式修复结果、失败归因、退款异常、Provider �
 | 表结构 | 写插件 migration：`extensions/<identifier>/src/api/db/migrations/`。 |
 | 数据修复 | 写 Upgrade：`src/api/upgrade/<version>/index.ts`。 |
 | 边界 | 不把表结构修改塞进 Upgrade，不把一次性历史修复写进正常 service。 |
-| 首版 | 当前未上线插件可直接调整 `0.0.1` migration/upgrade、实体和默认数据，不保留本地中间态旧字段兼容层。 |
+| 构建识别 | 官方升级流程只识别构建产物，写完 `src/api/upgrade/<version>/index.ts` 或 migration 后必须运行插件 API 构建，确认 `build/upgrade/<version>/index.js` 和 `build/db/migrations/*` 存在；不要只改源码就启动主系统验证。 |
+| 首版 | 当前未上线插件可直接调整 `0.0.1` migration/upgrade、实体和默认数据，不保留本地中间态旧字段兼容层；但本地库已执行过旧升级脚本时，验证前要考虑 `extension_versions` / migrations history 的本地状态。 |
 | Seeds | 只负责首次安装初始化数据，必须可重复执行并用 `shouldRun()` 或唯一键避免重复。 |
 | 静态文件 | 随发布包携带的静态文件放 `storage/static`；运行时上传/生成文件放 `storage/uploads` 等运行目录。 |
 | 系统运行时目录 | 主系统生成的安装/版本标记放 `storage/data`，数据库备份放 `storage/backups`；不要在仓库根目录生成 `data/` 或 `backups/`。 |
@@ -370,7 +400,7 @@ AI 修复重试、格式修复结果、失败归因、退款异常、Provider �
 - 经营游戏首屏在 Web API 或旧存档列表暂不可用时仍应展示可玩的场景预览、HUD、核心入口和玩家可读服务状态；服务异常说明也应使用开张、回到旧档、恢复小镇等玩家语境，不要写成创建、读取、加载、刷新等普通应用流程；不要因为后端未 ready 就白屏、长时间 loading 或只显示故障式错误。
 - 经营游戏降级状态下，不可用的创建、生成或行动入口应转为等待态、重试命令或明确不可行动原因；不要保留看似可成功但必然触发网络失败的主按钮。
 - 经营游戏首屏创建、恢复存档和重连服务的加载态也必须写成玩法对象，例如小镇开张中、正在翻看旧存档、重连镇务中；不要只写“创建中”“读取中”“连接中”这类普通应用状态。
-- 经营游戏首屏的命令预览不能只是静态词条；应展示行动用途、收益预览、解锁或日结提示，并通过可访问名称保留完整说明。
+- 经营游戏降级首屏的命令预览不能只是静态词条；应展示行动用途、收益预览、解锁或日结提示，并通过可访问名称保留完整说明。
 - 经营游戏新手首屏必须给出一屏内可理解的第一分钟目标，例如三步开张路线、可得奖励或记忆影响；不要只展示品牌标题、氛围文案和开始按钮。经营游戏新存档主 CTA 应写成开张、启程、经营等玩家动作，例如“开张小镇”，不要写成“创建小镇”“新建存档”这类数据操作。
 - 游戏化 UI 的奖励、推荐、热点、任务、抽屉和弹层动效必须支持 prefers-reduced-motion；减少动态效果时保留信息层级和视觉状态，但停止循环动画、弹跳、横向滑入或大幅位移。
 - 自定义游戏抽屉或弹层必须具备 dialog 语义、标题关联、打开后自动聚焦、关闭后恢复触发点焦点、Tab 焦点循环、背景滚动锁定、Escape 关闭、可聚焦面板入口、带业务对象或面板标题的关闭按钮、遮罩点击关闭和内部点击防冒泡；不要只做视觉遮罩导致键盘或鼠标用户被困住，也不要把关闭按钮的可访问名称只写成“关闭”。
@@ -396,7 +426,7 @@ AI 修复重试、格式修复结果、失败归因、退款异常、Provider �
 
 ### 对话与记忆
 
-- 居民或 NPC 对话不能退化成普通表单；当存在记忆、偏好、约定或关键时刻时，用户端应提供可点选话题、角色回复气泡和清晰的额度/生成提示，让记忆成为可操作玩法。对话输入区必须说明正在给谁写话题，并提供居民化 placeholder、输入 aria-label 和聊天按钮可访问名称；对话提交按钮的可见文本也必须带当前对象或等待对象，例如“和小满聊天”“等小满回应”，不要只写“和居民聊天”“交流中”。
+- 居民或 NPC 对话不能退化成普通表单；当存在记忆、偏好、约定或关键时刻时，用户端应提供可点选话题、角色回复气泡和清晰的额度/生成提示，让记忆成为可操作玩法。居民聊天额度确认必须延续当前居民名。对话输入区必须说明正在给谁写话题，并提供居民化 placeholder、输入 aria-label 和聊天按钮可访问名称；对话提交按钮的可见文本也必须带当前对象或等待对象，例如“和小满聊天”“等小满回应”，不要只写“和居民聊天”“交流中”。
 - 居民、角色、伙伴、参谋或关键 NPC 图片加载失败时，fallback 必须继续使用业务角色样式、尺寸和语境，覆盖列表、地图热点、HUD、确认卡和策略面板等首屏路径；不要退回通用应用头像、裸首字母圆点、裸文字或脱离题材的占位壳。
 - 切换居民或 NPC 时必须清空上一位角色的输入和回复；生成或聊天成功后要用返回数据同步当前角色对象，避免旧气泡、旧关系或旧记忆显示到另一位角色上。
 - 角色/NPC 记忆分层保存长期摘要、偏好、约定、关键时刻和有限最近消息；传给 LLM 时使用白名单摘要和短窗口。
@@ -459,13 +489,13 @@ Windows PowerShell 下若 `pnpm --filter <identifier> build:*` 因 `sh is not re
 
 ## 环境基线
 
-- Node.js：要求 `>=22.20.x <23`；本仓库使用 nvm 管理 Node，根目录 `.nvmrc` 固定为 `22.23.0`。
-- Codex 桌面非交互 PowerShell 不保证自动切换 nvm 版本；若裸 `node -v` 命中全局 Node 24，不要误判为缺少 Node 22。先显式使用：`nvm use 22.23.0; node -v; corepack pnpm -v`。
+- Node.js：要求 `>=24.x`；本仓库使用 nvm 管理 Node，根目录 `.nvmrc` 固定为 `24`，Docker node 镜像也使用 Node 24。
+- Codex 桌面非交互 PowerShell 不保证自动切换 nvm 版本；若裸 `node -v` 命中旧版本，不要误判为项目问题。先显式使用：`nvm use 24; node -v; corepack pnpm -v`。
 - pnpm：项目声明 `pnpm@10.20.0`。
 - Docker：本机实测 Docker `29.5.3`、Compose `v5.1.4`。
 - Windows pnpm + Docker bind mount 会把 workspace 包内的 `node_modules` Junction 泄入 Linux 容器；凡 `nodejs` 服务会读取的 `packages/@buildingai/*/node_modules`，必须在 `docker-compose.yml` 用 anonymous volume 隔离，避免容器内解析到 `/mnt/host/...` 这类不可用宿主路径。
-- 官方建议本地开发优先使用 pnpm：根目录安装依赖后运行 `pnpm dev:main`，插件目录可运行 `pnpm dev`、`pnpm dev:web`、`pnpm dev:api`。
-- Docker 可用于基础依赖和完整环境验证：`docker compose up -d`，入口默认 `http://localhost:4090/install`。
+- 本地开发优先使用 pnpm：根目录安装依赖后运行 `pnpm dev:main`（并行启动 `dev:web` 与 `dev:api`），也可分别运行 `pnpm dev:web`、`pnpm dev:api`；插件目录可运行 `pnpm dev`、`pnpm dev:web`、`pnpm dev:api`。
+- Docker 可用于 Postgres/Redis 基础依赖和完整环境验证；本地 Node 开发时可停止 `buildingai-nodejs`，只保留 Docker Postgres/Redis，并把 `.env` 的 `DB_PORT`、`REDIS_PORT` 对齐 `docker ps` 暴露端口。
 - 手动路径：准备 PostgreSQL、Redis、主系统 `.env`，再运行 `pnpm install` 与 `pnpm start`。
 - 插件业务配置不放 `.env`，走管理员后台配置或主站 Secret。
 
@@ -475,7 +505,7 @@ Windows 与沙箱常见故障排查：
 - **pnpm install 报 `EEXIST: file already exists, junction` 或大量 `.ignored_*` 目录**：之前包管理器切换（npm/yarn → pnpm）或跨容器挂载遗留了失效 junction，执行 `pnpm store prune` 并手动删除 workspace 内 `.ignored_*` 前缀的空 junction 后重试。
 - **pnpm 告警 `The "pnpm" field in package.json is no longer read by pnpm`**：根 package.json 还残留 `pnpm.*` 字段，按"工作区配置"章节要求迁移到 `pnpm-workspace.yaml`。
 - **ERR_PNPM_CATALOG_NOT_FOUND**：插件引用了未在 pnpm-workspace.yaml catalogs 里定义的条目，在对应 catalog 分组补条目即可；不要绕过 catalog 写硬编码版本。
-- **Corepack 版本冲突**：若全局 node 是 v24 而项目要求 v22，必须先 `nvm use 22.23.0`；否则 corepack 可能拉错 pnpm shim，出现 `Unsupported engine` 或脚本找不到命令。
+- **Corepack 版本冲突**：若裸 `node -v` 不是 v24，先 `nvm use 24`；否则 corepack 可能拉错 pnpm shim，出现 `Unsupported engine` 或脚本找不到命令。
 
 ## 品牌静态资源
 

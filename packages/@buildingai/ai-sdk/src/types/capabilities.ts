@@ -4,6 +4,7 @@ export type ProviderCapability =
     | "speech"
     | "transcription"
     | "image"
+    | "video"
     | "moderation"
     | "rerank";
 
@@ -30,6 +31,10 @@ export const PROVIDER_CAPABILITIES: Record<
     image: {
         name: "Image Generation",
         description: "图像生成、编辑",
+    },
+    video: {
+        name: "Video Generation",
+        description: "视频生成",
     },
     moderation: {
         name: "Content Moderation",
@@ -62,6 +67,7 @@ export function createCapabilities(supported: ProviderCapability[]): ProviderCap
                 speech: supportedSet.has("speech"),
                 transcription: supportedSet.has("transcription"),
                 image: supportedSet.has("image"),
+                video: supportedSet.has("video"),
                 moderation: supportedSet.has("moderation"),
                 rerank: supportedSet.has("rerank"),
             };

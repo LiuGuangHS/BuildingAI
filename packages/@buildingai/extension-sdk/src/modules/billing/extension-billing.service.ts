@@ -85,7 +85,7 @@ export class ExtensionBillingService {
      * @param entityManager - Optional entity manager
      */
     async deductUserPower(opts: ExtensionPowerDeductionOptions, entityManager?: EntityManager) {
-        const extensionIdentifier = getExtensionIdentifierFromStack(["/build/modules/"]);
+        const extensionIdentifier = getExtensionIdentifierFromStack(["/build/modules/", "/src/api/modules/"]);
 
         if (!extensionIdentifier) {
             throw new Error("Extension not found");
@@ -117,7 +117,7 @@ export class ExtensionBillingService {
      * @param entityManager - Optional entity manager
      */
     async addUserPower(opts: ExtensionPowerDeductionOptions, entityManager?: EntityManager) {
-        const extensionIdentifier = getExtensionIdentifierFromStack(["/build/modules/"]);
+        const extensionIdentifier = getExtensionIdentifierFromStack(["/build/modules/", "/src/api/modules/"]);
 
         if (!extensionIdentifier) {
             throw new Error("Extension not found");

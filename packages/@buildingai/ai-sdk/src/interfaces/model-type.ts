@@ -5,6 +5,7 @@ export const MODEL_TYPES = {
     SPEECH_TO_TEXT: "speech2text",
     TEXT_EMBEDDING: "text-embedding",
     TEXT_TO_IMAGE: "text-to-image",
+    TEXT_TO_VIDEO: "text-to-video",
     TTS: "tts",
 } as const;
 
@@ -43,6 +44,11 @@ export const MODEL_TYPE_DESCRIPTIONS: Record<
         name: "图像生成",
         nameEn: "TEXT_TO_IMAGE",
         description: "文本生成图像",
+    },
+    [MODEL_TYPES.TEXT_TO_VIDEO]: {
+        name: "视频生成",
+        nameEn: "TEXT_TO_VIDEO",
+        description: "文本/图片生成视频",
     },
     [MODEL_TYPES.TTS]: {
         name: "语音合成",

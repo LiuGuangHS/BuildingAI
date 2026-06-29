@@ -40,7 +40,7 @@ function getVersionFromPackageJson(): string {
  */
 export const AppConfig: AppConfigType = {
     /** Application name */
-    name: "BuildingAI",
+    name: "EchoFlowAI",
 
     /** Application version */
     version: getVersionFromPackageJson(),

@@ -19,7 +19,7 @@ services:
             REDIS_PASSWORD: ${REDIS_PASSWORD:-}
             QUICK_START_MODE: ${QUICK_START_MODE:-false}
         command: >
-            sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then exec redis-server --requirepass "$$REDIS_PASSWORD"; else exec redis-server; fi'
+            sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then exec redis-server --bind 0.0.0.0 --requirepass "$$REDIS_PASSWORD"; else exec redis-server --bind 0.0.0.0; fi'
         ports:
             - "${REDIS_EXTERNAL_PORT:-}${REDIS_EXTERNAL_PORT:+:}6379"
         volumes:
@@ -124,11 +124,11 @@ services:
         command: |
             sh -c '
             set -e
-            echo "🚀 Starting BuildingAI container..."
+            echo "🚀 Starting EchoFlowAI container..."
 
-            if ! command -v curl >/dev/null 2>&1 || ! command -v pg_dump >/dev/null 2>&1; then
-            echo "🔧 Installing system dependencies (curl, postgresql-client)..."
-            apt-get update -qq && apt-get install -y -qq --no-install-recommends curl postgresql-client >/dev/null 2>&1
+            if ! command -v curl >/dev/null 2>&1 || ! command -v pg_dump >/dev/null 2>&1 || ! command -v ps >/dev/null 2>&1; then
+            echo "🔧 Installing system dependencies (curl, postgresql-client, procps)..."
+            apt-get update -qq && apt-get install -y -qq --no-install-recommends curl postgresql-client procps >/dev/null 2>&1
             fi
 
             if [ -n "$NPM_REGISTRY_URL" ]; then
@@ -165,7 +165,7 @@ services:
             echo "🔀 REDIS_HOST localhost -> redis (Docker network)"
             fi
 
-            echo "🎯 Starting BuildingAI..."
+            echo "🎯 Starting EchoFlowAI..."
             exec pnpm start --no-daemon
             '
         networks:

@@ -74,16 +74,23 @@ export class AppModule {
 
         const rootPath = shouldUseWebPath ? webPath : publicPath;
 
+        const webApiPrefix = process.env.VITE_APP_WEB_API_PREFIX || "/api";
+        const consoleApiPrefix = process.env.VITE_APP_CONSOLE_API_PREFIX || "/consoleapi";
+
         return {
             module: AppModule,
             imports: [
                 ServeStaticModule.forRoot({
                     rootPath,
                     exclude: [
-                        ...extensionsList.map((extension) => `/extension/${extension.identifier}`),
-                        ...extensionsList.map((extension) => `/${extension.name}`),
-                        process.env.VITE_APP_WEB_API_PREFIX,
-                        process.env.VITE_APP_CONSOLE_API_PREFIX,
+                        `${webApiPrefix}{/*path}`,
+                        `${consoleApiPrefix}{/*path}`,
+                        ...extensionsList.flatMap((extension) => [
+                            `/extension/${extension.identifier}`,
+                            `/${extension.name}`,
+                            `/${extension.name}${webApiPrefix}{/*path}`,
+                            `/${extension.name}${consoleApiPrefix}{/*path}`,
+                        ]),
                     ],
                 }),
                 ConfigModule.forRoot({

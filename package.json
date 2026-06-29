@@ -1,14 +1,14 @@
 {
     "name": "buildingai-monorepo",
-    "title": "BuildingAI",
+    "title": "EchoFlowAI",
     "version": "26.1.2-rc.4",
-    "description": "BuildingAI Monorepo",
+    "description": "EchoFlowAI Monorepo",
     "author": {
-        "name": "BuildingAI Teams",
-        "url": "https://www.buildingai.cc"
+        "name": "EchoFlow Team",
+        "url": "https://ai.echoflow.cn"
     },
     "license": "Apache-2.0",
-    "homepage": "https://www.buildingai.cc",
+    "homepage": "https://ai.echoflow.cn",
     "repository": {
         "type": "git",
         "url": "https://github.com/BidingCC/BuildingAI.git"
@@ -65,7 +65,7 @@
         "dev:desktop": "cd packages/client && pnpm run dev:desktop",
         "dev:api": "cd packages/api && pnpm run dev",
         "dev:web": "cd packages/client && pnpm run dev",
-        "dev:main": "cd packages/client && pnpm run dev && cd ../api && pnpm run dev",
+        "dev:main": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
         "build:desktop": "cd packages/client && pnpm run build:desktop",
         "build:api": "cd packages/api && pnpm run build",
         "build:web": "cd packages/client && pnpm run build:web",

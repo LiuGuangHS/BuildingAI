@@ -1,8 +1,8 @@
 {
     "name": "extension-starter",
     "version": "0.0.1",
-    "description": "BuildingAI extension starter template.",
-    "author": "BuildingAI Teams",
+    "description": "EchoFlowAI extension starter template.",
+    "author": "EchoFlow Team",
     "private": true,
     "main": "./manifest.json",
     "module": "./manifest.json",

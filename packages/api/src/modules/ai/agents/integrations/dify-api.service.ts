@@ -1,4 +1,5 @@
 import { HttpErrorFactory } from "@buildingai/errors";
+import { requestProviderJson } from "@buildingai/extension-sdk";
 import type { ThirdPartyIntegrationConfig } from "@buildingai/types/ai/agent-config.interface";
 import { Injectable, Logger } from "@nestjs/common";
 
@@ -128,24 +129,16 @@ export class DifyApiService {
         const url = `${normalized.baseURL}/info`;
 
         try {
-            const response = await fetch(url, {
+            const data = await requestProviderJson(url, {
                 method: "GET",
-                headers: this.buildHeaders(apiKey),
-            });
-
-            if (!response.ok) {
-                const text = await response.text();
-                throw HttpErrorFactory.badRequest(
-                    `获取 Dify 应用信息失败: HTTP ${response.status} ${text}`,
-                );
-            }
-
-            const data = (await response.json()) as Record<string, any>;
+                headers: this.buildHeaders(apiKey) as Record<string, string>,
+                timeoutMs: 30_000,
+                maxRetries: 0,
+                serviceLabel: "Dify",
+                badRequestLabel: "获取 Dify 应用信息失败",
+            }) as Record<string, any>;
             return this.mapAppInfo(data);
         } catch (error) {
-            if (error instanceof Error && error.message.startsWith("获取 Dify")) {
-                throw error;
-            }
             const msg = this.errMsg(error);
             this.logger.warn(`Dify app info request failed: ${url}, error=${msg}`);
             throw HttpErrorFactory.badRequest(`获取 Dify 应用信息失败: ${msg}`);
@@ -168,18 +161,14 @@ export class DifyApiService {
         const url = `${normalized.baseURL}/parameters`;
 
         try {
-            const response = await fetch(url, {
+            const data = await requestProviderJson(url, {
                 method: "GET",
-                headers: this.buildHeaders(apiKey),
-            });
-
-            if (!response.ok) {
-                const text = await response.text();
-                this.logger.warn(`Dify parameters request failed: HTTP ${response.status} ${text}`);
-                return { raw: {} };
-            }
-
-            const data = (await response.json()) as Record<string, any>;
+                headers: this.buildHeaders(apiKey) as Record<string, string>,
+                timeoutMs: 30_000,
+                maxRetries: 0,
+                serviceLabel: "Dify",
+                badRequestLabel: "获取 Dify 应用参数失败",
+            }) as Record<string, any>;
             return this.mapAppParameters(data);
         } catch (error) {
             this.logger.warn(`Dify parameters request failed: ${this.errMsg(error)}`);

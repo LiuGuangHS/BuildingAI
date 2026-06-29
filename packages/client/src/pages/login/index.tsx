@@ -57,7 +57,7 @@ const LoginPage = () => {
               <span className="text-xl font-bold">{websiteConfig?.webinfo.name}</span>
             </div>
           ) : (
-            <img className="h-10 w-auto object-contain" src="/logo-full.png" alt="清云AI" />
+            <img className="h-16 w-auto object-contain" src="/logo-full.png" alt="清云AI" />
           )}
         </a>
         <LoginForm />
