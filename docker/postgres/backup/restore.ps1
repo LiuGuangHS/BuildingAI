@@ -6,7 +6,16 @@ param(
 $ErrorActionPreference = "Stop"
 
 $backupDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$backupFilePath = Join-Path $backupDir $BackupFile
+$projectRoot = Resolve-Path (Join-Path $backupDir "..\..\..")
+$backupFilePath = $BackupFile
+if (-not [System.IO.Path]::IsPathRooted($backupFilePath)) {
+    $projectBackupPath = Join-Path $projectRoot $BackupFile
+    if (Test-Path $projectBackupPath) {
+        $backupFilePath = $projectBackupPath
+    } else {
+        $backupFilePath = Join-Path $backupDir $BackupFile
+    }
+}
 
 if (-not (Test-Path $backupFilePath)) {
     Write-Host "Error: Backup file not found: $backupFilePath"

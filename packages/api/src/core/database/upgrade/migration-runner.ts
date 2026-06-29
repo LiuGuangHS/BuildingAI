@@ -64,7 +64,7 @@ export class MigrationRunner {
         const dbPackagePath = require.resolve("@buildingai/db");
         const dbDistPath = path.dirname(dbPackagePath);
         this.migrationsDir = path.join(dbDistPath, "migrations");
-        this.versionsDir = path.join(process.cwd(), "data", "versions");
+        this.versionsDir = path.join(process.cwd(), "..", "..", "storage", "data", "versions");
     }
 
     /**
@@ -153,7 +153,7 @@ export class MigrationRunner {
     }
 
     /**
-     * Get existing versions from data/versions directory
+     * Get existing versions from storage/data/versions directory
      */
     private async getExistingVersions(): Promise<Set<string>> {
         try {

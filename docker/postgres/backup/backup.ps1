@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $backupDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$backupsDir = Join-Path $backupDir "backups"
+$projectRoot = Resolve-Path (Join-Path $backupDir "..\..\..")
+$backupsDir = Join-Path $projectRoot "storage\backups"
 
 if (-not (Test-Path $backupsDir)) {
     New-Item -ItemType Directory -Path $backupsDir -Force | Out-Null

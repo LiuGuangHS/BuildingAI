@@ -65,7 +65,6 @@ services:
             - buildingai-node-modules:/buildingai/node_modules
             - buildingai-pnpm-store:/pnpm-store
             - buildingai-turbo-cache:/root/.local/share/pnpm
-            - ./docker/postgres/backup/backups:/buildingai/backups
             - /buildingai/packages/api/node_modules
             - /buildingai/packages/cli/node_modules
             - /buildingai/packages/core/node_modules

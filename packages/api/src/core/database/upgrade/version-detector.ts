@@ -73,7 +73,7 @@ export class VersionDetector {
     private readonly packageJsonPath: string;
 
     constructor() {
-        this.versionsDir = path.join(process.cwd(), "data", "versions");
+        this.versionsDir = path.join(process.cwd(), "..", "..", "storage", "data", "versions");
         this.packageJsonPath = path.join(PROJECT_ROOT, "package.json");
     }
 
@@ -131,7 +131,7 @@ export class VersionDetector {
     }
 
     /**
-     * Get existing versions from data/versions directory
+     * Get existing versions from storage/data/versions directory
      */
     private async getExistingVersions(): Promise<Set<string>> {
         try {

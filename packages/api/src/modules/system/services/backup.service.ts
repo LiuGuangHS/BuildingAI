@@ -7,7 +7,7 @@ import { resolve } from "path";
 import { createGzip } from "zlib";
 import { pipeline } from "stream/promises";
 
-const BACKUP_DIR = resolve(process.cwd(), "..", "..", "backups");
+const BACKUP_DIR = resolve(process.cwd(), "..", "..", "storage", "backups");
 const BACKUP_CONFIG_GROUP = "db_backup_config";
 const BACKUP_SCHEDULE = "0 2 * * *";
 const BACKUP_FILENAME_REGEX = /^backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.sql\.gz$/;

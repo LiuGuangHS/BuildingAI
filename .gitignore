@@ -10,6 +10,10 @@ node_modules
 storage/*
 !storage/static
 
+# legacy runtime dirs
+/data/
+/backups/
+
 # Local env files
 .env
 .env.local

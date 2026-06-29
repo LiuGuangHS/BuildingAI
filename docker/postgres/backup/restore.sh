@@ -3,12 +3,20 @@ set -e
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <backup-file>"
-    echo "Example: $0 backups/backup_20260626_120000.sql.gz"
+    echo "Example: $0 storage/backups/backup_20260626_120000.sql.gz"
     exit 1
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_FILE="$SCRIPT_DIR/$1"
+PROJECT_ROOT="$SCRIPT_DIR/../../.."
+BACKUP_FILE="$1"
+if [[ "$BACKUP_FILE" != /* ]]; then
+    if [ -f "$PROJECT_ROOT/$BACKUP_FILE" ]; then
+        BACKUP_FILE="$PROJECT_ROOT/$BACKUP_FILE"
+    else
+        BACKUP_FILE="$SCRIPT_DIR/$BACKUP_FILE"
+    fi
+fi
 
 if [ ! -f "$BACKUP_FILE" ]; then
     echo "Error: Backup file not found: $BACKUP_FILE"
@@ -25,7 +33,7 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 echo "Stopping application container..."
-cd "$SCRIPT_DIR/../../.."
+cd "$PROJECT_ROOT"
 docker compose stop nodejs
 
 echo "Restoring database..."

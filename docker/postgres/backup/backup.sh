@@ -2,7 +2,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUPS_DIR="$SCRIPT_DIR/backups"
+PROJECT_ROOT="$SCRIPT_DIR/../../.."
+BACKUPS_DIR="$PROJECT_ROOT/storage/backups"
 
 mkdir -p "$BACKUPS_DIR"
 
@@ -12,7 +13,7 @@ BACKUP_FILE="$BACKUPS_DIR/backup_${TIMESTAMP}.sql.gz"
 echo "Starting PostgreSQL backup..."
 echo "Backup file: $BACKUP_FILE"
 
-cd "$SCRIPT_DIR/../../.."
+cd "$PROJECT_ROOT"
 docker exec buildingai-postgres pg_dump -U postgres -d buildingai | gzip > "$BACKUP_FILE"
 
 if [ $? -eq 0 ]; then

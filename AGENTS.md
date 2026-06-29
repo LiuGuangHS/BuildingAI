@@ -339,6 +339,7 @@ AI 修复重试、格式修复结果、失败归因、退款异常、Provider �
 | 首版 | 当前未上线插件可直接调整 `0.0.1` migration/upgrade、实体和默认数据，不保留本地中间态旧字段兼容层。 |
 | Seeds | 只负责首次安装初始化数据，必须可重复执行并用 `shouldRun()` 或唯一键避免重复。 |
 | 静态文件 | 随发布包携带的静态文件放 `storage/static`；运行时上传/生成文件放 `storage/uploads` 等运行目录。 |
+| 系统运行时目录 | 主系统生成的安装/版本标记放 `storage/data`，数据库备份放 `storage/backups`；不要在仓库根目录生成 `data/` 或 `backups/`。 |
 | 运行时文件 | 插件写入运行时生成文件时优先复用主系统 `FileStorageService.saveBuffer()` 并传入 `extensionId`，保留插件相对路径和公开 URL；不要在业务 service 里重复手写 `mkdir` / `writeFile` 根目录探测。 |
 | 大内容 | 历史记录存 URL、file ID 或相对路径，避免把大文件或 base64 放进数据库。 |
 | 删除保护 | `PENDING`、`PROCESSING`、导出中、审查中等状态默认禁止删除。 |
