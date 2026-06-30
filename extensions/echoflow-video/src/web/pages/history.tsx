@@ -3,9 +3,10 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
-import { ArrowLeft, Film } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@buildingai/ui/components/ui/tabs";
+import { ArrowLeft, History, SquareStack } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { ErrorState } from "../components/error-state";
@@ -26,6 +27,13 @@ export default function WebHistoryPage() {
     const [sortBy, setSortBy] = useState<"createdAt" | "updatedAt" | "completedAt" | "billingAmount">("createdAt");
     const pageSize = 12;
     const { data: models = [] } = useWebVideoModelOptionsQuery();
+
+    const location = useLocation();
+    const tabs = [
+        { label: "生成", path: "/" },
+        { label: "历史", path: "/history" },
+        { label: "短视频", path: "/studio" },
+    ] as const;
 
     const { data, isLoading, isError, refetch } = useWebVideoListQuery({
         page,
@@ -49,16 +57,26 @@ export default function WebHistoryPage() {
 
     return (
         <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-3 md:p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <Button variant="ghost" className="mb-2 w-fit" onClick={() => navigate("/")}>
+            <div className="flex flex-col gap-3 rounded-xl border bg-background/85 p-3 shadow-sm md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0 space-y-1">
+                    <h1 className="truncate text-lg font-semibold tracking-tight md:text-xl">视频历史</h1>
+                    <p className="truncate text-sm text-muted-foreground">检索生成记录，复用参数或进入详情。</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <Tabs value={activeTabValue(location.pathname)} onValueChange={(value) => navigate(value)}>
+                        <TabsList className="h-9" aria-label="视频工作区">
+                            {tabs.map((tab) => (
+                                <TabsTrigger key={tab.path} value={tab.path} className="gap-1.5 px-3">
+                                    {tab.label === "短视频" ? <SquareStack className="size-4" /> : tab.label === "历史" ? <History className="size-4" /> : null}
+                                    {tab.label}
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </Tabs>
+                    <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
                         <ArrowLeft className="size-4" />
-                        返回工作台
+                        返回生成
                     </Button>
-                    <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        <Film className="size-5 text-primary" />
-                        我的视频历史
-                    </h1>
                 </div>
             </div>
 
@@ -144,4 +162,10 @@ export default function WebHistoryPage() {
             )}
         </div>
     );
+}
+
+function activeTabValue(pathname: string) {
+    if (pathname.endsWith("/studio")) return "/studio";
+    if (pathname.endsWith("/history")) return "/history";
+    return "/";
 }

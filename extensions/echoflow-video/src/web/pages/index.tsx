@@ -2,12 +2,12 @@ import { useDocumentHead } from "@buildingai/hooks";
 import { createRequestId } from "@buildingai/http";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
-import { Film, History, RefreshCw, ShieldCheck, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Tabs, TabsList, TabsTrigger } from "@buildingai/ui/components/ui/tabs";
+import { History, RefreshCw, ShieldCheck, SquareStack } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-import { ErrorState } from "../components/error-state";
 import { GenerationForm } from "../components/generation-form";
 import { HistoryList } from "../components/history-list";
 import { VideoResult } from "../components/video-result";
@@ -21,12 +21,19 @@ import {
 } from "../services/web";
 import type { CreateVideoParams, VideoGeneration } from "../services/types/generation";
 
+const WORKBENCH_TABS = [
+    { label: "生成", path: "/" },
+    { label: "历史", path: "history" },
+    { label: "短视频", path: "studio" },
+] as const;
+
 export default function AIVideoIndexPage() {
     useDocumentHead({ title: "视频生成" });
 
     const [currentId, setCurrentId] = useState<string | undefined>();
     const [formInitialValues, setFormInitialValues] = useState<Partial<CreateVideoParams>>();
     const navigate = useNavigate();
+    const location = useLocation();
 
     const {
         data: models = [],
@@ -34,7 +41,11 @@ export default function AIVideoIndexPage() {
         isError: modelsError,
         refetch: refetchModels,
     } = useWebVideoModelOptionsQuery();
-    const { data: templateData, isError: templatesError, refetch: refetchTemplates } = useWebVideoTemplatesQuery({ page: 1, pageSize: 20 });
+    const {
+        data: templateData,
+        isError: templatesError,
+        refetch: refetchTemplates,
+    } = useWebVideoTemplatesQuery({ page: 1, pageSize: 20 });
     const {
         data: historyData,
         isLoading: historyLoading,
@@ -48,6 +59,18 @@ export default function AIVideoIndexPage() {
     const disabledReason = !modelsError && !modelsLoading && availableModelCount === 0
         ? "视频生成功能暂未开放，请稍后再来。"
         : undefined;
+    const recentHistory = useMemo(() => (historyData?.items ?? []).slice(0, 4), [historyData?.items]);
+
+    useEffect(() => {
+        if (templatesError) {
+            toast.error("无法读取视频模板", {
+                action: {
+                    label: "重试",
+                    onClick: () => refetchTemplates(),
+                },
+            });
+        }
+    }, [templatesError, refetchTemplates]);
 
     useEffect(() => {
         const reuseParams = readReuseParams();
@@ -94,79 +117,100 @@ export default function AIVideoIndexPage() {
     };
 
     return (
-        <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 p-3 md:p-4">
-            {modelsError ? (
-                <ErrorState title="加载生成规格失败" message="无法读取视频生成配置，请登录后重试。" onRetry={() => refetchModels()} />
-            ) : null}
-            {templatesError ? (
-                <ErrorState title="加载模板失败" message="无法读取视频模板。" onRetry={() => refetchTemplates()} />
-            ) : null}
-            <div className="flex flex-col gap-3 rounded-lg border bg-background/80 p-4 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0">
-                    <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight md:text-2xl">
-                        <Film className="size-5 text-primary" />
-                        视频生成
-                    </h1>
-                    <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                        输入画面想法或上传参考素材，提交后进入队列生成；完成后可在结果区和历史中查看。
-                    </p>
-                </div>
-                <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3 md:w-auto">
-                    <Badge variant={availableModelCount ? "default" : "secondary"} className="gap-1.5 px-2.5 py-1">
-                        <Sparkles className="size-3.5" />
-                        {modelsLoading ? "读取生成规格" : modelsError ? "读取失败" : availableModelCount ? `${availableModelCount} 个规格可用` : "暂未开放"}
-                    </Badge>
-                    <Badge variant="outline" className="gap-1.5 px-2.5 py-1">
-                        <RefreshCw className="size-3.5" />
-                        异步生成
-                    </Badge>
-                    <Badge variant="outline" className="gap-1.5 px-2.5 py-1">
-                        <ShieldCheck className="size-3.5" />
-                        上传校验
-                    </Badge>
-                </div>
-            </div>
+        <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-3 md:p-4">
+            <header className="rounded-xl border bg-background/85 p-3 shadow-sm backdrop-blur">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="min-w-0 space-y-1">
+                        <h1 className="truncate text-lg font-semibold tracking-tight md:text-xl">
+                            新视频任务
+                        </h1>
+                        <p className="truncate text-sm text-muted-foreground">
+                            {currentGeneration ? "任务已提交，结果会在当前工作区更新。" : "填写画面、素材和规格后开始生成。"}
+                        </p>
+                    </div>
 
-            <div className="grid gap-4 xl:grid-cols-[minmax(360px,0.92fr)_minmax(520px,1.35fr)]">
-                <GenerationForm
-                    loading={createMutation.isPending}
-                    models={models}
-                    modelsLoading={modelsLoading}
-                    disabledReason={disabledReason}
-                    promptTemplates={(templateData?.items ?? []).map((item) => ({
-                        label: item.title,
-                        prompt: item.prompt,
-                        modelConfigId: item.modelConfigId,
-                        defaultParams: item.defaultParams,
-                    }))}
-                    initialValues={formInitialValues}
-                    onSubmit={handleSubmit}
-                />
+                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                        <Tabs value={activeTabValue(location.pathname)} onValueChange={(value) => navigate(value)}>
+                            <TabsList className="h-9" aria-label="视频工作区">
+                                {WORKBENCH_TABS.map((tab) => (
+                                    <TabsTrigger key={tab.path} value={tab.path} className="gap-1.5 px-3">
+                                        {tab.label === "短视频" ? <SquareStack className="size-4" /> : tab.label === "历史" ? <History className="size-4" /> : null}
+                                        {tab.label}
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+                        </Tabs>
+                        <Badge variant="outline" className="gap-1.5 px-2.5 py-1">
+                            <RefreshCw className="size-3.5" />
+                            异步生成
+                        </Badge>
+                        <Badge variant="outline" className="gap-1.5 px-2.5 py-1">
+                            <ShieldCheck className="size-3.5" />
+                            上传校验
+                        </Badge>
+                    </div>
+                </div>
+            </header>
+
+            <div className="grid gap-4 xl:grid-cols-[minmax(360px,0.94fr)_minmax(520px,1.18fr)_minmax(320px,0.72fr)]">
+                <div className="space-y-3">
+                    {modelsError ? (
+                        <ErrorState title="加载生成规格失败" message="无法读取视频生成配置，请登录后重试。" onRetry={() => refetchModels()} />
+                    ) : null}
+                    <GenerationForm
+                        loading={createMutation.isPending}
+                        models={models}
+                        modelsLoading={modelsLoading}
+                        disabledReason={disabledReason}
+                        promptTemplates={(templateData?.items ?? []).map((item) => ({
+                            label: item.title,
+                            prompt: item.prompt,
+                            modelConfigId: item.modelConfigId,
+                            defaultParams: item.defaultParams,
+                        }))}
+                        initialValues={formInitialValues}
+                        onSubmit={handleSubmit}
+                    />
+                </div>
 
                 <VideoResult
                     generation={currentGeneration}
                     isLoading={createMutation.isPending}
                     onReuse={handleReuse}
                 />
-            </div>
 
-            {historyError ? (
-                <ErrorState title="加载最近生成失败" message="无法读取最近的视频生成记录。" onRetry={() => refetchHistory()} />
-            ) : null}
-            <HistoryList
-                items={historyData?.items || []}
-                loading={historyLoading && !historyError}
-                showDelete={false}
-                detailBasePath=""
-                variant="strip"
-                onReuse={handleReuse}
-                action={(
-                    <Button variant="ghost" size="sm" onClick={() => navigate("history")}>
-                        <History className="size-4" />
-                        查看全部
-                    </Button>
-                )}
-            />
+                <aside className="space-y-3">
+                    <div className="rounded-xl border bg-background/85 p-3 shadow-sm">
+                        <div className="flex items-center justify-between gap-2">
+                            <div>
+                                <p className="text-sm font-medium">最近生成</p>
+                                <p className="text-xs text-muted-foreground">复用参数后可直接回填到左侧工作台。</p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => navigate("history")}>
+                                查看全部
+                            </Button>
+                        </div>
+                    </div>
+                    {historyError ? (
+                        <ErrorState title="加载最近生成失败" message="无法读取最近的视频生成记录。" onRetry={() => refetchHistory()} />
+                    ) : (
+                        <HistoryList
+                            items={recentHistory}
+                            loading={historyLoading && !historyError}
+                            showDelete={false}
+                            detailBasePath=""
+                            variant="compact"
+                            onReuse={handleReuse}
+                        />
+                    )}
+                </aside>
+            </div>
         </div>
     );
+}
+
+function activeTabValue(pathname: string) {
+    if (pathname.endsWith("/history")) return "history";
+    if (pathname.endsWith("/studio")) return "studio";
+    return "/";
 }

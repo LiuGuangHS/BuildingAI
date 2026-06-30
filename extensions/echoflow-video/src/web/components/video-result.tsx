@@ -149,21 +149,14 @@ export function VideoResult({ generation, isLoading, onReuse }: VideoResultProps
                     )}
                 </div>
 
-                {isSuccess && !videoUrl ? (
-                    <Alert>
-                        <AlertCircle className="size-4" />
-                        <AlertTitle>缺少视频地址</AlertTitle>
-                        <AlertDescription>任务已完成但暂未返回可播放视频，请稍后刷新。</AlertDescription>
-                    </Alert>
-                ) : null}
-
-                {isFailed ? (
-                    <Alert variant="destructive">
-                        <XCircle className="size-4" />
-                        <AlertTitle>生成失败</AlertTitle>
+                {(isSuccess && !videoUrl) || isFailed ? (
+                    <Alert variant={isFailed ? "destructive" : undefined}>
+                        {isFailed ? <XCircle className="size-4" /> : <AlertCircle className="size-4" />}
+                        <AlertTitle>{isFailed ? "生成失败" : "缺少视频地址"}</AlertTitle>
                         <AlertDescription>
-                            {errorMessage || "任务没有生成成功，可以复用参数后再试一次。"}
-                            <span className="mt-1 block">{getBillingTrustMessage(generation)}</span>
+                            {isFailed
+                                ? `${errorMessage || "任务没有生成成功，可以复用参数后再试一次。"} ${getBillingTrustMessage(generation)}`
+                                : "任务已完成但暂未返回可播放视频，请稍后刷新。"}
                         </AlertDescription>
                     </Alert>
                 ) : null}

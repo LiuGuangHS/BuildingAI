@@ -155,7 +155,6 @@ test("video generation disables generation controls when no public model is usab
     assert.match(indexSource, /availableModelCount = models\.length/);
     assert.doesNotMatch(indexSource, /model\.available && model\.enabled && model\.configured/);
     assert.match(indexSource, /availableModelCount === 0/);
-    assert.match(indexSource, /availableModelCount \? `\$\{availableModelCount\} 个规格可用` : "暂未开放"/);
     assert.match(formSource, /const controlsDisabled = Boolean\(disabledReason\) \|\| Boolean\(loading\) \|\| !selectedModel/);
     assert.match(formSource, /const modeControlsDisabled = Boolean\(disabledReason\) \|\| Boolean\(loading\)/);
     assert.match(formSource, /disabled=\{modeControlsDisabled \|\| !option\.available \|\| modelsLoading\}/);
@@ -231,6 +230,20 @@ test("video detail page previews source media without implying it can be reused 
     assert.doesNotMatch(source, /复用素材|直接复用素材/);
 });
 
+test("video public workspace navigation uses Tabs for workspace views", async () => {
+    for (const file of [WEB_INDEX_PAGE_FILE, WEB_HISTORY_PAGE_FILE, WEB_STUDIO_PAGE_FILE]) {
+        const source = await readFile(file, "utf8");
+        assert.match(source, /@buildingai\/ui\/components\/ui\/tabs/);
+        assert.match(source, /<Tabs/);
+        assert.match(source, /<TabsList/);
+        assert.match(source, /<TabsTrigger/);
+        assert.match(source, /aria-label="视频工作区"/);
+        assert.match(source, /短视频/);
+        assert.doesNotMatch(source, /短视频制作"[,}]/);
+    }
+}
+);
+
 test("video user-facing pages avoid provider and backend operation terminology", async () => {
     for (const file of [WEB_INDEX_PAGE_FILE, WEB_HISTORY_PAGE_FILE, WEB_DETAIL_PAGE_FILE, WEB_STUDIO_PAGE_FILE]) {
         const source = await readFile(file, "utf8");
@@ -249,7 +262,7 @@ test("video user-facing page titles use consistent business wording", async () =
 
     assert.match(indexSource, /useDocumentHead\(\{ title: "视频生成" \}\)/);
     assert.match(historySource, /useDocumentHead\(\{ title: "我的视频历史 - 视频生成" \}\)/);
-    assert.match(historySource, />\s*我的视频历史\s*</);
+    assert.match(historySource, />\s*视频历史\s*</);
     assert.match(detailSource, /useDocumentHead\(\{ title: "视频详情 - 视频生成" \}\)/);
     assert.match(studioSource, /useDocumentHead\(\{ title: "短视频制作 - 视频生成" \}\)/);
     assert.doesNotMatch(historySource, /我的生成历史/);

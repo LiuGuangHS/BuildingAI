@@ -370,11 +370,10 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
 
                 <CardContent className="space-y-5">
                     {disabledReason && (
-                        <Alert>
-                            <AlertCircle className="size-4" />
-                            <AlertTitle>视频生成功能暂未开放</AlertTitle>
-                            <AlertDescription>{disabledReason}</AlertDescription>
-                        </Alert>
+                        <div className="flex items-start gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                            <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                            <p>{disabledReason} 可到 Console 开启可用模型后再试。</p>
+                        </div>
                     )}
 
                 <section className="space-y-2">

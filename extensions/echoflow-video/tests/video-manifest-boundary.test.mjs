@@ -2,11 +2,21 @@ import { access, readdir, readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-    assertAbsentDeps,
-    assertDeclaredDeps,
-    mergePackageDeps,
-} from "../../test-utils/manifest-boundary.mjs";
+function mergePackageDeps(pkg) {
+    return { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}), ...(pkg.optionalDependencies ?? {}) };
+}
+
+function assertDeclaredDeps(deps, entries) {
+    for (const [name, message] of entries) {
+        assert.ok(deps[name], message ?? `expected dependency ${name}`);
+    }
+}
+
+function assertAbsentDeps(deps, names) {
+    for (const name of names) {
+        assert.equal(deps[name], undefined, `${name} should not be declared`);
+    }
+}
 
 const PACKAGE_FILE = new URL("../package.json", import.meta.url);
 const MANIFEST_FILE = new URL("../manifest.json", import.meta.url);
