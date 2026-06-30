@@ -52,6 +52,27 @@ describe("astrology report web actions", () => {
         assert.match(pageSource, /AI锚点/);
     });
 
+    it("keeps report cards ordered as readable content before follow-up controls", () => {
+        const body = componentBody("ReportPanel");
+
+        const contextIndex = body.indexOf("<ReportContextTrail report={report} compact={compact} />");
+        const evidenceIndex = body.indexOf("<EvidenceList evidence={result.evidence ?? []} compact={compact} />");
+        const reviewIndex = body.indexOf("<ReviewChecklistPanel items={result.reviewChecklist ?? []} compact={compact} />");
+        const sectionsIndex = body.indexOf("result.sections?.slice");
+        const actionIndex = body.indexOf("<ActionList items={result.actions ?? []} compact={compact} />");
+        const signalIndex = body.indexOf("<SignalList items={result.warnings ?? []} compact={compact} />");
+        const followUpIndex = body.indexOf("<FollowUpPanel");
+        const feedbackIndex = body.indexOf("<FeedbackPanel report={report} compact={compact} onFeedback={onFeedback} />");
+
+        assert.ok(contextIndex < evidenceIndex, "context should appear before evidence");
+        assert.ok(evidenceIndex < reviewIndex, "evidence should appear before review checklist");
+        assert.ok(reviewIndex < sectionsIndex, "review checklist should appear before report sections");
+        assert.ok(sectionsIndex < actionIndex, "sections should appear before action list");
+        assert.ok(actionIndex < signalIndex, "actions should appear before signals");
+        assert.ok(signalIndex < followUpIndex, "signals should appear before follow-up prompts");
+        assert.ok(followUpIndex < feedbackIndex, "follow-up prompts should appear before feedback");
+    });
+
     it("keeps all confidence tiers visible in the compact report evidence panel", () => {
         const evidenceBody = componentBody("EvidenceList");
 

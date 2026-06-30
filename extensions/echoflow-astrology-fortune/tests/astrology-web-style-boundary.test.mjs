@@ -18,6 +18,15 @@ test("astrology web page keeps plugin CSS minimal and prefers platform component
     assert.doesNotMatch(styleBlock, /\*\s*\{/);
     assert.doesNotMatch(styleBlock, /linear-gradient|radial-gradient|100vh|100dvh/);
 });
+test("astrology toolbar is a workspace control bar", () => {
+    assert.match(pageSource, /<PluginBusinessToolbar/);
+    assert.match(pageSource, /<WorkTabs activeView=\{activeView\} onChange=\{onChangeView\} \/>/);
+    assert.match(pageSource, /<Tabs/);
+    assert.match(pageSource, /<TabsList/);
+    assert.match(pageSource, /<TabsTrigger/);
+    assert.match(pageSource, /今日建议/);
+    assert.doesNotMatch(pageSource, /<strong>星盘报告<\/strong>/);
+});
 
 test("astrology checklist controls use the platform Label component", () => {
     assert.match(pageSource, /@buildingai\/ui\/components\/ui\/label/);
@@ -32,12 +41,16 @@ test("astrology checklist controls use the platform Label component", () => {
 test("embedded astrology workspaces do not stretch composer panels to app-shell height", () => {
     assert.doesNotMatch(pageSource, /self-stretch/);
     assert.ok(
-        [...pageSource.matchAll(/grid items-start gap-3 lg:grid-cols-\[minmax\(0,1\.04fr\)_minmax\(300px,\.96fr\)\]/g)].length >= 2,
-        "expected today and profile workspaces to align to content height",
+        [...pageSource.matchAll(/grid items-start gap-3 lg:grid-cols-\[minmax\(0,1\.35fr\)_minmax\(300px,\.65fr\)\]/g)].length >= 3,
+        "expected content-first workspaces to keep composer panels aligned to content height",
     );
     assert.ok(
-        [...pageSource.matchAll(/grid items-start gap-3 lg:grid-cols-\[minmax\(0,1fr\)_minmax\(300px,\.96fr\)\]/g)].length >= 3,
-        "expected ask, relationship, and report workspaces to align to content height",
+        [...pageSource.matchAll(/grid items-start gap-3 lg:grid-cols-\[minmax\(0,1\.04fr\)_minmax\(300px,\.96fr\)\]/g)].length >= 1,
+        "expected profile workspace to align to content height",
+    );
+    assert.ok(
+        [...pageSource.matchAll(/grid items-start gap-3 lg:grid-cols-\[minmax\(0,1fr\)_minmax\(300px,\.96fr\)\]/g)].length >= 1,
+        "expected report workspace to align to content height",
     );
     assert.match(pageSource, /<form className="self-start rounded-md border bg-card p-4"/);
 });

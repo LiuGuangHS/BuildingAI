@@ -2,7 +2,7 @@
 
 `echoflow-astrology-fortune` 是 EchoFlow 的星盘运势插件。用户输入出生信息后生成个人星盘、运势解读与提问建议；报告生成走主站 LLM，按报告类型计费，并提供失败退款保护。
 
-文档维护规则：全仓公共边界、主系统二开、上游同步、组件化 UI 和验证规则维护在根目录 `AGENTS.md`；本 README 只维护 `echoflow-astrology-fortune` 的业务边界、能力状态、入口、报告/队列/计费/生成上下文事实、验证命令和待办。临时分析、浏览器 QA checklist、设计参考、外部项目快照或计划文档只作为施工材料，有效结论必须合并到 `AGENTS.md` 或本 README，不长期维护第二套插件规范；新的报告结构、追问、反馈、计费、队列、浏览器 QA 或 AI 可信度结论也同样先回写这两处长期入口，并从“下一步”移除已经落地的旧计划。
+文档维护：跨插件通用规范见根 `AGENTS.md`；本 README 只记录本插件的业务事实、入口、特有边界、验证状态、风险和下一步。临时计划或 QA 结论收口后只合并仍有效内容，不长期维护第二套文档。
 
 ## 定位
 
@@ -31,10 +31,7 @@
 | 计费退款 | ready | 使用主系统算力账本，报告失败按账务事实退款。 |
 | 队列报告 | ready | 报告生成接入主系统 `QueueModule` / BullMQ，不保留进程内 fallback；入队失败、Worker 崩溃和超时回收都会写失败态并记录 `failureType/failureReason`，便于 Console 排查。 |
 | 终态保护 | ready | Worker 崩溃、超时回收和异常失败写回逐条加锁，只允许 `PENDING/PROCESSING` 报告进入失败态，并保留失败归因 metadata。 |
-| 事务锁超时 | ready | 所有写操作事务开头执行 `SET LOCAL lock_timeout = 3000`，通过文件级常量 `LOCK_TIMEOUT` 统一管理。 |
 | 任务恢复 | ready | 实现 `onModuleInit` 启动恢复（recoverInterruptedReports + failStaleReports），事务内悲观锁（`pessimistic_write`）+ CAS 二次校验（`canRecoverAstrologyReport`/`canClaimAstrologyReportForProcessing`）防止多实例重复入队。 |
-| Service 继承 | ready | AstrologyFortuneService 继承 BaseService<AstrologyReport>，复用 withTransaction 等通用能力。 |
-| 错误处理 | ready | 业务校验失败使用 HttpErrorFactory/BadRequestException 抛出 HTTP 异常，Controller 层无 try/catch 吞异常。 |
 | 统计聚合 | ready | Console 概览统计使用 CASE WHEN 单 SQL 聚合（success/failed/pending/processing/favorite），消除 N+1 COUNT 查询。 |
 | 真实 Redis/Worker smoke | pending | 仍需覆盖成功、失败、超时、删除保护和退款异常。 |
 
@@ -69,75 +66,34 @@
 | `dto/astrology-fortune.dto.ts` | 用户端和管理端请求/响应约束。 |
 | `src/web/constants/report-types.ts` | 用户端报告类型、展示文案和分析范围。 |
 
-## 主系统复用边界
+## 关键技术边界
 
 | 能力 | 当前实现 |
 |---|---|
-| LLM | 通过 `AiPublicModule` / `PublicAiModelService` 获取启用 LLM 并调用 `generateText()`；星盘业务层不直接读取 Provider adapter 或 Secret。 |
-| Provider Config | 由 `PublicAiModelService` 在主系统边界内复用 Provider/Secret 归一化；插件只保存主站模型 ID，不重复拉取或归一化 Provider 配置。 |
-| AI 结果解析 | 报告 AI 结果解析使用主系统 `@buildingai/extension-sdk/utils/pure` 的 `safeJsonParse` 读取模型返回 JSON，公开上下文使用同入口 `buildDefinedWhere`；纯解析路径不从 SDK 根入口拉起 Nest/DB/低层 AI provider。schema、结构化默认值和非法 JSON 错误仍由报告解析 service 与 focused tests 兜底。 |
-| Billing | 使用 `ExtensionBillingModule` / `ExtensionBillingService` 做余额预检、预扣和失败退款。 |
-| Queue | 报告生成使用主系统 `QueueModule` / BullMQ；队列不可用、Worker 崩溃或超时回收时先按账务事实退款，再标记报告失败并返回可观测错误，metadata 保留 `failureType` 和 `failureReason`。 |
-| Rate Limit | Web 报告生成入口复用 `ExtensionRateLimitService` + 主系统 Redis 做 10 秒/分钟双窗口限流；价格组和报告扣费只负责业务资格与成本控制。 |
-| Notification | 通过 `ExtensionNotificationService` 注册报告生成成功和报告生成失败场景；成功通知携带精简 AI 摘要、评分、关键词、幸运锚点、前两条带 low/medium/high 置信度的判断依据、复盘清单和追问建议，缺少置信度或来源/洞察不完整的依据不会进入通知摘要；失败通知携带退款排查信息；通知投递失败不影响报告终态。 |
-| 构建依赖 | 已清理模板残留依赖；依赖保留以源码、`vite`、`tsconfig` 或测试配置链路里真实用到为准。 |
-| UI | 用户端和 Console 复用主系统 Tabs、Card、Button、Dialog、Label、Checkbox、表单组件、Alert、Skeleton 和局部空状态；复盘清单和行动项这类复合勾选行使用系统 `Label` + `Checkbox` + `useId()` 保留整行点击语义并避免重复 DOM id；插件 CSS 只控制布局、业务分组、报告展示状态和响应式。 |
-| RootLayout / React Query | `src/web/main.tsx` 只挂主系统扩展 `RootLayout`，不再自建 `QueryClientProvider`；页面和 service hooks 复用 RootLayout 提供的查询上下文。 |
-| 路由分包 | Web 首页和 Console 管理页均通过 React lazy 加载，路由 fallback 使用主系统 `Skeleton`；Console 代码不静态进入用户端路由模块。 |
-| 数据 | 轻量反馈先写入业务记录 metadata；若需要全量运营统计，再迁移为独立实体。 |
+| 生成可用性 | Web 以公开 `generation-status` 作为唯一生成能力来源，只返回 `canGenerate`、`unavailableReason` 和公开价格组。 |
+| 生成上下文 | Web 公开 `generationContext`，包含报告类型、关注方向、当前状态、问题、语言、目标对象存在性和脱敏问题质量。 |
+| AI 契约 | 模型结果必须是结构化 JSON；标题、摘要、评分、关键词、幸运锚点、判断依据、洞察段落、行动、风险、复盘清单和追问都有最小可用要求。 |
+| 置信与来源 | `evidence` 来源只能来自真实上下文，且每条必须由模型给出 low/medium/high；不可用、猜测或编造来源进入格式异常失败。 |
+| 继续追问 | 不新增聊天实体，追问回到“问问”工作区并带入来源报告摘要、置信依据、行动、风险、复盘和脱敏反馈。 |
+| 反馈 | 用户端反馈只支持评分和短备注，轻量写入 metadata，并作为后续追问/同类报告的质量参考。 |
+| 队列与退款 | 报告生成走主系统队列；入队失败、Worker 崩溃和超时回收会写失败归因并按账务事实退款。 |
+| Public 边界 | Web 不返回用户 ID、模型 ID、Provider、Secret、原始 payload、Base URL、AI 修复审计或 Console 排障字段。 |
 
 依赖边界：用户端页面直接 import `sonner` 的 `toast`，因此插件 `package.json` 显式声明 `sonner`；不要依赖视频或图片插件的同名依赖偶然存在。
 
-## 用户体验规则
+## 用户端边界
 
 | 主题 | 要求 |
 |---|---|
-| 付费说明 | 每个生成入口展示分析范围、价格组或扣费规则、失败/退款保护。 |
-| 插件边界 | 用户端不重复主系统已有的账号、头像、全局导航、应用标题、余额入口和全局统计；只展示当前业务需要的档案、生成依据、报告状态和结果动作。 |
-| 首屏 | 优先展示当前档案、当前问题、生成按钮和最近结果，不把模型机制放到主视觉层级，不做营销落地页。 |
-| 尺寸 | 页面适配主系统可用内容区，避免固定整页大壳、过宽居中容器和 `100vh` 背景造成与主系统割裂。 |
-| Tab | `今日`、`问问`、`关系`、`档案`、`报告` 是插件内部业务切换，不承担主系统级导航职责。 |
-| 继续追问 | 将追问问题带回 `问问` 工作区，复用 `/astrology-fortune/reports/generate`；问问区必须显示来源报告提示和“清除上下文”，让用户知道这次生成会带着上一份报告继续。 |
-| 结果区 | 展示行动项、摘要、参考来源和质量反馈；AI 摘要使用系统 `Alert`，状态、关键词、生成依据和幸运锚点使用系统 `Badge`，主分数使用系统 `Progress`，反馈区使用系统 `Textarea` 收集短备注，明确提示这条备注会进入下一次追问或同类报告的 AI 质量参考。 |
-| 查询失败 | 非关键列表、档案和历史使用局部空状态或重试提示，不用全局 toast 淹没工作区。 |
-| Console | 只做配置、任务、退款、报告和档案运营，不混入用户生成流程。 |
-
-## 用户端设计收敛
-
-首轮前端优化按“嵌入式业务面板”落地，优先级如下：
-
-| 优先级 | 内容 | 说明 |
-|---|---|---|
-| P1 | 紧凑业务工具栏 | 保留内部 Tab、当前档案、档案完整度、价格组和失败退款；移除插件级 App Header、报告总数、收藏总数等全局感信息。 |
-| P1 | 问问生成器 | 左侧输入报告类型、关注方向、当前状态和具体问题；问题质量面板展示可用度、已包含、建议补充和输出影响；右侧展示本次参考和报告预览。 |
-| P1 | 今日面板 | 关注领域、今日状态、模板问题和最近今日报告摘要。 |
-| P1 | 关系面板 | 对方信息、关系场景、信息可信度、分析范围和关系报告预览。 |
-| P1 | 报告消费 | 摘要优先，其次紧凑 AI 锚点、判断依据、AI 复盘清单、行动项、风险提醒、观察信号、生成依据、问题质量、模型生成追问建议和反馈；工作台 compact 报告卡展示整体评分、幸运锚点和前三条判断依据，让高/中/低置信层级优先可见，不把核心结论只藏在详情弹窗。 |
-| P1 | 生成依据链路 | 用户端历史、报告卡和详情优先读取后端公开 `generationContext`，展示范围、状态、问题和追问来源。 |
-| P1 | 档案质量提示 | 档案列表和工具栏展示 AI 依据完整度、缺项和当前价格组，提醒用户补全出生信息会提升报告颗粒度。 |
-| P2 | 报告导出/分享 | 用户端已提供复制和 `.txt` 下载；导出优先从结构化 `result` 重建文本，保留评分、关键词、幸运锚点、判断依据、复盘清单、行动项、风险提醒和模型生成追问，避免旧 `resultText` 丢失 AI 亮点。PDF、对比报告和资产库后置。 |
-
-暂不做插件级用户中心、独立首页 Hero、全局数据看板、复杂分享中心和完整报告资产库；这些容易和主系统能力重复，或把插件做成独立应用。
-
-### 2026-06-20 设计审查结论
-
-| 审查项 | 结论 |
-|---|---|
 | 插件边界 | 用户端继续作为主系统 iframe 内的业务面板，不重复账号、头像、全局导航、余额入口或完整应用壳。 |
-| AI 亮点 | 智能感落在问题质量、AI 解读范围、生成依据、档案完整度、行动建议、风险提醒、继续追问和反馈闭环；问题质量不只显示分数，还要说明已包含上下文、建议补充项和为什么会影响判断依据、行动建议和复盘清单；继续追问不只是填入新问题，还要把上一份报告的带置信度判断依据、行动、风险、复盘和反馈作为白名单上下文带入下一轮 AI；反馈闭环不只记录评分，还要允许用户补一句真实纠偏或有效点，进入后续 AI 质量参考。 |
-| 视觉密度 | 桌面端采用左侧输入/任务、右侧报告/准备度；多列区块使用顶部对齐，生成表单和任务面板保持内容高度，避免主系统 iframe 内出现大面积空白；移动端收敛为单列，内部 Tab 横向滚动。 |
-| 数据链路 | 报告卡、历史和详情优先读取 Web 公开 `generationContext`，包括脱敏问题质量；不从私有 request payload 或未脱敏 metadata 推断上下文。 |
-| 公开上下文 | `generationContext` 只保留报告类型、关注方向、当前状态、问题、语言、是否有目标对象和问题质量摘要；通知摘要只保留评分、关键词、幸运锚点、带置信度的判断依据、复盘清单和追问建议的公开片段，不透出原始请求、Provider 或 Secret，也不把缺失置信度的依据包装成可信结论。 |
-| 公开类型 | Web `AstrologyReport` / `AstrologyProfile` 不包含 `userId`、`modelId`、`providerId`、`requestPayload`；Console 通过 `ConsoleAstrologyReport` / `ConsoleAstrologyProfile` 单独扩展排障字段。Web 查询参数不包含用户/模型/Provider 筛选，Console 使用 `ConsoleQueryAstrologyReportsParams` / `ConsoleQueryAstrologyProfilesParams`。 |
-| 首屏预期 | 空报告状态也要预告摘要、判断依据、复盘清单、行动建议、观察信号和继续追问，让用户生成前就理解 AI 输出是可解释、可执行、可复盘的结构。 |
-| 视觉约束 | 复用主系统 token、Button、Tabs、Dialog 和表单组件；插件 CSS 只控制布局、业务分组、状态和响应式；普通工作区通过 Tailwind `items-start` / `self-start` 控制嵌入式面板高度，不使用 `self-stretch` 把插件撑成完整应用壳。 |
-| 样式边界 | 用户端主要视觉落在系统组件 `className`、Tailwind 工具类和 `cn()` 组合；普通 Tab、面板、空态、进度和报告卡不得再注入内联 `<style>` 或长期维护手写 CSS，确需特殊媒体/画布样式时要有测试或 README 说明。 |
-| 时间展示 | 用户端报告列表、生成依据和详情使用本插件本地 `formatReportTime()`，不依赖额外 i18n provider，避免成功报告态在扩展 RootLayout、preview 或 mock smoke 中崩溃。 |
-| 结构化展示 | 用户端行动建议和风险提醒同时兼容历史字符串与模型结构化对象；新报告的 `actions` 使用 `{ item, reason, timebox }`，`warnings` 使用 `{ title, detail }`，主报告卡把行动拆成“事项/原因/时间”、风险拆成“标题/detail”，导出和通知摘要继续通过 `formatActionItem()` / `formatWarningItem()` 串联，不能把对象直接作为 React child 或复制文本输出 `[object Object]`。 |
-| AI 契约 | AI 结果解析、标题 title、摘要 summary、评分 scores、关键词 keywords、幸运锚点 lucky、判断依据 evidence、洞察段落 sections、行动建议 actions、风险提醒 warnings、复盘清单 reviewChecklist、模型生成追问 followUps、结构化默认值、问题质量上下文、追问来源上下文、反馈反哺和用户反馈 metadata 由独立 service 与 focused tests 兜底；`title` 与 `summary` 必须非空，`scores` 必须由模型明确给出且至少包含 `overall`，不在后端或前端补默认分，`keywords` 至少 2 个非空词，`lucky` 必须包含 `color`、`number`、`direction` 和 `timeRange`，不让用户端固定展示位退化为空标签或占位符，`evidence`、`reviewChecklist` 和 `followUps` 至少各 2 条，`sections` 至少 4 段且必须覆盖洞察、机会、风险和行动，`actions` 至少 3 条且每项必须包含非空 `item`、`reason`、`timebox`，`warnings` 至少 2 条且每项必须包含非空 `title`、`detail`；`evidence.source` 只允许来自用户档案、出生/星座信息、长期画像、当前状态、当前问题、问题质量、目标对象、关系状态、追问来源、来源报告或用户反馈等真实上下文；复盘清单的 `evidenceSource` 必须能追溯到本次报告的判断依据、行动建议或风险提醒，`followUps` 必须是可执行问题或延展请求，缺失、编造来源、不可追溯或口号式追问都会进入格式异常失败与账务事实退款链路；解析器兼容 `text`、`outputText`、`output_text` 和 `choices[0].message.content` 等常见 SDK 文本形态，避免真实模型返回成功但插件误判失败。 |
-| 生成可用性 | Web 用户端以公开 generation-status 为唯一生成能力来源；`canGenerate=false` 时保留业务工作台、档案和历史，但禁用生成输入、模板、关系参数、提交和重新生成，并用主系统主题提示当前生成服务不可用。 |
-| 失败体验 | 模型返回空内容、非 JSON 或结构不符合契约时，用户端只看到“AI 返回格式异常、按账务事实退款”的安全文案；业务 metadata 保留 `failureType` 和 `failureReason` 供 Console 排查，不暴露原始模型输出。 |
-| Console 诊断 | 管理端报告详情复用 Dialog、Badge 和 Detail 小块展示 AI 评分、关键词、幸运锚点、判断依据、复盘清单、行动建议、风险提醒、继续追问、AI 修复重试、修复结果、修复原因、失败类型、失败原因和退款异常；排障只读取公开结构化结果和脱敏 metadata，不读取 `requestPayload`、原始上游响应或 Secret。 |
+| 首屏 | 优先展示当前档案、当前问题、生成按钮和最近结果，不把模型机制放到主视觉层级，不做营销落地页。 |
+| Tab | `今日`、`问问`、`关系`、`档案`、`报告` 是插件内部业务切换，不承担主系统级导航职责。 |
+| 继续追问 | 将追问问题带回 `问问` 工作区，复用 `/astrology-fortune/reports/generate`；问问区必须显示来源报告提示和“清除上下文”。 |
+| 结果区 | 摘要、判断依据、行动项、风险、复盘清单、生成依据、问题质量和追问建议都要能被消费；评分、关键词、幸运锚点、置信依据使用系统组件承载。 |
+| 查询失败 | 非关键列表、档案和历史使用局部空状态或重试提示，不用全局 toast 淹没工作区。 |
+| 反馈 | 用户端反馈只支持评分和短备注，并作为后续追问/同类报告的质量参考。 |
+| 配置页 | Console 只做配置、任务、退款、报告和档案运营，不混入用户生成流程。 |
+| 设计收敛 | 保留紧凑业务工具栏、问问/今日/关系面板和报告消费；不做用户中心、独立首页 Hero、全局数据看板、复杂分享中心和完整报告资产库。 |
 
 ## 数据与存储
 

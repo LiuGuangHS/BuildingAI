@@ -18,12 +18,12 @@
 .astro-report-card,
 .astro-context-card {
     border-color: var(--astro-line);
-    box-shadow: 0 18px 50px color-mix(in srgb, var(--foreground) 8%, transparent);
+    box-shadow: 0 12px 32px color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
 .astro-toolbar {
-    top: 8px;
-    border-radius: 18px;
+    top: 6px;
+    border-radius: 14px;
 }
 
 .astro-toolbar-profile {
@@ -86,9 +86,25 @@
     white-space: nowrap;
 }
 
-.astro-insight-scope,
 .astro-context-card {
     background: color-mix(in srgb, var(--muted) 80%, var(--card));
+}
+
+.astro-report-body > article,
+.astro-report-body > div,
+.astro-report-body > section {
+    scroll-margin-top: 1rem;
+}
+
+.astro-report-section h3 {
+    font-weight: 700;
+    color: var(--foreground);
+}
+
+.astro-report-section p {
+    margin-top: 0.35rem;
+    color: var(--muted-foreground);
+    line-height: 1.75;
 }
 
 @media (prefers-reduced-motion: reduce) {

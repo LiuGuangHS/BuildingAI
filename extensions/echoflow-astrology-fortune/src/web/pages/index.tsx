@@ -30,7 +30,6 @@ import { usePagination } from "@buildingai/ui/hooks/use-pagination";
 import { cn } from "@buildingai/ui/lib/utils";
 import {
     AlertCircle,
-    BookOpen,
     CalendarDays,
     CheckCircle2,
     Coins,
@@ -124,11 +123,6 @@ type DailyFocusOption = {
     focusArea: string;
     state: string;
     question: string;
-};
-
-type InsightScopeItem = {
-    title: string;
-    text: string;
 };
 
 const defaultIntent = reportIntents[0] as ReportIntent;
@@ -627,7 +621,20 @@ export default function AstrologyFortuneHomePage() {
                 )}
 
                 {activeView === "ask" && (
-                    <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,.96fr)]">
+                    <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,.65fr)]">
+                        <ReportPanel
+                            report={currentReport}
+                            generationDisabled={generationDisabled}
+                            generationUnavailableReason={generationUnavailableReason}
+                            onFavorite={handleFavorite}
+                            onCopy={copyReport}
+                            onDownload={downloadReport}
+                            onOpen={setDetailReport}
+                            onDelete={handleDeleteReport}
+                            onRegenerate={handleRegenerate}
+                            onFollowUp={prepareFollowUp}
+                            onFeedback={handleFeedback}
+                        />
                         <ReportComposer
                             intent={currentIntent}
                             intents={reportIntents}
@@ -651,35 +658,28 @@ export default function AstrologyFortuneHomePage() {
                             generationDisabled={generationDisabled}
                             generationUnavailableReason={generationUnavailableReason}
                         />
-                        <div className="grid gap-3">
-                            <GenerationValuePanel
-                                intent={currentIntent}
-                                profile={selectedProfile}
-                                completion={profileCompletion}
-                                question={question}
-                                partner={
-                                    currentIntent.value === "compatibility" ? partner : undefined
-                                }
-                            />
-                            <ReportPanel
-                                report={currentReport}
-                                generationDisabled={generationDisabled}
-                                generationUnavailableReason={generationUnavailableReason}
-                                onFavorite={handleFavorite}
-                                onCopy={copyReport}
-                                onDownload={downloadReport}
-                                onOpen={setDetailReport}
-                                onDelete={handleDeleteReport}
-                                onRegenerate={handleRegenerate}
-                                onFollowUp={prepareFollowUp}
-                                onFeedback={handleFeedback}
-                            />
-                        </div>
                     </section>
                 )}
 
                 {activeView === "relationship" && (
-                    <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,.96fr)]">
+                    <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,.65fr)]">
+                        <ReportPanel
+                            report={
+                                activeReport?.reportType === "compatibility"
+                                    ? activeReport
+                                    : (latestCompatibilityReport ?? currentReport)
+                            }
+                            generationDisabled={generationDisabled}
+                            generationUnavailableReason={generationUnavailableReason}
+                            onFavorite={handleFavorite}
+                            onCopy={copyReport}
+                            onDownload={downloadReport}
+                            onOpen={setDetailReport}
+                            onDelete={handleDeleteReport}
+                            onRegenerate={handleRegenerate}
+                            onFollowUp={prepareFollowUp}
+                            onFeedback={handleFeedback}
+                        />
                         <RelationshipPanel
                             partner={partner}
                             profile={selectedProfile}
@@ -697,32 +697,6 @@ export default function AstrologyFortuneHomePage() {
                                 })
                             }
                         />
-                        <div className="grid gap-3">
-                            <GenerationValuePanel
-                                intent={relationshipIntent}
-                                profile={selectedProfile}
-                                completion={profileCompletion}
-                                question={relationshipIntent.question}
-                                partner={partner}
-                            />
-                            <ReportPanel
-                                report={
-                                    activeReport?.reportType === "compatibility"
-                                        ? activeReport
-                                        : (latestCompatibilityReport ?? currentReport)
-                                }
-                                generationDisabled={generationDisabled}
-                                generationUnavailableReason={generationUnavailableReason}
-                                onFavorite={handleFavorite}
-                                onCopy={copyReport}
-                                onDownload={downloadReport}
-                                onOpen={setDetailReport}
-                                onDelete={handleDeleteReport}
-                                onRegenerate={handleRegenerate}
-                                onFollowUp={prepareFollowUp}
-                                onFeedback={handleFeedback}
-                            />
-                        </div>
                     </section>
                 )}
 
@@ -799,9 +773,7 @@ function PluginBusinessToolbar({
     activeView,
     intent,
     profile,
-    report,
     completion,
-    generationBlock,
     onChangeView,
     onOpenProfiles,
 }: {
@@ -814,13 +786,10 @@ function PluginBusinessToolbar({
     onChangeView: (view: WorkView) => void;
     onOpenProfiles: () => void;
 }) {
-    const subtitle = profile
-        ? `${profile.zodiacSign || "星座待补"} · 完整度 ${completion.percent}%`
-        : "补全出生信息后，即可生成今日建议。";
     return (
-        <header className="astro-toolbar sticky top-0 z-10 mb-3 grid gap-3 border bg-background/95 p-3 backdrop-blur lg:grid-cols-[minmax(280px,.9fr)_minmax(0,1.1fr)]">
+        <header className="astro-toolbar sticky top-0 z-10 mb-3 grid gap-2 border bg-background/95 p-1.5 backdrop-blur lg:grid-cols-[minmax(220px,.62fr)_minmax(0,1.38fr)]">
             <div
-                className="astro-toolbar-profile min-w-0 cursor-pointer rounded-md p-2 text-left hover:bg-muted/60"
+                className="astro-toolbar-profile min-w-0 cursor-pointer rounded-md px-2 py-1.5 text-left hover:bg-muted/60"
                 role="button"
                 tabIndex={0}
                 onClick={onOpenProfiles}
@@ -830,17 +799,21 @@ function PluginBusinessToolbar({
             >
                 <div className="flex min-w-0 items-center gap-2">
                     <UserRound size={16} />
-                    <strong>{activeView === "today" ? "今日建议" : intent.label}</strong>
-                    <span>{profile?.name || "未完善档案"}</span>
+                    <strong>{activeView === "today" ? "今日建议" : itemLabel(activeView)}</strong>
+                    <span className="truncate text-muted-foreground">{profile ? `${profile.name} · ${profile.zodiacSign || "星座待补"}` : "档案未完善"}</span>
                 </div>
-                <div className="mt-1 flex flex-wrap gap-1.5 text-sm text-muted-foreground">
-                    <span>{generationBlock?.title || subtitle}</span>
-                    {report && <span>最近报告：{statusLabel(report.status)}</span>}
+                <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                    <span>{profile ? intent.label : "选择档案后生成报告"}</span>
+                    <span>素材 {completion.percent}%</span>
                 </div>
             </div>
             <WorkTabs activeView={activeView} onChange={onChangeView} />
         </header>
     );
+}
+
+function itemLabel(view: WorkView) {
+    return viewOptions.find((item) => item.value === view)?.label ?? "今日";
 }
 
 function WorkTabs({
@@ -921,8 +894,23 @@ function TodayView({
     onFeedback: ReportFeedbackHandler;
 }) {
     return (
-        <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.04fr)_minmax(300px,.96fr)]">
-            <div className="astro-hero-card rounded-md border bg-card p-4">
+        <section className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,.65fr)]">
+            <ReportPanel
+                report={report}
+                generationDisabled={generationDisabled}
+                generationUnavailableReason={generationUnavailableReason}
+                onFavorite={onFavorite}
+                onCopy={onCopy}
+                onDownload={onDownload}
+                onOpen={onOpenReport}
+                onDelete={onDelete}
+                onRegenerate={onRegenerate}
+                onFollowUp={onFollowUp}
+                onFeedback={onFeedback}
+            />
+
+            <div className="grid gap-3">
+                <div className="astro-hero-card rounded-md border bg-card p-4">
                 <div className="mb-4 border-b pb-4">
                     <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                         <CalendarDays size={15} /> 今日建议
@@ -966,22 +954,6 @@ function TodayView({
                     ))}
                 </div>
                 {generationBlock && <GenerationUnavailableNotice block={generationBlock} />}
-                <InsightScope
-                    items={[
-                        {
-                            title: "参考档案",
-                            text: "出生日期、地点和星座信息会作为长期倾向底座。",
-                        },
-                        {
-                            title: "结合当下",
-                            text: "今日状态和关注点会影响建议的优先级，减少泛泛而谈。",
-                        },
-                        {
-                            title: "输出结构",
-                            text: "生成摘要、观察信号和下一步行动，方便当天复盘。",
-                        },
-                    ]}
-                />
                 <div className="mt-4 flex items-center justify-between gap-3 max-md:grid">
                     <CostHint intent={dailyIntent} />
                     <Button
@@ -995,33 +967,13 @@ function TodayView({
                         {generationBlock?.actionLabel || "生成今日建议"}
                     </Button>
                 </div>
-                <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
-                    <Wand2 size={15} />
-                    <span>AI 会把今日结论拆成摘要、观察信号和下一步行动；生成后可继续追问执行细节。</span>
-                </div>
             </div>
-
-            <div className="grid gap-3">
-                <ProfileReadiness
-                    profile={profile}
-                    completion={completion}
-                    onOpenProfile={onOpenProfile}
-                />
-                <ReportPanel
-                    report={report}
-                    compact
-                    generationDisabled={generationDisabled}
-                    generationUnavailableReason={generationUnavailableReason}
-                    onFavorite={onFavorite}
-                    onCopy={onCopy}
-                    onDownload={onDownload}
-                    onOpen={onOpenReport}
-                    onDelete={onDelete}
-                    onRegenerate={onRegenerate}
-                    onFollowUp={onFollowUp}
-                    onFeedback={onFeedback}
-                />
-            </div>
+            <ProfileReadiness
+                profile={profile}
+                completion={completion}
+                onOpenProfile={onOpenProfile}
+            />
+        </div>
         </section>
     );
 }
@@ -1167,31 +1119,6 @@ function ReportComposer(props: {
 
             <QuestionQualityPanel quality={quality} />
 
-            <InsightScope
-                items={[
-                    {
-                        title: "解读类型",
-                        text: `${props.intent.label} · ${priceGroupLabel(props.intent.priceGroup)}`,
-                    },
-                    {
-                        title: "上下文来源",
-                        text:
-                            props.reportType === "compatibility"
-                                ? `档案完整度 ${props.profileCompletion.percent}%；关系对象 ${props.partner.name || "TA"}。`
-                                : `档案完整度 ${props.profileCompletion.percent}%；结合当前状态和具体问题。`,
-                    },
-                    {
-                        title: "生成结果",
-                        text: "会给出判断依据、行动建议、风险提醒，并可带上下文继续追问。",
-                    },
-                ]}
-            />
-
-            <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
-                <MessageCircle size={15} />
-                <span>生成结果会沉淀到报告库；继续追问会带着上一份报告上下文，而不是重新从零开始。</span>
-            </div>
-
             <GenerationFooter intent={props.intent} busy={props.busy} generationDisabled={generationDisabled} />
         </form>
     );
@@ -1272,26 +1199,6 @@ function RelationshipPanel({
                 completion={partnerCompletion}
                 text="对方资料越完整，关系节奏、冲突来源和相处建议越能落到细节。"
             />
-            <InsightScope
-                items={[
-                    {
-                        title: "双方基础",
-                        text: "我的档案和对方资料会共同进入关系匹配判断。",
-                    },
-                    {
-                        title: "关系阶段",
-                        text: `${partner.relationshipStatus || "未填写"} 场景会影响沟通建议和推进节奏。`,
-                    },
-                    {
-                        title: "可信度",
-                        text: `对方资料完整度 ${partnerCompletion.percent}%，会影响结论颗粒度。`,
-                    },
-                ]}
-            />
-            <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
-                <BookOpen size={16} />
-                <span>出生时间缺失也可以生成；补充后会增强宫位、相处节奏和沟通时机判断。</span>
-            </div>
             {generationDisabled && <GenerationUnavailableNotice text={generationUnavailableReason} />}
             <div className="mt-4 flex items-center justify-between gap-3">
                 <CostHint intent={relationshipIntent} />
@@ -1723,7 +1630,7 @@ function ReportPanel({
             </div>
 
             {result ? (
-                <div className="grid gap-3">
+                <div className="astro-report-body grid gap-3">
                     <Alert className="border-primary/20 bg-primary/5">
                         <ShieldCheck size={16} />
                         <AlertTitle>AI 摘要结论</AlertTitle>
@@ -1733,27 +1640,14 @@ function ReportPanel({
                     <ReportContextTrail report={report} compact={compact} />
                     <EvidenceList evidence={result.evidence ?? []} compact={compact} />
                     <ReviewChecklistPanel items={result.reviewChecklist ?? []} compact={compact} />
-                    <div className="flex flex-wrap gap-1.5">
-                        {result.keywords?.slice(0, 6).map((item) => (
-                            <Badge key={item} variant="secondary">{item}</Badge>
-                        ))}
-                    </div>
                     {result.sections?.slice(0, compact ? 1 : 2).map((section) => (
-                        <article key={section.heading} className="rounded-md border bg-card p-3">
+                        <article key={section.heading} className="astro-report-section rounded-md border bg-card p-3">
                             <h3>{section.heading}</h3>
                             <p>{section.content}</p>
                         </article>
                     ))}
                     <ActionList items={result.actions ?? []} compact={compact} />
                     <SignalList items={result.warnings ?? []} compact={compact} />
-                    <FollowUpPanel
-                        report={report}
-                        compact={compact}
-                        generationDisabled={generationDisabled}
-                        generationUnavailableReason={generationUnavailableReason}
-                        onFollowUp={onFollowUp}
-                    />
-                    <FeedbackPanel report={report} compact={compact} onFeedback={onFeedback} />
                     {!compact && (
                         <>
                             <div className="grid gap-3 sm:grid-cols-3">
@@ -1775,6 +1669,19 @@ function ReportPanel({
                             </div>
                         </>
                     )}
+                    <div className="flex flex-wrap gap-1.5">
+                        {result.keywords?.slice(0, 6).map((item) => (
+                            <Badge key={item} variant="secondary">{item}</Badge>
+                        ))}
+                    </div>
+                    <FollowUpPanel
+                        report={report}
+                        compact={compact}
+                        generationDisabled={generationDisabled}
+                        generationUnavailableReason={generationUnavailableReason}
+                        onFollowUp={onFollowUp}
+                    />
+                    <FeedbackPanel report={report} compact={compact} onFeedback={onFeedback} />
                     <div className="flex flex-wrap gap-2">
                         <Action onClick={() => onCopy(report)}>
                             <Copy size={14} />
@@ -1891,74 +1798,6 @@ function CompactAiAnchors({ result, compact }: { result: NonNullable<AstrologyRe
     );
 }
 
-function GenerationValuePanel({
-    intent,
-    profile,
-    completion,
-    question,
-    partner,
-}: {
-    intent: ReportIntent;
-    profile: AstrologyProfile | null;
-    completion: ProfileCompletion;
-    question: string;
-    partner?: PartnerInput;
-}) {
-    const items = [
-        profile ? `档案：${profile.name} / ${profile.zodiacSign}` : "档案：生成时自动保存",
-        `方向：${intent.label}`,
-        question
-            ? `问题：${question.slice(0, 28)}${question.length > 28 ? "..." : ""}`
-            : "问题：使用默认问题",
-        partner ? `关系对象：${partner.name} / ${partner.relationshipStatus}` : "",
-    ].filter(Boolean);
-    const deliverables = [
-        "判断依据",
-        "摘要结论",
-        "行动建议",
-        "风险提醒",
-        "继续追问上下文",
-    ];
-    return (
-        <section className="astro-context-card rounded-md border bg-card p-4">
-            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
-                <FileText size={14} /> 本次参考
-            </div>
-            <h3 className="mt-2 text-lg font-bold">报告会看这些信息</h3>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">AI 会把这些上下文转成可复盘的结构化报告，并沉淀到当前报告和报告库。</p>
-            <ul className="mt-3 grid gap-2 text-sm text-muted-foreground">
-                {items.map((item) => (
-                    <li key={item} className="rounded-md border bg-muted/35 px-3 py-2">{item}</li>
-                ))}
-            </ul>
-            <div className="mt-3 grid gap-2 rounded-md border bg-muted p-3 text-muted-foreground">
-                <div className="font-semibold text-foreground">生成后得到</div>
-                <div className="flex flex-wrap gap-1.5">
-                    {deliverables.map((item) => (
-                        <span key={item} className="rounded-full border bg-background px-2 py-1 text-xs">{item}</span>
-                    ))}
-                </div>
-            </div>
-            <div className="astro-cost-hint mt-3 flex flex-wrap gap-1.5">
-                <span>
-                    <Coins size={15} /> {priceGroupLabel(intent.priceGroup)}
-                </span>
-                <span>
-                    <ShieldCheck size={15} /> 失败自动退款
-                </span>
-            </div>
-            <div className="mt-2 text-xs leading-6 text-muted-foreground">
-                提交生成时按后台配置的价格组扣费；模型、队列或服务失败会按账务事实退款。
-            </div>
-            {completion.missing.length > 0 && (
-                <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
-                    可提升：补充 {completion.missing.join("、")} 后，报告会更具体。
-                </div>
-            )}
-        </section>
-    );
-}
-
 function ReportContextTrail({
     report,
     compact,
@@ -2061,9 +1900,9 @@ function ProfileReadiness({
             <div className="flex items-start justify-between gap-3">
                 <div>
                     <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
-                        <UserRound size={14} /> 档案准备度
+                        <UserRound size={14} /> 素材完整度
                     </div>
-                    <h3 className="mt-2 text-lg font-bold">{missingItems.length ? `还差 ${missingItems.length} 项即可生成` : "档案已就绪"}</h3>
+                    <h3 className="mt-2 text-lg font-bold">{missingItems.length ? `还可补 ${missingItems.length} 项` : "素材已就绪"}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
                         {profile
                             ? `${profile.name} · ${profile.zodiacSign || "星座待补"}`
@@ -2396,22 +2235,6 @@ function SignalList({ items, compact }: { items: ReportWarningItem[]; compact?: 
     );
 }
 
-function InsightScope({ items }: { items: InsightScopeItem[] }) {
-    return (
-        <div className="astro-insight-scope grid gap-2 rounded-md border bg-muted p-3 text-muted-foreground">
-            <div className="font-semibold text-foreground">AI 解读范围</div>
-            <div className="grid gap-2 sm:grid-cols-3">
-                {items.map((item) => (
-                    <span key={item.title} className="rounded-md border bg-background/70 p-3">
-                        <strong className="block text-foreground">{item.title}</strong>
-                        <small className="mt-1 block leading-5">{item.text}</small>
-                    </span>
-                ))}
-            </div>
-        </div>
-    );
-}
-
 type QuestionQuality = {
     score: number;
     checks: Array<{ label: string; passed: boolean }>;
@@ -2636,7 +2459,7 @@ function ReportDetailModal({
                     </div>
                 )}
                 {report && result && (
-                    <div className="space-y-5">
+                    <div className="astro-report-body space-y-5">
                         <Alert className="border-primary/20 bg-primary/5">
                             <ShieldCheck size={16} />
                             <AlertTitle>AI 摘要结论</AlertTitle>
@@ -2645,6 +2468,14 @@ function ReportDetailModal({
                         <ReportContextTrail report={report} />
                         <EvidenceList evidence={result.evidence ?? []} />
                         <ReviewChecklistPanel items={result.reviewChecklist ?? []} />
+                        {result.sections?.map((section) => (
+                            <article key={section.heading} className="astro-report-section rounded-md border bg-muted/35 p-3">
+                                <h3>{section.heading}</h3>
+                                <p>{section.content}</p>
+                            </article>
+                        ))}
+                        <ActionList items={result.actions ?? []} />
+                        <SignalList items={result.warnings ?? []} />
                         <div className="grid gap-3 sm:grid-cols-3">
                             {Object.entries(result.scores ?? {}).map(([key, value]) => (
                                 <Metric
@@ -2659,14 +2490,6 @@ function ReportDetailModal({
                                 <Badge key={item} variant="secondary">{item}</Badge>
                             ))}
                         </div>
-                        {result.sections?.map((section) => (
-                            <article key={section.heading} className="rounded-md border bg-muted/35 p-3">
-                                <h3>{section.heading}</h3>
-                                <p className="text-muted-foreground">{section.content}</p>
-                            </article>
-                        ))}
-                        <ActionList items={result.actions ?? []} />
-                        <SignalList items={result.warnings ?? []} />
                         <FollowUpPanel
                             report={report}
                             generationDisabled={generationDisabled}
