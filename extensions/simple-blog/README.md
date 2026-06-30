@@ -2,7 +2,7 @@
 
 `simple-blog` 是 BuildingAI 官方示例博客插件，同时作为插件开发参考模板。提供文章分类、文章 CRUD、公开浏览和 Console 管理能力。
 
-文档维护规则：全仓公共边界、主系统二开、上游同步、组件化 UI 和验证规则维护在根目录 `AGENTS.md`；本 README 只维护 `simple-blog` 作为官方示例的业务边界、能力状态、入口、数据/事务/安全事实和验证命令。临时分析和计划文档只作为施工材料，有效结论合并回 `AGENTS.md` 或本 README。
+文档维护：跨插件通用规范见根 `AGENTS.md`；本 README 只记录本插件的业务事实、入口、特有边界、验证状态、风险和下一步。临时计划或 QA 结论收口后只合并仍有效内容，不长期维护第二套文档。
 
 ## 定位
 
@@ -22,9 +22,6 @@
 | 批量删除 | ready | 批量删除文章时使用 CASE WHEN 单 SQL 批量更新分类计数。 |
 | 浏览量 | ready | 使用 `increment` 原子操作，避免 read-modify-write 竞态。 |
 | 分页 | ready | 公开文章列表默认 `take: 50` 限制，防止全表扫描。 |
-| DTO 验证 | ready | title/content/summary/cover 均有长度/格式校验；cover 使用 `@IsUrl` HTTP/HTTPS 校验；content 限制 100000 字符。 |
-| 错误处理 | ready | Controller 层异常冒泡到全局过滤器，不再 try/catch 吞异常返回 200。 |
-| Service/Controller 继承 | ready | ArticleService 继承 BaseService，使用 withTransaction 等通用能力。 |
 | Upgrade 日志 | ready | 0.0.2 upgrade 使用 NestJS Logger 而非 console.log。 |
 
 ## 入口与页面
@@ -54,17 +51,21 @@
 | `ArticleService extends BaseService<Article>` | 文章 CRUD、事务包裹、原子浏览量、批量删除。 |
 | `CategoryService` | 分类 CRUD、原子计数增减。 |
 
-## 主系统复用边界
+## 用户端边界
+
+| 主题 | 说明 |
+|---|---|
+| Web | 文章列表、分类浏览、文章详情和分页浏览，默认 50 条/页。 |
+| Console | 分类管理、文章增删改查和批量删除。 |
+
+## 关键技术边界
 
 | 能力 | 当前实现 |
 |---|---|
-| BaseService | ArticleService、CategoryService 均继承 `@buildingai/base` 的 BaseService，复用通用 CRUD 和 `withTransaction`。 |
-| 事务 | 文章创建/更新/删除/批量删除均使用 `withTransaction` 包裹，事务开头执行 `SET LOCAL lock_timeout = 3000`，通过文件级常量 `LOCK_TIMEOUT` 统一管理。 |
-| DTO 验证 | 使用 class-validator：`@IsUrl` 校验 cover URL 协议（http/https），`@MaxLength(100000)` 限制 content 长度，`@MaxLength(200)` 限制 title。 |
-| 错误处理 | Service 层使用 `HttpErrorFactory.badRequest/notFound` 抛出 HTTP 异常，Controller 层不使用 try/catch 吞异常，异常冒泡到全局过滤器。 |
-| 种子数据 | 首次安装通过 seeders 创建默认分类。 |
-| UI | 复用主系统 Button、Card、Input、Textarea、Select、Badge、Label 等组件。 |
-| i18n | 使用 `@buildingai/i18n` 多语言支持。 |
+| 业务模型 | Article、Category 作为官方示例实体，覆盖文章、分类、公开浏览和 Console CRUD。 |
+| 数据一致性 | 文章创建/更新/删除/批量删除会联动分类计数；分类 `articleCount` 和文章 `viewCount` 都使用 SQL 原子操作。 |
+| 默认数据 | 首次安装通过 seeders 创建默认分类，`0.0.2` upgrade 使用 NestJS Logger 输出。 |
+| 模板价值 | 作为官方示例，应持续符合根 `AGENTS.md` 的插件结构、DTO、事务、UI 和验证规则。 |
 
 ## 数据与存储
 
@@ -90,17 +91,10 @@ pnpm --filter simple-blog build:publish
 | `check-types` | pass |
 | `build:api` | pass |
 | `build:web` | pass |
-| 事务安全 | 所有写操作包裹在事务内并设置 lock_timeout。 |
+| 事务安全 | 写操作事务边界已覆盖文章和分类计数联动。 |
 | 原子计数 | 分类计数和浏览量均使用 SQL 原子操作。 |
 
 ## 作为参考模板
 
-`simple-blog` 作为官方示例插件，新插件应参考以下规范实现：
+`simple-blog` 是官方示例插件，重点展示标准插件结构、Web/Console 双入口、插件实体、事务写入、原子计数和发布验证。通用开发规范以根 `AGENTS.md` 为准，不在本 README 重复维护。
 
-1. **Service 继承 BaseService**：复用分页、事务包装、通用 CRUD。
-2. **Controller 继承 BaseController**：统一错误处理。
-3. **DTO 完整验证**：每个字段都有 class-validator 装饰器，URL 字段用 `@IsUrl`，文本字段加 `@MaxLength`。
-4. **事务包裹**：涉及多表写操作使用 `withTransaction`，事务内设置 lock_timeout。
-5. **原子计数**：避免 read-modify-write 竞态。
-6. **错误处理**：Controller 层不吞异常，Service 层抛 HTTP 异常而非 `new Error()`。
-7. **批量操作**：避免循环内逐条 SQL。

@@ -2,7 +2,7 @@
 
 `echoflow-ai-town` 是 EchoFlow 的小镇经营游戏插件。用户端直接进入可玩小镇，建造、装饰并经营专属小镇，围绕存档、行动、居民关系、事件、日结、今日计划和居民对话形成日常循环；Console 负责模型配置、存档诊断、日志和运营排查。
 
-文档维护规则：全仓公共边界、主系统二开、上游同步、组件化 UI 和验证规则维护在根目录 `AGENTS.md`；本 README 只维护 `echoflow-ai-town` 的业务边界、能力状态、入口、玩法/记忆/catalog/计费事实、验证命令和待办。临时分析、浏览器 QA checklist、外部项目快照或计划文档只作为施工材料，有效结论必须合并到 `AGENTS.md` 或本 README，不长期维护第二套插件规范；新的玩法循环、记忆、catalog、计费、降级体验或浏览器 QA 结论也直接沉淀到这两处，并从“下一步”移除已经落地的旧计划。
+文档维护：跨插件通用规范见根 `AGENTS.md`；本 README 只记录本插件的业务事实、入口、特有边界、验证状态、风险和下一步。临时计划或 QA 结论收口后只合并仍有效内容，不长期维护第二套文档。
 
 ## 定位
 
@@ -61,9 +61,6 @@
 | 内容包 | ready | `launch-core@0.0.1` / `season-0` manifest 已记录内容范围、seed 策略和幂等键；存档 `worldState.contentPack` 会保存当前内容包快照。 |
 | 内容包运营页 | ready | Console 提供只读内容包面板，展示 manifest、存档覆盖、章节分布、活动状态和运营告警；暂不提供后台改内容开关。 |
 | 正式计费 | ready | 已接入 `ExtensionBillingModule` / `ExtensionBillingService`；今日计划、居民聊天和探索导演价格由 Console 配置，默认价格为 0 时不扣费，真实模型成功且未 fallback 时才以事件 ID 作为 `associationNo` 幂等扣费，失败按账务事实退款。 |
-| Service/Controller 继承 | ready | TownService 继承 BaseService<TownSave>，Web/Console Controller 均继承 BaseController，复用事务包装和通用 CRUD。 |
-| 事务锁超时 | ready | 所有写操作事务开头执行 `SET LOCAL lock_timeout = 3000`，通过文件级常量 `LOCK_TIMEOUT` 统一管理，防止长时间锁等待。 |
-| HTTP 异常 | ready | 业务校验失败统一使用 `BadRequestException` / `NotFoundException`，不再 `throw new Error()` 返回 500；Controller 层无 try/catch 吞异常。 |
 | 天气 Catalog | ready | 天气效果乘数集中在 `catalog/town-weather.catalog.ts`，经营金币、拜访声望、探索体力消耗等数值配置与业务逻辑分离。 |
 | 统计聚合优化 | ready | 统计查询使用 `GROUP BY` 单 SQL 聚合替代多次 COUNT 查询，消除 N+1 查询问题。 |
 | 事件分页 | ready | getEvents 支持 `take` 参数分页，默认 50 条限制，防止全表扫描。 |
@@ -91,25 +88,31 @@
 | Rule Services | `town-world-rules.service.ts`、`town-relationship-rules.service.ts`、`town-progress-rules.service.ts` | 天气、日结、关系、任务、成就、解锁和奖励计算。 |
 | Catalog | `catalog/*.ts` | 默认建筑、区域、居民、基础行动、事件选项、任务、周目标、主线章节、成就、节日候选和内容包 manifest。 |
 
+## 用户端边界
+
+| 主题 | 说明 |
+|---|---|
+| 页面形态 | 用户端继续作为主系统 iframe 内的业务面板，不重复账号、头像、全局导航、余额入口或完整应用壳。 |
+| 首屏 | 首屏优先展示小镇场景、资源、目标、建筑/居民热点和行动命令牌，保持可玩场景为视觉中心。 |
+| 行动循环 | 经营、拜访、布置、探索、升级和休息都会经过服务端规则结算；每日行动预算和同日重复动作拦截继续存在。 |
+| 命令牌与热点 | 底部行动栏和地图热点必须呈现推荐、任务关联、收益预览、预算提示、不可行动原因与完整可访问名称。 |
+| 记忆与对话 | 居民对话支持记忆、偏好、约定和关键时刻，白名单摘要进入 prompt，并影响推荐、预览、热点和 Console 诊断。 |
+| 反馈 | 行动、日结和对话反馈都要展示资源变化与业务解释，不回退到普通应用式错误或加载壳。 |
+| Console | 管理 AI 配置、存档诊断、日志统计、内容包只读面板和异常排查，不混入用户生成流程。 |
+
 后端写入阶段使用存档锁保护资源、关系、任务和事件一致性；模型调用不放在长事务内。
 
-## 主系统复用边界
+## 关键技术边界
 
 | 能力 | 当前实现 |
 |---|---|
-| LLM | 通过 `AiPublicModule` / `PublicAiModelService` 获取启用 LLM 并调用 `generateText()`；插件不直接读取 Provider adapter 或 Secret。 |
-| Provider Config | 由 `PublicAiModelService` 在主系统边界内复用 `normalizeProviderConfig()`、Provider adapter 和 Secret 解析；小镇业务层不得重复拉取或归一化 Provider 配置。 |
-| AI 结果解析 | 今日计划、事件导演和居民回复等模型返回 JSON 文本统一使用主系统 `safeJsonParse` 解析；业务 prompt 和审计快照的 `JSON.stringify` 保持可读序列化用途。 |
-| Secret | 模型密钥来自主站 Provider Secret；插件不保存 API Key，不写 `.env`。 |
-| 上传 | 当前小镇不处理用户上传文件。 |
-| 计费 | 今日计划、居民聊天和探索导演使用 `ExtensionBillingService`，事件 ID 作为 `associationNo`；默认价格为 0 时不扣费，fallback 不扣费，失败按账务事实退款。 |
-| Rate Limit | Web 行动和居民聊天入口复用 `ExtensionRateLimitService` + 主系统 Redis 做 10 秒/分钟双窗口限流；玩法行动预算和 AI 日额度继续保留业务语义。 |
-| 队列 | 当前 AI 调用为业务请求内编排；如引入长流程记忆压缩或章节生成，应优先接主系统队列。 |
-| 通知 | 当前无异步终态或离线触达事件，暂不接入通知；后续长任务或运营触达应复用 `ExtensionNotificationService`。 |
-| 额度确认 | 今日计划和居民回复不在浏览器持久化“已确认”状态；每次高成本动作按当前场景展示镇务额度提示。 |
-| UI | 用户端和 Console 优先复用主系统 Button、Card、Input、Select、Tabs、Badge、Label、Alert、Skeleton 等组件；AI 配置页普通字段标签已收敛到系统 `Label`，复合 checkbox/radio 行需要整行点击时才保留原生 `label` 语义。首屏路由延迟加载 Console 外壳，Console 菜单图标走主系统静态白名单。游戏场景、命令牌、地图热点和奖励结算可保留插件业务样式，但不能退回另一套基础控件系统。 |
-| Manifest | `package.json` 声明运行时代码、构建配置和测试路径直接 import/require 的包；当前已移除未使用的 `@buildingai/utils`，并为 eslint 配置声明 `eslint` / `globals`，为规则级 smoke 测试声明 `ts-node`。 |
-| RootLayout | 前端入口直接使用主系统 `RootLayout` 提供的 QueryClientProvider 和扩展布局，不在插件 main.tsx 里再包一层 QueryClientProvider，避免查询默认配置和首屏错误处理分裂。 |
+| AI 角色 | 主站 LLM 只做镇务参谋、叙事导演和居民表演层；金币、体力、声望、关系、奖励和扣费仍由服务端规则控制。 |
+| 规则与 catalog | 建筑、区域、居民、行动、事件、任务、周目标、主线、成就、天气和内容包均由 catalog/rule service 维护，service 负责事务、校验和编排。 |
+| 记忆闭环 | 居民摘要、心情、偏好、约定、关键时刻和有限最近消息进入白名单 prompt，并影响推荐目标、行动预览、地图热点和 Console 诊断。 |
+| 计费 | 今日计划、居民聊天和探索导演使用主系统计费；默认价格为 0 时不扣费，fallback 不扣费，真实模型成功才按事件 ID 幂等扣费。 |
+| 内容包 | `launch-core@0.0.1` / `season-0` manifest 记录内容范围、seed 策略和幂等键；存档保存内容包快照。 |
+| 用户端语境 | 用户端只写小镇玩法语境；模型、Provider、fallback 等运维术语只保留在 Console。 |
+| Console | 管理 AI 配置、存档诊断、日志统计、内容包只读面板和异常排查，不混入用户生成流程。 |
 
 ## 数据与存储
 

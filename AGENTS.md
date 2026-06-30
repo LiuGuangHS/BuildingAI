@@ -4,7 +4,6 @@
 
 - [核心边界](#核心边界)
 - [文档治理](#文档治理)
-- [整合优化收口](#整合优化收口)
 - [主系统二开决策](#主系统二开决策)
 - [官方依据](#官方依据)
 - [工作区配置](#工作区配置)
@@ -30,7 +29,7 @@
 
 本仓库是基于 BuildingAI 的 EchoFlow 二开与插件工作区。所有 Agent 和人工改动以本文件为准：主系统是需要持续吸收官方上游更新的二开基座，EchoFlow 业务优先落在插件内；确属平台公共能力的通知、多渠道、登录、计费、Secret、上传、队列和 Console 基础能力，可以按主系统模块边界实现，但必须记录与上游可能冲突的点。
 
-长期规范只维护在 `AGENTS.md` 和各 `extensions/echoflow-*/README.md`。`docs/`、`.agents/`、`.codex/` 和计划文件只作为阶段性分析、执行计划或交接材料；其中形成的最佳实践、边界或任务结论要及时合并回 `AGENTS.md` 或对应插件 README，避免长期维护第二套文档。新发现的更好规范、组件约束、验证方式或边界结论，默认先落到这两个长期入口，再清理临时材料。
+长期事实源只分两层：根 `AGENTS.md` 记录跨插件通用规则、主系统二开边界、安全/计费/队列/UI/验证基线；各 `extensions/*/README.md` 记录插件自己的业务事实、入口、特有边界、验证状态、风险和下一步。`docs/`、计划、截图、QA checklist、外部参考和临时分析只作为施工材料，不长期维护第二套事实源。
 
 ## 核心边界
 
@@ -50,32 +49,16 @@
 |---|---|
 | 全仓规范 | `AGENTS.md` 记录主系统二开边界、插件通用规范、上游同步、安全、验证、UI 和文档治理。 |
 | 插件事实 | `extensions/echoflow-*/README.md` 记录该插件业务目标、入口、能力状态、数据/队列/计费/AI/上传/通知边界、验证缺口和下一步。 |
-| README 收口 | 每个 EchoFlow 插件 README 开头必须有“文档维护规则”，并在正文维护定位、当前能力、入口/职责、关键技术边界、前端嵌入约束、验证命令、已知风险和下一步；不要只把 README 写成营销介绍或零散变更日志。 |
+| README 收口 | 每个 EchoFlow 插件 README 开头必须有简短“文档维护”说明，并在正文维护定位、当前能力、入口/职责、关键技术边界、前端嵌入约束、验证命令、已知风险和下一步；不要只把 README 写成营销介绍或零散变更日志。 |
 | 临时材料 | `docs/`、`docs/superpowers/`、插件内 `docs/`、设计参考图说明、截图说明、浏览器 QA checklist 和一次性计划只用于阶段性协作；任务收口时只把仍有效的规范、边界、验证证据、设计结论和剩余风险合并回 `AGENTS.md` 或插件 README。 |
-| 外部参考缓存 | `.agents/references/`、外部项目快照、参考实现和日志只作为阅读材料或复现证据；不能成为 EchoFlow 长期事实源，也不能在 README 中要求后续维护其原始结构。借鉴后的结论必须改写成 EchoFlow 自己的业务边界、组件约束、安全规则或验证命令。 |
-| 清理规则 | 临时材料合并后应删除或明确标记为临时/过期；确需保留原始参考、日志或截图时，必须写明来源、日期、用途和“不作为长期事实源”；不要在交付说明、README 或 AGENTS 中继续引用临时计划作为长期事实来源。 |
-| 更新时机 | 发现更好的插件开发规范、组件使用约束、安全边界、验证流程、宿主集成经验或用户端文案规则时，及时更新本文件；发现插件特有经验时更新该插件 README。 |
-| 计划粒度 | 插件 README 的后续任务必须能直接驱动开发，至少包含范围、文件、验收、验证命令和阻塞条件；不要只写“优化 UI”“继续完善”“做 smoke”这类不可执行句子。 |
+| 外部参考缓存 | `.agents/references/`、外部项目快照、参考实现和日志只作为阅读材料或复现证据；借鉴后的结论必须改写成 EchoFlow 自己的业务边界、组件约束、安全规则或验证命令。 |
+| 清理规则 | 临时材料合并后应删除或明确标记为临时/过期；确需保留原始参考、日志或截图时，必须写明来源、日期、用途和“不作为长期事实源”。 |
+| 更新时机 | 跨插件规范更新本文件；插件特有经验更新对应 README。 |
+| 计划粒度 | 插件 README 的后续任务必须能直接驱动开发，至少包含范围、步骤、验收和阻塞条件。 |
 
 插件 README 的“下一步”只记录仍真实存在的产品、技术、验证缺口和执行顺序；已经通过代码、测试或浏览器验证落地的临时任务要合并进“当前能力/验证”并从待办里移除或标记已落地，避免旧计划长期误导后续开发。每次完成设计、开发、浏览器 QA、构建发布或审查修复后，都要同步检查对应 README 的“当前能力”“开发与验证”“已知风险”“下一步”是否仍准确；如果临时文档、旧计划或外部参考与 `AGENTS.md` / README 冲突，以 `AGENTS.md` / README 为准并立即收口修正。交付前必须把文档同步作为完成条件之一；若本次改动不需要更新 README/AGENTS，交付说明要明确写“文档无需更新”的原因。
 
-## 整合优化收口
-
-当前 EchoFlow 插件已经形成稳定骨架：根 `AGENTS.md` 只沉淀跨插件共性，插件 README 只写本插件差异、当前状态、验证证据、真实风险和可执行下一步；不要在每个 README 里重复整套通用规范长文。发现五个插件都在重复的规则，优先上提到本节或对应主系统/SDK 章节，再让 README 只保留插件自己的例外和证据。
-
-| 方向 | 收口规则 |
-|---|---|
-| 事实源 | 全仓规则归 `AGENTS.md`，插件事实归 README，测试锁边界；不要让 `docs/`、计划、截图说明或外部参考继续承担事实源。 |
-| 元信息 | `manifest.json`、`package.json`、`extensions/extensions.json` 和安装记录保持 identifier/name/version/icon/author/engine 一致；用户可见 name/description 使用业务语境，不用泛 AI 壳。 |
-| Web/Console | Web serializer 默认白名单 public 字段；Console 才能展示排障字段、raw payload、Provider、Secret、任务 ID、管理员备注或退款异常。 |
-| 前端外壳 | 插件默认是主系统 iframe + RootLayout 内的业务面板；不重复账号、导航、余额、全局统计、完整 App Header 或营销 Hero。 |
-| UI/CSS | Button/Card/Tabs/Dialog/Label/Alert/Skeleton/Progress 等先用主系统组件和 Tailwind；CSS 只保留业务画布、正文编辑器、媒体预览、游戏舞台和响应式兜底。 |
-| 异步链路 | 付费或长流程默认接主系统计费、限流、队列、通知和锁内终态保护；失败退款按账务事实说话，不在 README 或用户端提前宣称闭环。 |
-| 安全 helper | JSON、Provider HTTP、Base URL、公网 URL、下载、Storage、Rate Limit、Billing、Notification 优先用公开 SDK/helper；不要为了 import 好看在插件内包一层无业务差异的转口。 |
-| 测试 | 边界测试优先锁 public/private 字段、manifest/package/registry、脚本、发布包、关键禁词和核心语义；普通文案不要大面积逐字复刻，避免测试脆弱化。 |
-| 下一步 | README 待办必须包含范围、文件/入口、步骤、验收和阻塞条件；已 ready 的事实移到“当前能力/验证”，不要在“下一步”重复。 |
-
-适合继续上提到共享 SDK/测试工具的重复项：manifest/package/registry 一致性 helper、public serializer 白名单 helper、release allowlist 检查、队列恢复/终态保护/退款归因骨架，以及 SSRF/Provider URL 安全测试 helper。只有两三个插件重复但业务细节不同的逻辑，先写 AGENTS 规则，不急着抽象代码。
+跨插件重复规则只在本文件维护；插件 README 不再重复整套 BaseService、RootLayout、lock_timeout、UI、限流、通知等通用规范，只记录本插件例外、证据和缺口。适合后续抽成共享 SDK/测试工具的重复项包括元信息一致性、public serializer 白名单、release allowlist、队列恢复/终态保护/退款归因和 SSRF/Provider URL 安全测试 helper；只有两三个插件重复且业务细节不同的逻辑，先写规则，不急着抽象代码。
 
 ## 主系统二开决策
 
@@ -211,7 +194,6 @@ EchoFlow 业务插件 devDependencies 最小基线（`catalog:*` 版本由 pnpm-
 
 **模板合规强制规则**：`templates/extension-starter/` 和 `extensions/simple-blog/` 作为脚手架和官方示例，必须始终符合本节所有规则；规范变更（脚本约定、依赖基线、字段要求）必须同步更新模板和示例，禁止出现"规范写了但模板没改"导致新插件从脚手架就违规的情况。
 
-跨插件重复的测试辅助可放在 `extensions/test-utils/`，该目录是可跟踪的测试目录，`.gitignore` 必须显式放行；仅承载 Node 测试、静态边界测试和测试 helper，不能放业务运行时代码；插件 runtime 不能反向依赖该目录。
 
 ## 后端规范
 
@@ -288,7 +270,7 @@ EchoFlow 业务插件 devDependencies 最小基线（`catalog:*` 版本由 pnpm-
 用户端文案避免泛化“AI 风”堆砌。生成类插件把智能感落到分析范围、扣费规则、失败退款、上下文来源和结构化结果；Console 可保留模型、Provider、AI 等运维术语。
 插件公开元信息会出现在应用列表、安装记录或市场入口，也属于用户第一印象；用户端插件的 `manifest.json`、安装记录 seed/upgrade、package 描述和市场文案应使用业务/玩法/工具语境，不要把名称写成泛 AI 应用、AI 助手或 AI 趣味玩法，除非该入口面向 Console 运维而非最终用户。
 
-设计/实现过程中的草稿计划、参考图、浏览器 QA checklist、临时截图说明和一次性分析文档只作为执行辅助；交付前把仍有效的规范、边界、验证结论、设计取舍和剩余风险合并进 `AGENTS.md` 或对应插件 `README.md`，并清理本人创建的临时脚本和临时文档，避免长期维护第二套散落文档。参考图可以保留为插件静态发布资产或 README 事实的一部分，但不能成为 README 之外的长期任务看板。插件 README 应记录该插件的业务边界、AI/计费/安全能力状态、前端嵌入约束、验证命令和当前缺口；根 `AGENTS.md` 只沉淀跨插件通用规则。浏览器 QA 检查 React lazy route 或 Suspense 页面时，必须等待 loading/skeleton 结束并确认业务标题/关键文案出现后再判断视觉状态；短暂骨架态不能当作白屏或通过证据。浏览器 QA 还必须先用 HTTP 或页面标题确认当前端口服务确实属于被测插件，例如根路径、HTML title、Vite base 和业务文案都匹配 `identifier`；不要把其他插件占用的 dev server、主系统登录跳转错误页或浏览器 `data:` 错误页当作当前插件的视觉证据。
+草稿计划、参考图、浏览器 QA checklist、截图说明和一次性分析只作为执行辅助；交付前把仍有效结论合并进 `AGENTS.md` 或对应 README。浏览器 QA 必须等待 lazy/skeleton 结束，并用 URL、title、Vite base、端口和业务文案确认当前页面确属被测插件，不能把其他插件 dev server、主系统错误页或浏览器 `data:` 错误页当作证据。
 
 Docker 验证若主站 node 容器长时间未监听端口，先区分业务启动错误和宿主挂载阻塞：检查 PM2 error 日志、API 进程状态、`/proc/<pid>/wchan` 和 `/proc/net/tcp`。若进程处于 `D` 状态且 `wchan` 为 `p9_client_rpc`，这是 Docker Desktop / WSL 访问 Windows 工作区挂载的内核等待，不能归因于插件业务逻辑或 Nest DI；应记录为环境验证阻塞，待 Docker/WSL/文件挂载恢复后再做浏览器 E2E。
 
@@ -519,13 +501,12 @@ Windows 与沙箱常见故障排查：
 
 | 优先级 | 事项 | 完成条件 | 验证方式 |
 |---|---|---|---|
-| P1 | 真实端到端 smoke | 配好主站 Secret、测试用户、余额和存储，覆盖图像、视频、合同、星盘、小镇的成功、失败、退款或 fallback。 | `pnpm --filter <id> smoke:web`（需 token/开关）+ 浏览器 E2E 录屏 |
-| P1 | 队列与恢复 smoke | 验证图像、合同、星盘和视频的 Redis/Worker 拓扑、抢占、重复执行保护、超时回收、重启恢复、软删除保护和失败补偿。 | 本地 docker compose 重启 Worker + 队列状态 API + focused tests |
-| P2 | 主系统能力复用审查 | 清理直接 provider 注入、内存队列、进程内限流、手写密钥脱敏、手写文件 URL、手写通知/签名协议和可替换裸 UI 控件。 | 静态 diff + 边界测试（public types、manifest、SDK boundary） |
-| P2 | 上传与 URL 安全审查 | 所有接收文件、URL、Webhook 回调和远程资源下载入口只接受平台上传或受信任 provider 返回值。 | SSRF/URL 边界测试 + `assertPublicHttpUrl` 覆盖率检查 |
-| P2 | 异步终态一致性审查 | 图像、合同、星盘等异步链路具备二次读取、锁定、终态短路和软删除保护。 | 终态重复触发测试 + 删除保护测试 |
-| P2 | 测试补强 | 为失败退款、计费幂等、队列入队失败、恢复扫描、文件归属、世界规则和 AI fallback 补 focused tests。 | `pnpm --filter <id> test` 全绿 + 新增测试覆盖新分支 |
-| P3 | 发布前整理 | 清理或确认未跟踪文件、锁文件必要性、构建产物和提交分组。 | `git status` 审查 + `pnpm build && pnpm typecheck` 全绿 |
+| P1 | 真实端到端 smoke | 配好主站 Secret、测试用户、余额、存储和 Worker，覆盖图像、视频、合同、星盘、小镇的成功、失败、退款或 fallback。 | smoke 脚本 + 浏览器/主站证据 |
+| P1 | 队列与恢复 smoke | 验证异步插件的 Redis/Worker 拓扑、抢占、重复执行保护、超时回收、重启恢复、软删除保护和失败补偿。 | docker/Worker 重启 + focused tests |
+| P2 | 主系统能力复用审查 | 清理可替换的直接 provider 注入、内存队列/限流、手写密钥脱敏、手写 URL/通知/签名和裸 UI 控件。 | 静态 diff + 边界测试 |
+| P2 | 上传与 URL 安全审查 | 所有文件、URL、Webhook 和远程下载入口只接受平台上传或受信 provider 返回值，并走公共安全 helper。 | SSRF/URL 边界测试 |
+| P2 | 测试补强 | 为失败退款、计费幂等、队列入队失败、恢复扫描、文件归属、世界规则和 AI fallback 补 focused tests。 | `pnpm --filter <id> test` |
+| P3 | 发布前整理 | 清理临时材料、锁文件必要性、构建产物和提交分组。 | `git status` + 必要构建/类型检查 | `git status` 审查 + `pnpm build && pnpm typecheck` 全绿 |
 
 ## 交付检查
 

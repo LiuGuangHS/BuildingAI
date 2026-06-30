@@ -56,15 +56,13 @@ services:
             retries: 5
 
     nodejs:
-        image: node:24-bookworm-slim
+        image: node:24
         container_name: buildingai-nodejs${DOCKER_CONTAINER_SUFFIX:-}
         restart: on-failure:3
         working_dir: /buildingai
         volumes:
             - ./:/buildingai
-            - buildingai-node-modules:/buildingai/node_modules
-            - buildingai-pnpm-store:/pnpm-store
-            - buildingai-turbo-cache:/root/.local/share/pnpm
+            - /buildingai/node_modules
             - /buildingai/packages/api/node_modules
             - /buildingai/packages/cli/node_modules
             - /buildingai/packages/core/node_modules
@@ -145,15 +143,13 @@ services:
 
             if ! command -v pnpm >/dev/null 2>&1; then
             echo "📦 Installing pnpm..."
-            npm install -g pnpm@latest
+            npm install -g pnpm@11.9.0
             npm install -g pm2
 
             if [ -n "$NPM_REGISTRY_URL" ]; then
                 pnpm config set registry "$NPM_REGISTRY_URL"
             fi
             fi
-
-            pnpm config set store-dir /pnpm-store
 
             # localhost inside a container is the container itself, not host Postgres/Redis
             if [ "$DB_HOST" = "localhost" ] || [ "$DB_HOST" = "127.0.0.1" ]; then
@@ -186,8 +182,3 @@ services:
 networks:
     buildingai-network:
         driver: bridge
-
-volumes:
-    buildingai-node-modules:
-    buildingai-pnpm-store:
-    buildingai-turbo-cache:

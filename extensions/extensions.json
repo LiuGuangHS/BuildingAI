@@ -37,17 +37,17 @@
         "simple-blog": {
             "manifest": {
                 "identifier": "simple-blog",
-                "name": "Simple Blog",
+                "name": "文章资讯",
                 "version": "0.0.1",
-                "description": "A simple blog application",
+                "description": "发布文章资讯、管理内容分类，快速搭建资讯展示主页。",
                 "author": {
                     "avatar": "/static/avatars/buildingai.png",
-                    "name": "BuildingAI Teams",
+                    "name": "EchoFlowAI Team",
                     "homepage": ""
                 }
             },
             "isLocal": true,
-            "enabled": true,
+            "enabled": false,
             "installedAt": "2026-06-12T08:09:37.497Z"
         },
         "echoflow-contract-generation": {
@@ -98,7 +98,7 @@
                 }
             },
             "isLocal": true,
-            "enabled": false,
+            "enabled": true,
             "installedAt": "2026-06-14T00:00:00.000Z"
         }
     },
