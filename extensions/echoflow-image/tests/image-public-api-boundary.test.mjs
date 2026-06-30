@@ -146,6 +146,23 @@ test("image shared error state avoids static lucide imports on always-available 
     assert.doesNotMatch(source, /lucide-react/);
 });
 
+test("image public workspace header is a workspace control bar", async () => {
+    const [shellSource, modeSource, indexSource] = await Promise.all([
+        readFile(WORKSPACE_SHELL_FILE, "utf8"),
+        readFile(MODE_SWITCH_FILE, "utf8"),
+        readFile(WEB_INDEX_FILE, "utf8"),
+    ]);
+
+    assert.match(shellSource, /新图片任务/);
+    assert.doesNotMatch(shellSource, /EchoFlowAI 绘画/);
+    assert.match(modeSource, /@buildingai\/ui\/components\/ui\/tabs/);
+    assert.match(modeSource, /<Tabs/);
+    assert.match(modeSource, /<TabsList/);
+    assert.match(modeSource, /<TabsTrigger/);
+    assert.match(indexSource, /mode=\{workspaceMode\}/);
+    assert.match(indexSource, /onModeChange=\{setWorkspaceMode\}/);
+});
+
 test("image canvas workspace is lazy-loaded away from the default generation route", async () => {
     const source = await readFile(WEB_INDEX_FILE, "utf8");
     assert.match(source, /const CreativeCanvasWorkspace = lazy\(\(\) =>/);

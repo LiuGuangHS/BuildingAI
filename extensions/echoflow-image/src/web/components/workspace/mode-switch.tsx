@@ -1,5 +1,4 @@
-import { Button } from "@buildingai/ui/components/ui/button";
-import { cn } from "@buildingai/ui/lib/utils";
+import { Tabs, TabsList, TabsTrigger } from "@buildingai/ui/components/ui/tabs";
 
 export type WorkspaceMode = "quick" | "canvas";
 
@@ -30,31 +29,23 @@ const modeItems: Array<{
 
 export function WorkspaceModeSwitch({ value, onChange }: ModeSwitchProps) {
     return (
-        <div className="inline-grid grid-cols-2 gap-1 rounded-lg border bg-muted/20 p-1" role="tablist" aria-label="EchoFlowAI 绘画模式">
-            {modeItems.map((item) => {
-                const active = value === item.value;
-                return (
-                    <Button
+        <Tabs value={value} onValueChange={(next) => onChange(next as WorkspaceMode)} className="min-w-0">
+            <TabsList className="grid h-auto grid-cols-2 gap-1 rounded-lg border bg-muted/20 p-1" aria-label="图片工作区">
+                {modeItems.map((item) => (
+                    <TabsTrigger
                         key={item.value}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        variant="ghost"
+                        value={item.value}
                         title={`${item.title}：${item.description}`}
-                        onClick={() => onChange(item.value)}
-                        className={cn(
-                            "h-10 rounded-md px-2.5 text-xs text-muted-foreground sm:h-11",
-                            active && "border border-primary/40 bg-primary/10 text-primary shadow-sm",
-                        )}
+                        className="h-10 rounded-md px-2.5 text-xs text-muted-foreground data-[state=active]:border data-[state=active]:border-primary/40 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm sm:h-11"
                     >
                         <span aria-hidden="true" className="text-sm leading-none">{item.mark}</span>
                         <span className="flex flex-col items-start leading-none">
                             <span className="font-semibold">{item.title}</span>
                             <span className="mt-1 hidden text-[11px] font-normal opacity-75 sm:inline">{item.description}</span>
                         </span>
-                    </Button>
-                );
-            })}
-        </div>
+                    </TabsTrigger>
+                ))}
+            </TabsList>
+        </Tabs>
     );
 }

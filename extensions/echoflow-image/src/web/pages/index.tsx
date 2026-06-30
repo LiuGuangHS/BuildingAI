@@ -1,15 +1,16 @@
 import { useDocumentHead } from "@buildingai/hooks";
 import { Button } from "@buildingai/ui/components/ui/button";
-import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { cn } from "@buildingai/ui/lib/utils";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { GenerationFlowCanvas } from "../components/canvas/generation-flow-canvas";
+import { InspirationBoard } from "../components/canvas/inspiration-board";
 import { GenerationForm } from "../components/generation-form";
 import { HistoryList } from "../components/history-list";
-import { QuickGeneratePanel } from "../components/panels/quick-generate-panel";
 import { ResultGallery } from "../components/result-gallery";
-import type { WorkspaceMode } from "../components/workspace/mode-switch";
 import { WorkspaceShell } from "../components/workspace/workspace-shell";
+import type { WorkspaceMode } from "../components/workspace/mode-switch";
 import {
     useWebCreateGenerationMutation,
     useWebDeleteGenerationMutation,
@@ -24,30 +25,12 @@ import {
 import type { CreateGenerationParams, ImageGeneration } from "../services/types/generation";
 import { ImageGenerationStatus } from "../services/types/generation";
 
-const CreativeCanvasWorkspace = lazy(() =>
-    import("../components/canvas/creative-canvas-workspace").then((module) => ({
-        default: module.CreativeCanvasWorkspace,
-    })),
-);
-
-function CanvasLoading() {
-    return (
-        <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]" role="status" aria-live="polite">
-            <div className="space-y-4">
-                <Skeleton className="h-40 rounded-lg" />
-                <Skeleton className="h-32 rounded-lg" />
-            </div>
-            <Skeleton className="min-h-[32rem] rounded-lg" />
-        </div>
-    );
-}
-
 export default function EchoflowImagePublicPage() {
     useDocumentHead({ title: "EchoFlowAI 绘画" });
 
-    const [mode, setMode] = useState<WorkspaceMode>("quick");
     const [currentGeneration, setCurrentGeneration] = useState<ImageGeneration | undefined>();
     const [reuseValues, setReuseValues] = useState<Partial<CreateGenerationParams> | undefined>();
+    const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("quick");
 
     const {
         data: historyData,
@@ -129,8 +112,12 @@ export default function EchoflowImagePublicPage() {
             style: generation.style,
             responseFormat: generation.responseFormat,
         });
-        setMode("quick");
         toast.success("参数已回填");
+    };
+
+    const handleContinueFromImage = (values: Partial<CreateGenerationParams>) => {
+        setReuseValues(values);
+        toast.success("已填入参考图，可继续生成分支");
     };
 
     const isGenerating = createMutation.isPending || retryMutation.isPending || currentIsRunning;
@@ -139,7 +126,6 @@ export default function EchoflowImagePublicPage() {
             <ResultGallery
                 generation={currentGeneration}
                 isLoading={isGenerating && !currentGeneration?.resultImages?.length}
-                onOpenCanvas={() => setMode("canvas")}
                 variant="stage"
             />
         ),
@@ -179,19 +165,17 @@ export default function EchoflowImagePublicPage() {
 
     return (
         <WorkspaceShell
-            mode={mode}
-            onModeChange={setMode}
-            quickActions={
-                mode === "quick" ? (
-                    <Button variant="outline" size="sm" onClick={() => refetchHistory()} className="rounded-md">
-                        <span aria-hidden="true" className="text-sm leading-none">↻</span>
-                        <span className="hidden sm:inline">刷新</span>
-                    </Button>
-                ) : null
-            }
+            mode={workspaceMode}
+            onModeChange={setWorkspaceMode}
+            quickActions={(
+                <Button variant="outline" size="sm" onClick={() => refetchHistory()} className="rounded-md">
+                    <span aria-hidden="true" className="text-sm leading-none">↻</span>
+                    <span className="hidden sm:inline">刷新</span>
+                </Button>
+            )}
         >
-            <div hidden={mode !== "quick"}>
-                <QuickGeneratePanel isGenerating={isGenerating} result={quickResult} history={quickHistory}>
+            <div className="grid min-w-0 gap-2.5 xl:grid-cols-[minmax(340px,390px)_minmax(0,1fr)] xl:items-start 2xl:grid-cols-[minmax(340px,390px)_minmax(0,1fr)_minmax(280px,340px)]">
+                <section className="min-w-0 xl:sticky xl:top-2.5">
                     <GenerationForm
                         loading={isGenerating}
                         models={models}
@@ -221,21 +205,20 @@ export default function EchoflowImagePublicPage() {
                         }}
                         onSubmit={handleSubmit}
                     />
-                </QuickGeneratePanel>
+                </section>
+
+                <main className="grid min-w-0 content-start gap-2.5">
+                    <section className={cn("min-w-0 rounded-lg", isGenerating && "ring-1 ring-primary/25")}>
+                        {quickResult}
+                    </section>
+                    <GenerationFlowCanvas generation={currentGeneration} onContinueFromImage={handleContinueFromImage} />
+                    <InspirationBoard generation={currentGeneration} compact />
+                </main>
+
+                <aside className="min-w-0 2xl:sticky 2xl:top-2.5">
+                    {quickHistory}
+                </aside>
             </div>
-            {mode === "canvas" && (
-                <Suspense fallback={<CanvasLoading />}>
-                    <CreativeCanvasWorkspace
-                        generation={currentGeneration}
-                        onReturnToGenerate={() => setMode("quick")}
-                        onContinueFromImage={(values) => {
-                            setReuseValues(values);
-                            setMode("quick");
-                            toast.success("已填入参考图，可继续生成分支");
-                        }}
-                    />
-                </Suspense>
-            )}
         </WorkspaceShell>
     );
 }
