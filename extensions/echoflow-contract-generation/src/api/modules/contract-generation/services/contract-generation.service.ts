@@ -81,6 +81,7 @@ const sectionSchema = z.object({
 const riskSchema = z.object({
     id: z.string().optional(),
     sectionId: z.string().optional(),
+    kind: z.enum(["missing_fact", "legal_risk", "clarity", "enforceability"]).optional(),
     sectionTitle: z.string(),
     level: z.enum(["low", "medium", "high"]),
     issue: z.string(),
@@ -1231,11 +1232,17 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
     }
 
     private buildGeneratePrompt(dto: GenerateContractDto, template: ContractTemplate) {
+        const variables = dto.variables ?? {};
+        const missingFields = template.fields
+            .filter((field) => field.required && !String(variables[field.key] ?? "").trim())
+            .map((field) => ({ key: field.key, label: field.label }));
         return `你是一名严谨的中国商业合同起草助手。请输出符合 schema 的结构化合同数据，不要输出 Markdown。
 
 重要限制：
 - 内容仅供参考，不得宣称构成法律意见。
 - 条款要具体、可执行，避免空泛表达。
+- 不要因为事实不完整而拒绝起草；缺少关键信息时，在合同正文使用【待补充：字段名】占位。
+- 每个【待补充：字段名】都要在 riskFindings 中输出一条 kind 为 missing_fact 的批注，提醒导出前补齐。
 - 主动补齐付款、验收、违约、解除、保密、争议解决等关键风险条款。
 - 风险提示要指出缺失或不清楚的信息，并给出可替换文本。
 - ${PROMPT_SECURITY_RULES}
@@ -1247,7 +1254,8 @@ export class ContractGenerationService extends BaseService<ContractGenerationTas
 目标语言：${dto.language ?? "zh-CN"}
 合同立场：${this.getStanceInstruction(dto.stance)}
 默认条款结构：${template.defaultSections.join("、")}
-用户填写字段：${JSON.stringify(dto.variables ?? {}, null, 2)}
+用户填写字段：${JSON.stringify(variables, null, 2)}
+缺失必填事实：${missingFields.length ? JSON.stringify(missingFields, null, 2) : "无"}
 补充要求：${dto.prompt || "无"}
 后台模板额外提示：${template.promptTemplate || "无"}`;
     }
@@ -1388,6 +1396,7 @@ ${content}`;
         return (Array.isArray(risks) ? risks : []).slice(0, MAX_PROMPT_LIST_ITEMS).map((risk, index) => ({
             id: String(risk.id || `${index}:${risk.sectionTitle ?? ""}:${risk.issue ?? ""}`).trim().slice(0, 500),
             sectionId: risk.sectionId ? String(risk.sectionId).trim().slice(0, 120) : undefined,
+            kind: risk.kind,
             sectionTitle: String(risk.sectionTitle ?? "").trim().slice(0, 200),
             level: risk.level ?? "medium",
             issue: String(risk.issue ?? "").trim().slice(0, 1000),

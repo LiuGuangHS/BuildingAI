@@ -12,7 +12,7 @@ export type RiskReasoning = {
 };
 
 export function deriveRiskReasoning(risk: ContractRiskFinding, index: number): RiskReasoning {
-    const severityLabel = risk.level === "high" ? "高风险" : risk.level === "medium" ? "中风险" : "低风险";
+    const severityLabel = risk.kind === "missing_fact" ? "待补充" : risk.level === "high" ? "高风险" : risk.level === "medium" ? "中风险" : "低风险";
 
     return {
         key: risk.id || `${index}:${risk.sectionTitle}:${risk.issue}`,

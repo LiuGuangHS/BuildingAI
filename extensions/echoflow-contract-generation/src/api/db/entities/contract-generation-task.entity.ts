@@ -28,6 +28,7 @@ export type ContractSection = {
 export type ContractRiskFinding = {
     id?: string;
     sectionId?: string;
+    kind?: "missing_fact" | "legal_risk" | "clarity" | "enforceability";
     sectionTitle: string;
     level: "low" | "medium" | "high";
     issue: string;

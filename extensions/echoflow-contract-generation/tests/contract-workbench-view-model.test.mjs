@@ -32,9 +32,9 @@ test("deriveContractWorkbenchState keeps the first viewport plugin-focused", () 
         dirty: false,
     });
 
-    assert.equal(state.kicker, "合同编辑器");
+    assert.equal(state.kicker, "起草");
     assert.equal(state.title, "服务合同.docx");
-    assert.equal(state.primaryAction.label, "补齐事实");
+    assert.equal(state.primaryAction.label, "生成占位草稿");
     assert.deepEqual(state.missingFacts.map((item) => item.label), ["乙方", "合同金额"]);
     assert.equal(JSON.stringify(state).includes("用户头像"), false);
     assert.equal(JSON.stringify(state).includes("全局统计"), false);

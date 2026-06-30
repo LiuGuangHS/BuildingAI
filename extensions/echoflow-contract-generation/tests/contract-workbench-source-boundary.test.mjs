@@ -7,6 +7,9 @@ const page = readFileSync(new URL("../src/web/pages/index.tsx", import.meta.url)
 const shell = readFileSync(new URL("../src/web/components/contract-workbench/ContractWorkbenchShell.tsx", import.meta.url), "utf8");
 const textEditor = readFileSync(new URL("../src/web/components/contract-editor/ContractPlateEditor.tsx", import.meta.url), "utf8");
 const riskPanel = readFileSync(new URL("../src/web/components/contract-workbench/ContractRiskReasoningPanel.tsx", import.meta.url), "utf8");
+const taskBar = readFileSync(new URL("../src/web/components/contract-workbench/ContractTaskBar.tsx", import.meta.url), "utf8");
+const viewModel = readFileSync(new URL("../src/web/components/contract-workbench/contract-workbench-view-model.ts", import.meta.url), "utf8");
+const inspector = readFileSync(new URL("../src/web/components/contract-workbench/ContractInspector.tsx", import.meta.url), "utf8");
 const consoleTasks = readFileSync(new URL("../src/web/pages/console/tasks.tsx", import.meta.url), "utf8");
 
 test("workbench source does not reintroduce host shell concepts", () => {
@@ -21,6 +24,17 @@ test("new workbench layout is component driven instead of css shell driven", () 
     }
     assert.equal(shell.includes("lg:grid-cols-[minmax(280px,320px)_minmax(0,1fr)]"), true);
     assert.equal(shell.includes("xl:grid-cols-[minmax(280px,320px)_minmax(620px,1fr)_minmax(300px,360px)]"), true);
+});
+
+test("contract task bar stays object-first and leaves actions in tools", () => {
+    assert.match(taskBar, /tools\?: ReactNode/);
+    assert.match(taskBar, /\{tools \? <div className="contract-taskbar-tools">\{tools\}<\/div> : null\}/);
+    assert.match(viewModel, /kicker: options\.mode === "review" \? "审查" : "起草"/);
+    assert.doesNotMatch(viewModel, /kicker: "合同编辑器"/);
+    assert.match(inspector, /@buildingai\/ui\/components\/ui\/tabs/);
+    assert.match(inspector, /<Tabs/);
+    assert.match(inspector, /<TabsList/);
+    assert.match(inspector, /<TabsTrigger/);
 });
 
 test("contract document editor workbench is lazy-loaded from the user page", () => {

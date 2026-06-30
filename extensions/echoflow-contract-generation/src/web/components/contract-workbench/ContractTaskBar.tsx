@@ -8,12 +8,12 @@ export function ContractTaskBar({ state, tools }: { state: ContractWorkbenchStat
     return (
         <header className="contract-taskbar rounded-xl border bg-card/95 px-3 py-2 shadow-sm">
             <div className="contract-taskbar-main">
-                <div className="flex min-w-0 items-center gap-2.5 max-sm:items-start">
-                    <Badge variant="outline" className="shrink-0">{state.kicker}</Badge>
-                    <div className="min-w-0">
+                <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
                         <h1 className="truncate text-[15px] font-semibold leading-tight tracking-normal max-sm:whitespace-normal">{state.title}</h1>
-                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground max-sm:whitespace-normal">{state.subtitle}</p>
+                        <Badge variant="outline" className="shrink-0">{state.kicker}</Badge>
                     </div>
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground max-sm:whitespace-normal">{state.subtitle}</p>
                 </div>
                 <div className="contract-taskbar-signals" aria-label="合同编辑信号">
                     {state.aiSignals.map((signal) => (

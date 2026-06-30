@@ -137,11 +137,7 @@ export default function ContractGenerationHomePage() {
         if (!selectedTemplate) return;
         const errors = validateTemplateFields(selectedTemplate, variables);
         setFieldErrors(errors);
-        if (Object.keys(errors).length > 0) {
-            setMessage("请先补全必填合同信息。");
-            return;
-        }
-        setMessage("合同任务已提交，正在后台生成。");
+        setMessage(Object.keys(errors).length > 0 ? "信息不全也可以生成，AI 会用【待补充】占位并生成批注。" : "合同任务已提交，正在后台生成。");
         try {
             const task = await generateMutation.mutateAsync({ title, templateId: selectedTemplate.id, contractType: selectedTemplate.contractType, industry: selectedTemplate.industry, variables, prompt: buildGenerationPrompt(prompt, draftSections), language: "zh-CN", stance });
             setTask(task);

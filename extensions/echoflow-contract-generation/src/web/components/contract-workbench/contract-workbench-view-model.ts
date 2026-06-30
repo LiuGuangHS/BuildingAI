@@ -71,9 +71,9 @@ export function deriveContractWorkbenchState(options: {
     const sectionCount = options.task?.sections?.length ?? 0;
 
     return {
-        kicker: "合同编辑器",
+        kicker: options.mode === "review" ? "审查" : "起草",
         title: `${options.task?.title || options.template?.name || (options.mode === "review" ? "上传合同审查" : "新合同起草")}.docx`,
-        subtitle: options.task ? "已载入任务正文，可编辑、审查和导出。" : options.mode === "review" ? "导入已有合同，生成 AI 法务批注。" : "补齐事实后生成可编辑合同正文。",
+        subtitle: options.task ? "已载入任务正文，可编辑、审查和导出。" : options.mode === "review" ? "导入已有合同，生成 AI 法务批注。" : "描述业务背景即可生成；缺失事实会用【待补充】占位。",
         recognizedFacts,
         missingFacts,
         aiSignals: [
@@ -104,9 +104,8 @@ function derivePrimaryAction(options: {
 }): ContractWorkbenchAction {
     if (!options.configured) return { key: "configure", label: "等待配置", tone: "blocked" };
     if (options.task && BUSY_STATUSES.has(options.task.status)) return { key: "wait", label: "处理中", tone: "secondary" };
-    if (!options.task && options.mode === "draft" && options.missingFactsCount > 0) return { key: "complete_facts", label: "补齐事实", tone: "blocked" };
     if (!options.task && options.mode === "review" && !options.hasReviewFile) return { key: "upload_review", label: "选择文件", tone: "blocked" };
-    if (!options.task) return { key: options.mode === "review" ? "upload_review" : "generate", label: options.mode === "review" ? "开始审查" : "生成合同", tone: "primary" };
+    if (!options.task) return { key: options.mode === "review" ? "upload_review" : "generate", label: options.mode === "review" ? "开始审查" : options.missingFactsCount > 0 ? "生成占位草稿" : "生成合同", tone: "primary" };
     if (options.dirty) return { key: "save", label: "保存修改", tone: "primary" };
     if ((options.task.riskFindings?.length ?? 0) > 0) return { key: "export", label: "导出结果", tone: "primary" };
     return { key: "review", label: "风险预检", tone: "primary" };

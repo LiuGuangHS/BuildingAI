@@ -48,7 +48,7 @@ test("contract risk findings support optional annotation anchors without exposin
     const match = source.match(/export type ContractRiskFinding = \{([\s\S]*?)\n\};/);
     assert.ok(match, "ContractRiskFinding type should exist");
     const riskBlock = match[1];
-    for (const field of ["id?: string", "sectionId?: string", "quote?: string"]) {
+    for (const field of ["id?: string", "sectionId?: string", "kind?:", "missing_fact", "quote?: string"]) {
         assert.ok(riskBlock.includes(field), `${field} should remain optional`);
     }
     for (const forbidden of ["provider", "requestPayload", "modelId"]) {

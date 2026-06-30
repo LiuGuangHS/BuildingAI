@@ -2,11 +2,21 @@ import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-    assertAbsentDeps,
-    assertDeclaredDeps,
-    mergePackageDeps,
-} from "../../test-utils/manifest-boundary.mjs";
+function mergePackageDeps(pkg) {
+    return { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}), ...(pkg.optionalDependencies ?? {}) };
+}
+
+function assertDeclaredDeps(deps, entries) {
+    for (const [name, message] of entries) {
+        assert.ok(deps[name], message ?? `expected dependency ${name}`);
+    }
+}
+
+function assertAbsentDeps(deps, names) {
+    for (const name of names) {
+        assert.equal(deps[name], undefined, `${name} should not be declared`);
+    }
+}
 
 const PACKAGE_FILE = new URL("../package.json", import.meta.url);
 const CONTRACT_MODULE_FILE = new URL("../src/api/modules/contract-generation/contract-generation.module.ts", import.meta.url);
@@ -70,4 +80,13 @@ test("contract upload review uses main upload service boundary", async () => {
     assert.match(serviceSource, /FileUploadService/, "contract upload review should resolve files through the main upload service");
     assert.doesNotMatch(serviceSource, /@InjectRepository\(File\)/, "contract service should not inject the platform File repository directly");
     assert.doesNotMatch(serviceSource, /fileRepo/, "contract service should not keep a direct File repository field");
+});
+
+test("contract generation prompt supports AI-first missing fact placeholders", async () => {
+    const serviceSource = await readFile(CONTRACT_SERVICE_FILE, "utf8");
+
+    assert.match(serviceSource, /不要因为事实不完整而拒绝起草/);
+    assert.match(serviceSource, /【待补充：字段名】/);
+    assert.match(serviceSource, /kind 为 missing_fact/);
+    assert.match(serviceSource, /缺失必填事实/);
 });

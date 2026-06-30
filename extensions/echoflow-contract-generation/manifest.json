@@ -4,7 +4,7 @@
     "type": "application",
     "version": "0.0.1",
     "icon": "/echoflow-contract-generation/static/icon.png",
-    "description": "Word/WPS 风格合同编辑器，支持合同起草、AI 法务批注、条款改写与 Word 导出。",
+    "description": "Word/WPS 风格合同编辑器，支持一句话起草、AI 法务批注、条款改写与 Word 导出。",
     "homepage": "",
     "author": {
         "avatar": "/echoflow-contract-generation/static/icon.png",

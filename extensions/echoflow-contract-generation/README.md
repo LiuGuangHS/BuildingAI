@@ -1,8 +1,8 @@
 # 合同生成
 
-`echoflow-contract-generation` 是 EchoFlow 的合同编辑器插件。用户端提供 Word/WPS 风格合同页面，支持合同起草、上传审查、条款编辑、AI 法务批注、条款改写、版本保存和 Word 导出；Console 负责模型配置、合同模板和任务运维。
+`echoflow-contract-generation` 是 EchoFlow 的合同编辑器插件。用户端提供 Word/WPS 风格的合同编辑器，支持一句话起草、AI 法务批注、条款改写、版本保存、上传审查和 Word 导出；缺失事实会自动写成 `【待补充：字段名】` 并生成批注，不会阻塞生成。Console 负责模型配置、合同模板和任务运维。
 
-文档维护规则：全仓公共边界、主系统二开、上游同步、组件化 UI 和验证规则维护在根目录 `AGENTS.md`；本 README 只维护 `echoflow-contract-generation` 的业务边界、能力状态、入口、合同工作台/队列/计费/上传安全事实、验证命令和待办。临时分析、浏览器 QA checklist、外部项目快照或计划文档只作为施工材料，有效结论必须合并到 `AGENTS.md` 或本 README，不长期维护第二套插件规范；新的合同上传、计费、LLM、导出或风险审查规范也直接沉淀到这两处，并从“下一步”移除已经落地的旧计划。
+文档维护：跨插件通用规范见根 `AGENTS.md`；本 README 只记录本插件的业务事实、入口、特有边界、验证状态、风险和下一步。临时计划或 QA 结论收口后只合并仍有效内容，不长期维护第二套文档。
 
 ## 定位
 
@@ -18,17 +18,14 @@
 
 | 能力 | 状态 | 说明 |
 |---|---|---|
-| 合同起草 | ready | 用户填写行业、合同类型和关键条款后创建异步生成任务。 |
+| 合同起草 | ready | 用户输入业务背景即可起草；模板字段只作为辅助事实，缺失信息会写成 `【待补充：字段名】` 并生成 AI 批注，不阻塞生成。 |
 | 上传审查 | ready | 只接收平台 `fileId`，服务端校验上传者、插件归属、类型和大小。 |
 | 条款编辑 | ready | 用户端使用 Word/WPS 风格纸面编辑器，底层仍为原生纯文本条款编辑器和本地草稿流程；不依赖 PlateJS。 |
 | AI 法务批注 | ready | 风险审查以批注方式呈现，支持按条款定位、采纳、忽略和导出报告。 |
 | 再次审查 | ready | 已生成任务可触发再次审查，写回前校验当前任务状态。 |
 | Word 导出 | ready | 导出任务写回前校验导出状态，避免覆盖其他终态。 |
 | 计费退款 | ready | 使用主系统算力账本，生成前预检、任务入库后预扣、失败按账务事实退款。 |
-| 事务锁超时 | ready | 所有写操作事务开头执行 `SET LOCAL lock_timeout = 3000`，通过文件级常量 `LOCK_TIMEOUT` 统一管理。 |
 | 任务恢复 | ready | 实现 `onModuleInit` 启动恢复扫描，事务内悲观锁+CAS二次校验防止多实例重复入队；`reviewing` 超时回到 `draft`、`exporting` 超时回到 `export_failed`，避免交互任务永久 busy。 |
-| Service 继承 | ready | ContractGenerationService 继承 BaseService，复用 withTransaction 等通用能力。 |
-| 错误处理 | ready | 业务校验失败使用 HTTP 异常，Controller 层无 try/catch 吞异常。 |
 | 队列恢复 | partial | 已有超时恢复和状态抢占逻辑；仍需真实 Redis/Worker smoke。 |
 | 真实 LLM smoke | pending | 需要真实主站模型、Secret、余额和文件存储验证完整链路。 |
 
@@ -42,24 +39,6 @@
 | Console | `/console/tasks` | `src/web/pages/console/tasks.tsx` | 任务列表、失败、退款和运维排查。 |
 
 路由由 `src/web/routes.tsx` 使用 `defineRouteOption()` 注册。
-
-## 用户端合同编辑器
-
-用户端页面运行在主系统插件容器内，只呈现合同业务编辑器，不重复主系统导航、账号、头像、全局统计、模型管理、Provider、Secret 或原始上游响应。
-
-- 顶部：文档工具栏，显示当前合同文件、模型、任务状态、保存、AI 审查和导出。
-- 左侧：事实采集、模板入口、最近合同、上传审查和主动作。
-- 中间：Word/WPS 风格合同纸面、条款大纲、AI 批注标记和纯文本条款编辑器。
-- 右侧：AI 法务批注、条款改写、版本和导出四个上下文面板。
-
-AI 能力通过可观察业务信号呈现：识别事实、缺失事实、条款数量、高风险数量、来源条款、AI 法务批注、改写建议、价格组预扣和失败退款状态。
-
-实现约定：
-
-- 用户端首屏必须保持嵌入式插件面板形态，不做独立应用外壳、营销 Hero、全局侧边栏或账号区。
-- 普通控件和布局优先复用 BuildingAI UI 组件、`cn()` 和 Tailwind 工具类；手写 CSS 只保留给合同纸张、纯文本正文编辑器、AI 条款标记和无法由组件库稳定表达的局部排版。
-- 模板和最近合同放在抽屉内，不长期占用首屏空间；首屏只放当前合同输入、正文、风险/改写/版本/导出上下文。
-- 本地 Vite 独立预览可能出现主系统 API/session 不可用导致的 `Network Error` toast；最终视觉 QA 需要在真实主系统插件容器内复核账号态、API 数据、全局 toast 和主题变量。
 
 ## API 与后端模块
 
@@ -78,26 +57,29 @@ AI 能力通过可观察业务信号呈现：识别事实、缺失事实、条�
 | `controllers/console` | 管理端配置、模板、任务和统计。 |
 | `dto` | 用户端和管理端输入输出约束。 |
 
-## 主系统复用边界
+## 用户端边界
+
+| 主题 | 说明 |
+|---|---|
+| 页面形态 | 用户端运行在主系统插件容器内，只呈现合同业务编辑器，不重复主系统导航、账号、头像、全局统计、模型管理、Provider、Secret 或原始上游响应。 |
+| 布局 | 顶部显示文档工具栏，左侧是事实采集/模板/最近合同/上传审查，中间是合同纸面与纯文本编辑器，右侧是 AI 法务批注、条款改写、版本和导出面板。 |
+| AI 信号 | AI 能力通过事实、缺失事实、条款数量、高风险数量、来源条款、法务批注、改写建议、价格组预扣和失败退款等可观察信号呈现。 |
+| 首屏 | 首屏保持嵌入式插件面板形态，不做独立应用外壳、营销 Hero、全局侧边栏或账号区；模板和最近合同收进抽屉。 |
+| 预览 | 本地 Vite 预览可能因主系统 API/session 不可用出现 `Network Error` toast；最终视觉 QA 需要在真实主系统插件容器内复核账号态、API 数据、全局 toast 和主题变量。 |
+## 关键技术边界
 
 | 能力 | 当前实现 |
 |---|---|
-| LLM | 通过 `AiPublicModule` / `PublicAiModelService` 获取启用 LLM 并调用 `generateText()`；合同业务层不直接读取 Provider adapter 或 Secret。 |
-| Provider Config | 由 `PublicAiModelService` 在主系统边界内复用 Provider/Secret 归一化；插件只保存主站模型 ID，不重复拉取或归一化 Provider 配置。 |
-| 配置输出 | Console 对外返回模型或管理配置时必须白名单组装字段，不要直接展开 `config` / `resolved` / `endpoint`，避免历史字段如 `apiKeyMasked`、旧兼容键或内部排障字段泄漏。 |
-| Billing | 使用 `ExtensionBillingService`，任务 ID 作为 `associationNo`，扣费和退款做幂等检查。 |
-| Queue | 使用主系统 `QueueModule` 承载合同生成、上传审查和导出长流程。 |
-| Rate Limit | 用户端合同起草、上传审查、再次审查、条款改写和导出复用 `ExtensionRateLimitService` + 主系统 Redis 做 10 秒/分钟双窗口限流。 |
-| Upload | 前端复用平台上传，后端只接受当前插件可信 `fileId`，并通过 `UploadModule` / `FileUploadService` 读取平台文件记录，不直接注入平台 `File` 仓储；平台 `/uploads/` 路径在 fileId、上传者、插件归属、大小和 MIME 校验后放行，非平台文件 URL 解析前必须走 `assertPublicHttpUrl()` DNS 公网校验。 |
-| Notification | 通过 `ExtensionNotificationService` 注册合同生成成功、上传审查成功、导出成功和任务失败场景；通知失败不改变任务终态。 |
-| 构建依赖 | 已清理模板残留依赖；依赖是否保留必须能在源码、`vite`、`tsconfig` 或测试配置中找到实际用途。 |
-| UI | 用户端和 Console 复用主系统 Button、Card、Input、Textarea、Select、Tabs、Badge、Label、Alert、Skeleton 等组件；手写 CSS 只留给合同纸张、纯文本正文编辑器、AI 条款标记和无法由组件库稳定表达的局部排版。 |
-| Console JSON | 合同模板高级字段 JSON 编辑器复用 `@buildingai/stores` 的 `safeJsonParse`，不在 Web 运行时代码里保留裸 `JSON.parse`。 |
-| RootLayout / React Query | `src/web/main.tsx` 只挂主系统扩展 `RootLayout`，不再自建 `QueryClientProvider`；Web/Console hooks 复用 RootLayout 提供的查询上下文。 |
-| 路由分包 | `src/web/routes.tsx` 中 Web 首页和 3 个 Console 页面均使用 React lazy + 主系统 `Skeleton` 兜底；Console 配置、模板和任务页不静态进入默认路由模块。 |
-| 编辑器分包 | 用户端合同正文区域通过 React lazy 加载 `ContractDocumentWorkbench`，纯文本正文编辑器不静态进入页面首段逻辑；加载态使用主系统 `Skeleton`。 |
+| LLM | 通过主站启用模型起草、审查和改写；插件只保存主站模型 ID，不保存 Provider Secret。 |
+| 合同起草 | 缺失事实不会阻塞生成，会写成 `【待补充：字段名】` 并生成 AI 法务批注。 |
+| 上传审查 | 只接受平台上传返回的可信 `fileId`，并校验上传者、插件归属、MIME/扩展名和 20MB 大小上限。 |
+| 任务队列 | 合同生成、上传审查、再次审查和导出走任务状态与队列；写回前重新校验当前状态。 |
+| 计费退款 | 任务 ID 作为 `associationNo` 预扣；失败按账务事实退款，退款异常写入 `providerMetadata.refundError`。 |
+| 编辑器 | 用户端是 Word/WPS 风格纸面编辑器，底层仍为原生纯文本条款编辑器和本地草稿流程，不依赖 PlateJS。 |
+| 分包 | Web 首页、Console 页面和合同正文工作台均按需 lazy，避免默认入口加载所有管理和编辑器代码。 |
+| Public 边界 | 用户端不暴露主站模型密钥、Provider 配置、管理员备注或未脱敏上游响应。 |
 
-依赖边界：API 模块直接 import `express` 的 `Request` 类型，Console JSON 编辑器直接 import `@buildingai/stores`，因此插件 `package.json` 显式声明 `express: catalog:api` 和 `@buildingai/stores: workspace:*`；不要依赖根 workspace 或其他插件的偶然传递依赖。
+依赖边界：API 模块直接 import `express` 的 `Request` 类型，Console JSON 编辑器直接 import `@buildingai/stores`，因此插件 `package.json` 显式声明 `express: catalog:api` 和 `@buildingai/stores: workspace:*`。
 
 ## 上传与安全
 

@@ -26,3 +26,19 @@ test("deriveRiskReasoning returns structured AI explanation", () => {
     assert.equal(reasoning.suggestion, "补充逾期付款违约金");
     assert.equal(reasoning.canApplyRewrite, true);
 });
+
+test("deriveRiskReasoning labels missing fact annotations", () => {
+    const reasoning = model.deriveRiskReasoning(
+        {
+            id: "missing-party-b",
+            kind: "missing_fact",
+            sectionTitle: "合同主体",
+            level: "medium",
+            issue: "缺少乙方名称",
+            suggestion: "导出前补齐乙方名称。",
+        },
+        0,
+    );
+
+    assert.equal(reasoning.severityLabel, "待补充");
+});
