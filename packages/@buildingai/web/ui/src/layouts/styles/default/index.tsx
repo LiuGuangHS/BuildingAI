@@ -1,18 +1,22 @@
 import { SidebarInset, SidebarProvider, useSidebar } from "@buildingai/ui/components/ui/sidebar";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { DefaultAppSidebar } from "./_components/default-sidebar";
 
-function AutoCollapseForApps() {
+function AutoCollapseForPluginApps() {
   const { pathname } = useLocation();
-  const { open, setOpen } = useSidebar();
+  const { setOpen } = useSidebar();
+  const wasPluginPath = useRef(false);
+  const isPluginPath = pathname.startsWith("/apps/");
 
   useEffect(() => {
-    if (pathname.startsWith("/apps") && open) {
+    if (isPluginPath && !wasPluginPath.current) {
       setOpen(false);
     }
-  }, [open, pathname, setOpen]);
+
+    wasPluginPath.current = isPluginPath;
+  }, [isPluginPath, setOpen]);
 
   return null;
 }
@@ -20,7 +24,7 @@ function AutoCollapseForApps() {
 export default function DefaultLayout({ children }: { children?: React.ReactNode }) {
   return (
     <SidebarProvider storageKey="layout-style-default-sidebar">
-      <AutoCollapseForApps />
+      <AutoCollapseForPluginApps />
       <DefaultAppSidebar />
       <SidebarInset className="h-dvh overflow-x-hidden">{children || <Outlet />}</SidebarInset>
     </SidebarProvider>

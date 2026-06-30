@@ -9,7 +9,7 @@ import { ExtensionDetailType, ExtensionsService, PlatformInfo } from "@buildinga
 import { DictService } from "@buildingai/dict";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { createHttpClient, HttpClientInstance } from "@buildingai/utils";
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import * as semver from "semver";
 
 /**
@@ -17,7 +17,6 @@ import * as semver from "semver";
  */
 @Injectable()
 export class ExtensionMarketService {
-    private readonly logger = new Logger(ExtensionMarketService.name);
     private readonly httpClient: HttpClientInstance;
     private readonly appsMarketHttpClient: HttpClientInstance;
     private platformSecret: string | null = null;
@@ -254,22 +253,9 @@ export class ExtensionMarketService {
     async getMixedApplicationList() {
         const installedExtensions = await this.extensionsService.findAll();
 
-        // Fetch market list only for update checking (if platform secret is configured)
         const marketVersionMap = new Map<string, string>();
-        try {
-            const response = await this.appsMarketHttpClient.get("/appsLists");
-            const extensionList = Array.isArray(response.data) ? response.data : [];
 
-            // Create a map for quick lookup of market versions
-            extensionList.forEach((item: ApplicationListItem) => {
-                marketVersionMap.set(item.key, item.newVersion);
-            });
-        } catch (error) {
-            // 静默处理更新检查失败，不影响已安装扩展列表的返回
-            this.logger.error("更新检查失败", error);
-        }
-
-        // Map installed extensions with update check and compatibility check
+        // Map installed extensions with local compatibility check
         const installedExtensionsList = await Promise.all(
             installedExtensions.map(async (ext) => {
                 let hasUpdate = false;

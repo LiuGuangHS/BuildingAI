@@ -1,18 +1,9 @@
-import { useSidebar } from "@buildingai/ui/components/ui/sidebar";
-import { useLayoutEffect } from "react";
 import { Outlet } from "react-router-dom";
 
 import { DatasetsNavbar } from "./navbar";
 import { DatasetsSidebar } from "./sidebar";
 
 const KnowledgeLayout = () => {
-  const { setTemporaryOpen } = useSidebar();
-
-  useLayoutEffect(() => {
-    setTemporaryOpen(false);
-    return () => setTemporaryOpen(null); // Restore original state on unmount
-  }, [setTemporaryOpen]);
-
   return (
     <div className="flex h-full min-h-0">
       <DatasetsSidebar />
