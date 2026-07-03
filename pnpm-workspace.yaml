@@ -142,3 +142,15 @@ onlyBuiltDependencies:
   - msw
   - unrs-resolver
   - vue-demi
+
+# pnpm 11 approve-builds allowlist: keep in sync with onlyBuiltDependencies so
+# install/check scripts can run non-interactively in Docker and CI. Revisit when
+# pnpm changes build-script approval semantics or these native deps are removed.
+allowBuilds:
+  '@nestjs/core': true
+  '@swc/core': true
+  esbuild: true
+  msgpackr-extract: true
+  msw: true
+  unrs-resolver: true
+  vue-demi: true
