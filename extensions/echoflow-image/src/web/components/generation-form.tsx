@@ -1,9 +1,10 @@
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent } from "@buildingai/ui/components/ui/card";
-import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@buildingai/ui/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@buildingai/ui/components/ui/select";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
+import { getLocalStorage, safeJsonParse, safeJsonStringify } from "@buildingai/stores";
 import { cn } from "@buildingai/ui/lib/utils";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
@@ -31,17 +32,82 @@ interface GenerationFormProps {
 }
 
 const promptTemplates = [
-    { label: "雨夜街景", prompt: "未来城市雨后街道，霓虹倒影落在湿润路面，低机位构图，电影感光影，清晰细节" },
-    { label: "山湖清晨", prompt: "清晨山间湖泊，薄雾、雪山倒影和自然柔光，照片级写实，画面干净" },
-    { label: "枫叶庭院", prompt: "日式庭院，枫叶、石灯、木质回廊和秋日柔光，安静克制，细节丰富" },
-    { label: "产品静物", prompt: "极简产品静物摄影，浅色背景，柔和工作室光，材质清晰，商业级质感" },
-    { label: "机甲战场", prompt: "未来机甲站在雾气战场，金属结构清晰，低角度构图，电影感，强细节" },
-    { label: "室内软装", prompt: "现代室内空间，落地窗、织物沙发、植物与自然光，温和色彩，高级家居摄影" },
+    { label: "雨夜街景", category: "风景", mark: "雨", prompt: "未来城市雨后街道，霓虹倒影落在湿润路面，低机位构图，电影感光影，清晰细节" },
+    { label: "山湖清晨", category: "风景", mark: "山", prompt: "清晨山间湖泊，薄雾、雪山倒影和自然柔光，照片级写实，画面干净" },
+    { label: "枫叶庭院", category: "空间", mark: "庭", prompt: "日式庭院，枫叶、石灯、木质回廊和秋日柔光，安静克制，细节丰富" },
+    { label: "产品静物", category: "产品", mark: "物", prompt: "极简产品静物摄影，浅色背景，柔和工作室光，材质清晰，商业级质感" },
+    { label: "机甲战场", category: "风格", mark: "机", prompt: "未来机甲站在雾气战场，金属结构清晰，低角度构图，电影感，强细节" },
+    { label: "室内软装", category: "空间", mark: "室", prompt: "现代室内空间，落地窗、织物沙发、植物与自然光，温和色彩，高级家居摄影" },
+    { label: "人像写真", category: "人物", mark: "像", prompt: "自然光人像写真，干净背景，柔和肤色，浅景深，真实表情，商业摄影质感" },
+    { label: "海边日落", category: "风景", mark: "海", prompt: "海边日落，金色余晖、浪花和远处帆影，宽画幅构图，温暖电影色彩" },
+    { label: "动漫少女", category: "人物", mark: "漫", prompt: "动漫风少女角色设定，清晰线条，细致服装，柔和背景光，精致插画质感" },
+    { label: "包装海报", category: "产品", mark: "包", prompt: "高端饮品包装海报，产品居中，水珠质感，干净排版，商业广告摄影" },
+];
+
+const FAVORITE_TEMPLATE_STORAGE_KEY = "echoflow-image:favorite-template-prompts:v1";
+const QUICK_TEMPLATE_COUNT = 6;
+
+interface TemplateItem {
+    label: string;
+    category: string;
+    prompt: string;
+    mark: string;
+    coverImageUrl?: string;
+    favorite?: boolean;
+}
+
+const sizePresets = [
+    { label: "1:1", description: "方图", mark: "□", match: (value: string) => value === "1024x1024" },
+    { label: "竖图", description: "9:16", mark: "▯", match: (value: string) => {
+        const [width, height] = value.split("x").map((item) => Number(item));
+        return height > width;
+    } },
+    { label: "横图", description: "16:9", mark: "▭", match: (value: string) => {
+        const [width, height] = value.split("x").map((item) => Number(item));
+        return width > height;
+    } },
 ];
 
 function normalizeOptionalString(value?: string) {
     const trimmed = value?.trim();
     return trimmed ? trimmed : undefined;
+}
+
+function readFavoritePrompts() {
+    try {
+        const raw = getLocalStorage().getItem(FAVORITE_TEMPLATE_STORAGE_KEY);
+        return safeJsonParse<string[]>(raw) ?? [];
+    } catch {
+        return [];
+    }
+}
+
+function writeFavoritePrompts(values: string[]) {
+    try {
+        getLocalStorage().setItem(FAVORITE_TEMPLATE_STORAGE_KEY, safeJsonStringify(values));
+    } catch {
+        // Local template favorites are a convenience only; generation should keep working if storage is unavailable.
+    }
+}
+
+function getTemplateMark(template: ImagePromptTemplate, index: number) {
+    return template.title.trim().slice(0, 1) || String(index + 1);
+}
+
+function getModelAbilityLabels(model?: ImageModelOption) {
+    if (!model) return [];
+    const labels = ["文生图"];
+    if (model.capabilities?.imageToImage) labels.push("参考图");
+    if (model.capabilities?.multiReference) labels.push("多参考");
+    if (model.capabilities?.negativePrompt !== false) labels.push("反向词");
+    return labels;
+}
+
+function getModelDescription(model?: ImageModelOption) {
+    if (!model) return "选择可用模型后开始创作。";
+    const feature = model.features?.[0];
+    if (feature) return feature;
+    return `${model.model}${model.capabilities?.imageToImage ? "，支持参考图生成" : "，适合文生图任务"}`;
 }
 
 export function GenerationForm({
@@ -68,6 +134,8 @@ export function GenerationForm({
     const [style, setStyle] = useState("vivid");
     const [responseFormat, setResponseFormat] = useState<ImageResponseFormat>(ImageResponseFormat.B64_JSON);
     const [showAdvanced, setShowAdvanced] = useState(false);
+    const [showAllTemplates, setShowAllTemplates] = useState(false);
+    const [favoritePrompts, setFavoritePrompts] = useState<string[]>(() => readFavoritePrompts());
 
     useEffect(() => {
         if (!initialValues) return;
@@ -85,6 +153,7 @@ export function GenerationForm({
     }, [initialValues]);
 
     const selectedModel = useMemo(() => models.find((model) => model.id === modelId), [models, modelId]);
+    const abilityLabels = useMemo(() => getModelAbilityLabels(selectedModel), [selectedModel]);
 
     useEffect(() => {
         if (modelsLoading) return;
@@ -114,6 +183,14 @@ export function GenerationForm({
     const [width, height] = size.split("x").map((item) => Number(item));
     const localEstimatedPower = imageCount * (quality === "hd" ? 2 : 1) * (width > 1024 || height > 1024 ? 2 : 1);
     const visibleEstimatedPower = estimatedPower ?? localEstimatedPower;
+    const powerPerImage = Math.max(1, Math.ceil(visibleEstimatedPower / Math.max(imageCount, 1)));
+    const disabledReason = !modelId
+        ? "请选择模型"
+        : !prompt.trim()
+            ? "请输入提示词"
+            : loading
+                ? "生成中"
+                : undefined;
 
     const promptRatio = prompt.length / 4000;
     const promptColor =
@@ -219,7 +296,51 @@ export function GenerationForm({
     };
 
     const hasContent = !!(prompt || negativePrompt || hasReferenceImage);
-    const templateItems = [...templates.map((template) => ({ label: template.title, prompt: template.prompt })), ...promptTemplates].slice(0, 6);
+    const templateItems = useMemo<TemplateItem[]>(() => {
+        const remoteTemplates = templates.map((template, index) => ({
+            label: template.title,
+            category: template.category || "模板",
+            prompt: template.prompt,
+            mark: getTemplateMark(template, index),
+            coverImageUrl: template.coverImageUrl,
+        }));
+        const merged = [...remoteTemplates, ...promptTemplates];
+        const deduped = Array.from(new Map(merged.map((template) => [template.prompt, template])).values());
+        return deduped
+            .map((template) => ({ ...template, favorite: favoritePrompts.includes(template.prompt) }))
+            .sort((left, right) => Number(right.favorite) - Number(left.favorite));
+    }, [favoritePrompts, templates]);
+    const visibleTemplateItems = showAllTemplates ? templateItems : templateItems.slice(0, QUICK_TEMPLATE_COUNT);
+
+    const applyTemplate = (template: TemplateItem, mode: "replace" | "append") => {
+        setPrompt((current) => {
+            if (mode === "append" && current.trim()) {
+                return `${current.trim()}，${template.prompt}`;
+            }
+            return template.prompt;
+        });
+        if (!negativePrompt.trim()) {
+            const remoteTemplate = templates.find((item) => item.prompt === template.prompt);
+            if (remoteTemplate?.negativePrompt) setNegativePrompt(remoteTemplate.negativePrompt);
+        }
+    };
+
+    const toggleFavoriteTemplate = (template: TemplateItem) => {
+        setFavoritePrompts((current) => {
+            const exists = current.includes(template.prompt);
+            const next = exists
+                ? current.filter((promptValue) => promptValue !== template.prompt)
+                : [template.prompt, ...current].slice(0, 12);
+            writeFavoritePrompts(next);
+            return next;
+        });
+    };
+
+    const selectSizePreset = (presetIndex: number) => {
+        const preset = sizePresets[presetIndex];
+        const matched = sizeOptions.find((option) => preset.match(option));
+        if (matched) setSize(matched);
+    };
 
     return (
         <Card className="gap-0 overflow-hidden rounded-lg py-0 shadow-sm">
@@ -246,7 +367,7 @@ export function GenerationForm({
                     </div>
 
                     <div className="space-y-4 p-4">
-                        <div className="space-y-2">
+                        <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 shadow-sm">
                             <div className="flex items-end justify-between gap-3">
                                 <Label className="text-sm font-medium">提示词</Label>
                                 <span className={cn("text-xs tabular-nums transition-colors", promptColor)}>
@@ -257,7 +378,7 @@ export function GenerationForm({
                                 value={prompt}
                                 onChange={(event) => setPrompt(event.target.value)}
                                 placeholder="描述画面、主体、环境、光线与风格。例如：未来城市雨后街道，霓虹倒影，电影感，超清细节。"
-                                className="min-h-36 resize-y bg-background text-sm leading-relaxed placeholder:text-muted-foreground/60 sm:min-h-40"
+                                className="mt-2 min-h-36 resize-y border-primary/20 bg-background text-sm leading-relaxed shadow-xs placeholder:text-muted-foreground/60 focus-visible:ring-primary/25 sm:min-h-40"
                                 disabled={loading}
                                 required
                             />
@@ -277,25 +398,97 @@ export function GenerationForm({
                             </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="rounded-lg border bg-muted/10 p-3">
                             <div className="flex items-center justify-between gap-3 text-xs">
-                                <span className="font-semibold">灵感推荐</span>
-                                <span className="hidden text-muted-foreground sm:inline">点一下快速填入</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1.5">
-                                {templateItems.map((template) => (
+                                <div className="min-w-0">
+                                    <span className="font-semibold">灵感推荐</span>
+                                    <span className="ml-2 text-muted-foreground">
+                                        {favoritePrompts.length ? "收藏优先显示" : "点一下快速填入"}
+                                    </span>
+                                </div>
+                                {templateItems.length > QUICK_TEMPLATE_COUNT && (
                                     <Button
-                                        key={template.label}
                                         type="button"
-                                        disabled={loading}
-                                        onClick={() => setPrompt(template.prompt)}
-                                        variant="outline"
+                                        variant="ghost"
                                         size="sm"
-                                        className="min-w-0 justify-start rounded-md bg-muted/20 text-xs"
+                                        disabled={loading}
+                                        onClick={() => setShowAllTemplates((value) => !value)}
+                                        className="h-7 shrink-0 px-2 text-xs"
                                     >
-                                        <span aria-hidden="true" className="shrink-0 text-xs leading-none">＋</span>
-                                        <span className="truncate">{template.label}</span>
+                                        {showAllTemplates ? "收起" : "更多"}
                                     </Button>
+                                )}
+                            </div>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                                {visibleTemplateItems.map((template) => (
+                                    <Popover key={`${template.label}-${template.prompt}`}>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                type="button"
+                                                disabled={loading}
+                                                variant="outline"
+                                                className="h-auto min-w-0 justify-start rounded-md bg-background p-2 text-left shadow-xs hover:border-primary/30 hover:bg-primary/[0.03]"
+                                            >
+                                                {template.coverImageUrl ? (
+                                                    <img
+                                                        src={template.coverImageUrl}
+                                                        alt=""
+                                                        className="size-9 shrink-0 rounded-md object-cover"
+                                                        loading="lazy"
+                                                    />
+                                                ) : (
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted text-xs font-semibold text-muted-foreground"
+                                                    >
+                                                        {template.mark}
+                                                    </span>
+                                                )}
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="flex items-center gap-1.5">
+                                                        <span className="truncate text-xs font-medium">{template.label}</span>
+                                                        {template.favorite && <span className="text-[11px] text-amber-600">★</span>}
+                                                    </span>
+                                                    <span className="mt-0.5 block truncate text-[11px] font-normal text-muted-foreground">
+                                                        {template.category}
+                                                    </span>
+                                                </span>
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-64 p-2" align="start">
+                                            <div className="space-y-2">
+                                                <div>
+                                                    <p className="text-sm font-medium">{template.label}</p>
+                                                    <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+                                                        {template.prompt}
+                                                    </p>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-1.5">
+                                                    <Button type="button" size="sm" onClick={() => applyTemplate(template, "replace")}>
+                                                        替换
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => applyTemplate(template, "append")}
+                                                        disabled={!prompt.trim()}
+                                                    >
+                                                        追加
+                                                    </Button>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="w-full justify-center text-xs text-muted-foreground"
+                                                    onClick={() => toggleFavoriteTemplate(template)}
+                                                >
+                                                    {template.favorite ? "取消收藏" : "收藏模板"}
+                                                </Button>
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
                                 ))}
                             </div>
                         </div>
@@ -307,8 +500,8 @@ export function GenerationForm({
                                     <p className="mt-1 text-xs text-muted-foreground">只显示当前账号可用的生图模型。</p>
                                 </div>
                                 <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                                    <span className="size-1.5 rounded-full bg-emerald-500" />
-                                    主站配置
+                                    <span className={cn("size-1.5 rounded-full", selectedModel ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+                                    {selectedModel ? "可用" : modelsLoading ? "加载中" : "待配置"}
                                 </span>
                             </div>
 
@@ -329,7 +522,7 @@ export function GenerationForm({
                                                 <div className="flex min-w-0 flex-col">
                                                     <span className="truncate">{model.name}</span>
                                                     <span className="truncate text-xs text-muted-foreground">
-                                                        {model.model}
+                                                        {getModelDescription(model)}
                                                     </span>
                                                 </div>
                                             </SelectItem>
@@ -345,11 +538,22 @@ export function GenerationForm({
                                         暂无可用图片模型，请先在模型管理中启用。
                                     </p>
                                 ) : selectedModel ? (
-                                    <p className="truncate text-xs text-muted-foreground">
-                                        {selectedModel.model}
-                                        {canUseImageToImage ? " / 支持参考图" : " / 文生图"}
-                                        {canUseMultiReference ? " / 多参考" : ""}
-                                    </p>
+                                    <div className="rounded-md border bg-background px-3 py-2">
+                                        <div className="flex min-w-0 items-center justify-between gap-2">
+                                            <p className="min-w-0 truncate text-xs text-muted-foreground">{getModelDescription(selectedModel)}</p>
+                                            <span className="shrink-0 text-[11px] text-muted-foreground">{selectedModel.model}</span>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                            {abilityLabels.map((label) => (
+                                                <span
+                                                    key={label}
+                                                    className="rounded-md border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-[11px] font-medium text-primary"
+                                                >
+                                                    {label}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
                                 ) : null}
                             </div>
 
@@ -441,8 +645,28 @@ export function GenerationForm({
                             {showAdvanced && (
                                 <div className="border-t p-3">
                                     <div className="grid gap-3 sm:grid-cols-2">
-                                        <div className="space-y-2">
+                                        <div className="space-y-2 sm:col-span-2">
                                             <Label className="text-xs font-medium">尺寸</Label>
+                                            <div className="grid grid-cols-3 gap-1.5">
+                                                {sizePresets.map((preset, index) => {
+                                                    const active = preset.match(size);
+                                                    const disabled = !sizeOptions.some((option) => preset.match(option));
+                                                    return (
+                                                        <Button
+                                                            key={preset.label}
+                                                            type="button"
+                                                            variant={active ? "default" : "outline"}
+                                                            size="sm"
+                                                            disabled={loading || disabled}
+                                                            onClick={() => selectSizePreset(index)}
+                                                            className="h-auto flex-col gap-1 py-2 text-xs"
+                                                        >
+                                                            <span aria-hidden="true" className="text-base leading-none">{preset.mark}</span>
+                                                            <span>{preset.label}</span>
+                                                        </Button>
+                                                    );
+                                                })}
+                                            </div>
                                             <Select value={size} onValueChange={setSize} disabled={loading}>
                                                 <SelectTrigger className="h-9 w-full text-sm">
                                                     <SelectValue />
@@ -457,19 +681,28 @@ export function GenerationForm({
                                             </Select>
                                         </div>
 
-                                        <div className="space-y-2">
+                                        <div className="space-y-2 sm:col-span-2">
                                             <Label className="text-xs font-medium">
                                                 生成数量{isDalle3Like && <span className="ml-1 text-muted-foreground">(DALL-E 3 限制为 1)</span>}
                                             </Label>
-                                            <Input
-                                                type="number"
-                                                min={1}
-                                                max={isDalle3Like ? 1 : 4}
-                                                value={isDalle3Like ? 1 : n}
-                                                disabled={loading || isDalle3Like}
-                                                onChange={(event) => setN(event.target.value)}
-                                                className="h-9"
-                                            />
+                                            <div className="grid grid-cols-3 gap-1.5">
+                                                {[1, 2, 4].map((count) => (
+                                                    <Button
+                                                        key={count}
+                                                        type="button"
+                                                        variant={imageCount === count ? "default" : "outline"}
+                                                        size="sm"
+                                                        disabled={loading || isDalle3Like || count > (selectedModel?.allowedParams?.maxImages ?? 4)}
+                                                        onClick={() => setN(String(count))}
+                                                        className="h-9"
+                                                    >
+                                                        {count} 张
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                每张约 {powerPerImage} 算力，共 {visibleEstimatedPower} 算力
+                                            </p>
                                         </div>
 
                                         <div className="space-y-2">
@@ -534,11 +767,13 @@ export function GenerationForm({
                         </div>
                     </div>
 
-                    <div className="flex flex-col gap-3 border-t bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-3 border-t bg-primary/[0.04] p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="grid gap-1.5 text-xs text-muted-foreground sm:flex sm:flex-wrap sm:items-center">
-                            <span className="inline-flex items-center gap-1.5 text-foreground">
+                            <span className="inline-flex items-center gap-2 rounded-md border border-primary/15 bg-background px-2.5 py-1.5 text-foreground shadow-xs">
                                 <span aria-hidden="true" className="text-amber-500">●</span>
-                                预计消耗 <strong className="text-base text-amber-700">{visibleEstimatedPower}</strong> 算力
+                                <span>预计消耗</span>
+                                <strong className="text-lg leading-none text-amber-700">{visibleEstimatedPower}</strong>
+                                <span>算力</span>
                             </span>
                             <span className="inline-flex items-center gap-1">
                                 <span aria-hidden="true">✓</span>
@@ -548,12 +783,12 @@ export function GenerationForm({
                         <Button
                             type="submit"
                             size="lg"
-                            disabled={!prompt.trim() || !modelId || loading}
+                            disabled={Boolean(disabledReason)}
                             loading={loading}
-                            className="min-h-11 rounded-lg shadow-sm sm:min-w-36"
+                            className="min-h-11 rounded-lg shadow-sm sm:min-w-40"
                         >
                             <span aria-hidden="true">✦</span>
-                            开始生成
+                            {disabledReason || "开始生成"}
                         </Button>
                     </div>
                 </form>

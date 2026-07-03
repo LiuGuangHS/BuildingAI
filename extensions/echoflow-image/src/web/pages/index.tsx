@@ -1,11 +1,9 @@
 import { useDocumentHead } from "@buildingai/hooks";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { cn } from "@buildingai/ui/lib/utils";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { GenerationFlowCanvas } from "../components/canvas/generation-flow-canvas";
-import { InspirationBoard } from "../components/canvas/inspiration-board";
 import { GenerationForm } from "../components/generation-form";
 import { HistoryList } from "../components/history-list";
 import { ResultGallery } from "../components/result-gallery";
@@ -24,6 +22,29 @@ import {
 } from "../services";
 import type { CreateGenerationParams, ImageGeneration } from "../services/types/generation";
 import { ImageGenerationStatus } from "../services/types/generation";
+
+const CreativeCanvasWorkspace = lazy(() => import("../components/canvas/creative-canvas-workspace").then((module) => ({
+    default: module.CreativeCanvasWorkspace,
+})));
+
+function CanvasLoading() {
+    return (
+        <div className="grid gap-3 xl:grid-cols-[300px_minmax(0,1fr)]">
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
+                <div className="h-5 w-28 rounded bg-muted" />
+                <div className="mt-4 space-y-2">
+                    <div className="h-20 rounded-md bg-muted/70" />
+                    <div className="h-20 rounded-md bg-muted/50" />
+                    <div className="h-10 rounded-md bg-muted/60" />
+                </div>
+            </div>
+            <div className="min-h-[520px] rounded-lg border bg-card p-4 shadow-sm">
+                <div className="h-6 w-40 rounded bg-muted" />
+                <div className="mt-4 h-[440px] rounded-lg border border-dashed bg-muted/30" />
+            </div>
+        </div>
+    );
+}
 
 export default function EchoflowImagePublicPage() {
     useDocumentHead({ title: "EchoFlowAI 绘画" });
@@ -117,6 +138,7 @@ export default function EchoflowImagePublicPage() {
 
     const handleContinueFromImage = (values: Partial<CreateGenerationParams>) => {
         setReuseValues(values);
+        setWorkspaceMode("quick");
         toast.success("已填入参考图，可继续生成分支");
     };
 
@@ -174,51 +196,59 @@ export default function EchoflowImagePublicPage() {
                 </Button>
             )}
         >
-            <div className="grid min-w-0 gap-2.5 xl:grid-cols-[minmax(340px,390px)_minmax(0,1fr)] xl:items-start 2xl:grid-cols-[minmax(340px,390px)_minmax(0,1fr)_minmax(280px,340px)]">
-                <section className="min-w-0 xl:sticky xl:top-2.5">
-                    <GenerationForm
-                        loading={isGenerating}
-                        models={models}
-                        modelsLoading={modelsLoading}
-                        modelsError={modelsError}
-                        initialValues={reuseValues}
-                        templates={templateData?.items ?? []}
-                        estimatedPower={estimateMutation.data?.amount}
-                        onEstimateChange={(data) => {
-                            estimateMutation.mutate({
-                                modelConfigId: data.modelId,
-                                mode: data.mode,
-                                size: data.size,
-                                n: data.n,
-                                quality: data.quality,
-                            });
-                        }}
-                        onEnhancePrompt={async (data) => {
-                            try {
-                                const result = await promptEnhanceMutation.mutateAsync(data);
-                                toast.success("提示词已润色");
-                                return result;
-                            } catch (error) {
-                                toast.error(error instanceof Error ? error.message : "提示词润色失败");
-                                throw error;
-                            }
-                        }}
-                        onSubmit={handleSubmit}
+            {workspaceMode === "canvas" ? (
+                <Suspense fallback={<CanvasLoading />}>
+                    <CreativeCanvasWorkspace
+                        generation={currentGeneration}
+                        onReturnToGenerate={() => setWorkspaceMode("quick")}
+                        onContinueFromImage={handleContinueFromImage}
                     />
-                </section>
-
-                <main className="grid min-w-0 content-start gap-2.5">
-                    <section className={cn("min-w-0 rounded-lg", isGenerating && "ring-1 ring-primary/25")}>
-                        {quickResult}
+                </Suspense>
+            ) : (
+                <div className="grid min-w-0 gap-2.5 xl:grid-cols-[minmax(340px,390px)_minmax(0,1fr)] xl:items-start 2xl:grid-cols-[minmax(340px,390px)_minmax(0,1fr)_minmax(280px,340px)]">
+                    <section className="min-w-0 xl:sticky xl:top-2.5">
+                        <GenerationForm
+                            loading={isGenerating}
+                            models={models}
+                            modelsLoading={modelsLoading}
+                            modelsError={modelsError}
+                            initialValues={reuseValues}
+                            templates={templateData?.items ?? []}
+                            estimatedPower={estimateMutation.data?.amount}
+                            onEstimateChange={(data) => {
+                                estimateMutation.mutate({
+                                    modelConfigId: data.modelId,
+                                    mode: data.mode,
+                                    size: data.size,
+                                    n: data.n,
+                                    quality: data.quality,
+                                });
+                            }}
+                            onEnhancePrompt={async (data) => {
+                                try {
+                                    const result = await promptEnhanceMutation.mutateAsync(data);
+                                    toast.success("提示词已润色");
+                                    return result;
+                                } catch (error) {
+                                    toast.error(error instanceof Error ? error.message : "提示词润色失败");
+                                    throw error;
+                                }
+                            }}
+                            onSubmit={handleSubmit}
+                        />
                     </section>
-                    <GenerationFlowCanvas generation={currentGeneration} onContinueFromImage={handleContinueFromImage} />
-                    <InspirationBoard generation={currentGeneration} compact />
-                </main>
 
-                <aside className="min-w-0 2xl:sticky 2xl:top-2.5">
-                    {quickHistory}
-                </aside>
-            </div>
+                    <main className="grid min-w-0 content-start gap-2.5">
+                        <section className={cn("min-w-0 rounded-lg", isGenerating && "ring-1 ring-primary/25")}>
+                            {quickResult}
+                        </section>
+                    </main>
+
+                    <aside className="min-w-0 2xl:sticky 2xl:top-2.5">
+                        {quickHistory}
+                    </aside>
+                </div>
+            )}
         </WorkspaceShell>
     );
 }
