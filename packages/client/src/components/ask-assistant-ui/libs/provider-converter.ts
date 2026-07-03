@@ -7,6 +7,10 @@ export function convertProvidersToModels(providers: AiProvider[]): Model[] {
   const modelMap = new Map<string, Model>();
 
   providers.forEach((provider) => {
+    if (!provider.isActive) {
+      return;
+    }
+
     if (!provider.models || provider.models.length === 0) {
       return;
     }

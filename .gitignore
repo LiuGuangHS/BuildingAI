@@ -20,6 +20,8 @@ storage/*
 .env.development.local
 .env.test.local
 .env.production.local
+docker-compose.local.yml
+docker-compose.override.yml
 /logs/
 
 # Testing
