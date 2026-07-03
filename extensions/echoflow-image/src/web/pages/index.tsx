@@ -142,6 +142,11 @@ export default function EchoflowImagePublicPage() {
         toast.success("已填入参考图，可继续生成分支");
     };
 
+    const handleUsePrompt = (prompt: string) => {
+        setReuseValues({ prompt });
+        toast.success("提示词已填入");
+    };
+
     const isGenerating = createMutation.isPending || retryMutation.isPending || currentIsRunning;
     const quickResult = useMemo(
         () => (
@@ -149,6 +154,8 @@ export default function EchoflowImagePublicPage() {
                 generation={currentGeneration}
                 isLoading={isGenerating && !currentGeneration?.resultImages?.length}
                 variant="stage"
+                onUsePrompt={handleUsePrompt}
+                onContinueFromImage={handleContinueFromImage}
             />
         ),
         [currentGeneration, isGenerating],

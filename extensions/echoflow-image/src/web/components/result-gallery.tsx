@@ -5,7 +5,7 @@ import { cn } from "@buildingai/ui/lib/utils";
 import { Copy, Download, ExternalLink, ImageIcon, Images, LayoutPanelTop, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
-import type { GeneratedImageRecord, ImageGeneration } from "../services/types/generation";
+import type { CreateGenerationParams, GeneratedImageRecord, ImageGeneration } from "../services/types/generation";
 import { ImageGenerationStatus } from "../services/types/generation";
 import { downloadImage, resolveImageSrc } from "./image-utils";
 import { ResultSkeleton } from "./skeleton-card";
@@ -15,8 +15,16 @@ interface ResultGalleryProps {
     images?: GeneratedImageRecord[];
     isLoading?: boolean;
     onOpenCanvas?: () => void;
+    onUsePrompt?: (prompt: string) => void;
+    onContinueFromImage?: (values: Partial<CreateGenerationParams>) => void;
     variant?: "card" | "stage";
 }
+
+const emptyPromptSuggestions = [
+    { label: "未来城市", mark: "城", prompt: "赛博朋克风格的未来城市夜景，霓虹灯、雨后街道、电影感光影，超清细节" },
+    { label: "产品海报", mark: "品", prompt: "高端护肤品商业海报，干净浅色背景，柔和工作室光，材质清晰，精致排版" },
+    { label: "自然风景", mark: "景", prompt: "清晨山谷湖泊，薄雾、雪山倒影、自然柔光，宽画幅摄影，画面干净" },
+];
 
 function getStatusLabel(status?: ImageGenerationStatus | string) {
     if (status === ImageGenerationStatus.SUCCEEDED) return "已完成";
@@ -26,7 +34,21 @@ function getStatusLabel(status?: ImageGenerationStatus | string) {
     return status;
 }
 
-export function ResultGallery({ generation, images, isLoading, onOpenCanvas, variant = "card" }: ResultGalleryProps) {
+function getRunningStage(status?: ImageGenerationStatus | string) {
+    if (status === ImageGenerationStatus.PENDING) return "排队中";
+    if (status === ImageGenerationStatus.PROCESSING) return "生成中";
+    return "处理结果";
+}
+
+export function ResultGallery({
+    generation,
+    images,
+    isLoading,
+    onOpenCanvas,
+    onUsePrompt,
+    onContinueFromImage,
+    variant = "card",
+}: ResultGalleryProps) {
     const resolvedImages = images ?? generation?.resultImages ?? [];
     const isStage = variant === "stage";
 
@@ -47,6 +69,25 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas, var
                 downloadImage(src, `echoflow-image-${generation?.id || "result"}-${i + 1}.png`);
             }
         }
+    };
+
+    const continueFromImage = (image: GeneratedImageRecord) => {
+        const src = resolveImageSrc(image);
+        if (!src) {
+            toast.info("这张图片暂时不能作为参考图");
+            return;
+        }
+        onContinueFromImage?.({
+            prompt: image.revisedPrompt || generation?.prompt || "",
+            negativePrompt: generation?.negativePrompt,
+            referenceImageUrl: src,
+            sourceImages: [{ url: src, mimeType: image.mimeType }],
+            modelId: generation?.modelId,
+            size: generation?.size,
+            n: generation?.n,
+            quality: generation?.quality,
+            style: generation?.style,
+        });
     };
 
     return (
@@ -113,7 +154,32 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas, var
             </div>
             <CardContent className={cn(isStage ? "p-3 md:p-4" : "p-4 md:p-5")}>
                 {isLoading ? (
-                    <ResultSkeleton />
+                    <div className="space-y-4">
+                        <div className="rounded-lg border bg-muted/10 p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold">{getRunningStage(generation?.status)}</p>
+                                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                                        {generation?.prompt || "正在准备本次图片任务。"}
+                                    </p>
+                                </div>
+                                <div className="flex shrink-0 gap-1.5 text-xs">
+                                    {["排队中", "生成中", "处理结果", "即将完成"].map((step) => (
+                                        <span
+                                            key={step}
+                                            className={cn(
+                                                "rounded-md border bg-background px-2 py-1",
+                                                step === getRunningStage(generation?.status) && "border-primary/35 bg-primary/5 text-primary",
+                                            )}
+                                        >
+                                            {step}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <ResultSkeleton />
+                    </div>
                 ) : generation?.status === ImageGenerationStatus.FAILED ? (
                     <div className="flex min-h-[18rem] flex-col items-center justify-center rounded-lg border border-dashed bg-muted/10 p-4 text-center md:min-h-[28.5rem]">
                         <div className="mb-4 rounded-full bg-destructive/10 p-3">
@@ -150,17 +216,29 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas, var
                             <p className="mt-2 text-sm text-muted-foreground">
                                 输入提示词后提交生成，结果会显示在这里。
                             </p>
-                            <div className="mt-8 grid w-full max-w-lg grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
-                                {["待开始", "排队中", "生成中", "处理结果"].map((step, index) => (
-                                    <span
-                                        key={step}
-                                        className={cn(
-                                            "rounded-md border bg-background px-2 py-1.5",
-                                            index === 0 && "border-primary/35 bg-primary/5 text-primary",
-                                        )}
+                            <div className="mt-6 grid w-full gap-2 text-left">
+                                {emptyPromptSuggestions.map((suggestion) => (
+                                    <Button
+                                        key={suggestion.label}
+                                        type="button"
+                                        variant="outline"
+                                        disabled={!onUsePrompt}
+                                        onClick={() => onUsePrompt?.(suggestion.prompt)}
+                                        className="h-auto justify-start gap-2 rounded-md bg-background p-2 text-left"
                                     >
-                                        {step}
-                                    </span>
+                                        <span
+                                            aria-hidden="true"
+                                            className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-muted text-xs font-semibold text-muted-foreground"
+                                        >
+                                            {suggestion.mark}
+                                        </span>
+                                        <span className="min-w-0">
+                                            <span className="block truncate text-xs font-medium">{suggestion.label}</span>
+                                            <span className="line-clamp-1 text-[11px] font-normal text-muted-foreground">
+                                                {suggestion.prompt}
+                                            </span>
+                                        </span>
+                                    </Button>
                                 ))}
                             </div>
                         </div>
@@ -193,9 +271,19 @@ export function ResultGallery({ generation, images, isLoading, onOpenCanvas, var
                                                         loading="lazy"
                                                     />
                                                     <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                                                        {onContinueFromImage && generation && (
+                                                            <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="作为参考图继续生成" onClick={() => continueFromImage(image)}>
+                                                                <Sparkles className="size-3.5" />
+                                                            </Button>
+                                                        )}
                                                         {onOpenCanvas && (
                                                             <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="整理到画布" onClick={onOpenCanvas}>
                                                                 <LayoutPanelTop className="size-3.5" />
+                                                            </Button>
+                                                        )}
+                                                        {(image.revisedPrompt || generation?.prompt) && (
+                                                            <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="复制提示词" onClick={() => copyText(image.revisedPrompt || generation?.prompt)}>
+                                                                <Copy className="size-3.5" />
                                                             </Button>
                                                         )}
                                                         <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="打开图片" onClick={() => window.open(src, "_blank", "noopener,noreferrer")}>
