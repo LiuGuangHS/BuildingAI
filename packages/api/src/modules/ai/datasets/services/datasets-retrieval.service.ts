@@ -11,7 +11,7 @@ import type {
     RetrievalConfig,
     RetrievalResult,
 } from "@buildingai/types/ai/retrieval-config.interface";
-import { getProviderSecret } from "@buildingai/utils";
+import { normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { AiModelService } from "@modules/ai/model/services/ai-model.service";
 import { DatasetsConfigService } from "@modules/config/services/datasets-config.service";
 import { Injectable, Logger } from "@nestjs/common";
@@ -182,10 +182,7 @@ export class DatasetsRetrievalService {
             const providerSecret = await this.secretService.getConfigKeyValuePairs(
                 model.provider.bindSecretId!,
             );
-            const provider = getProviderForEmbedding(model.provider.provider, {
-                apiKey: getProviderSecret("apiKey", providerSecret),
-                baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-            });
+            const provider = getProviderForEmbedding(model.provider.provider, normalizeProviderConfig(providerSecret));
             const embeddingModel = provider(model.model);
             const input = query.replaceAll("\n", " ").trim() || " ";
             const result = await embed({ model: embeddingModel.model, value: input });
@@ -680,10 +677,7 @@ export class DatasetsRetrievalService {
             const providerSecret = await this.secretService.getConfigKeyValuePairs(
                 model.provider.bindSecretId!,
             );
-            const provider = getProviderForRerank(model.provider.provider, {
-                apiKey: getProviderSecret("apiKey", providerSecret),
-                baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-            });
+            const provider = getProviderForRerank(model.provider.provider, normalizeProviderConfig(providerSecret));
             const rerankModel = provider(model.model).model;
             const docs = items.map((x) => x.chunk.content);
             const result = await rerankV3({

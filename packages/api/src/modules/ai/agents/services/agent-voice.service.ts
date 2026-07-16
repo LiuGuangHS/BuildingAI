@@ -1,7 +1,7 @@
 import { getProviderForSpeech, getProviderForTranscription } from "@buildingai/ai-sdk";
 import { SecretService } from "@buildingai/core/modules";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { getProviderSecret } from "@buildingai/utils";
+import { normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 import {
     experimental_generateSpeech as generateSpeech,
@@ -114,10 +114,7 @@ export class AgentVoiceService {
         const providerSecret = await this.secretService.getConfigKeyValuePairs(
             model.provider.bindSecretId,
         );
-        const getTranscription = getProviderForTranscription(model.provider.provider, {
-            apiKey: getProviderSecret("apiKey", providerSecret),
-            baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-        });
+        const getTranscription = getProviderForTranscription(model.provider.provider, normalizeProviderConfig(providerSecret));
         return getTranscription(model.model);
     }
 
@@ -133,10 +130,7 @@ export class AgentVoiceService {
         const providerSecret = await this.secretService.getConfigKeyValuePairs(
             model.provider.bindSecretId,
         );
-        const getSpeech = getProviderForSpeech(model.provider.provider, {
-            apiKey: getProviderSecret("apiKey", providerSecret),
-            baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-        });
+        const getSpeech = getProviderForSpeech(model.provider.provider, normalizeProviderConfig(providerSecret));
         return getSpeech(model.model);
     }
 }

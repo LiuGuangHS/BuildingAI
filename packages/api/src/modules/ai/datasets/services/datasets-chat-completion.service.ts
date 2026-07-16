@@ -9,7 +9,7 @@ import { DATASETS_SYSTEM_PROMPT, GENERATE_TITLE_PROMPT } from "@buildingai/ai-to
 import { createDatasetsSearchTool } from "@buildingai/ai-toolkit/tools";
 import { SecretService } from "@buildingai/core/modules";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { getProviderSecret } from "@buildingai/utils";
+import { normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { AiModelService } from "@modules/ai/model/services/ai-model.service";
 import { Injectable, Logger } from "@nestjs/common";
 import type { LanguageModel } from "ai";
@@ -73,15 +73,6 @@ export class DatasetsChatCompletionService {
         try {
             await this.datasetMemberService.requireMember(params.datasetId, params.userId);
 
-            if (isNew) {
-                const record = await this.datasetsChatRecordService.createConversation(
-                    params.datasetId,
-                    params.userId,
-                    { title: params.title, modelId: params.modelId },
-                );
-                conversationId = record.id;
-            }
-
             const model = await this.aiModelService.findOne({
                 where: { id: params.modelId, isActive: true },
                 relations: ["provider"],
@@ -94,10 +85,16 @@ export class DatasetsChatCompletionService {
             const providerSecret = await this.secretService.getConfigKeyValuePairs(
                 model.provider.bindSecretId!,
             );
-            const provider = getProvider(model.provider.provider, {
-                apiKey: getProviderSecret("apiKey", providerSecret),
-                baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-            });
+            const provider = getProvider(model.provider.provider, normalizeProviderConfig(providerSecret));
+
+            if (isNew) {
+                const record = await this.datasetsChatRecordService.createConversation(
+                    params.datasetId,
+                    params.userId,
+                    { title: params.title, modelId: params.modelId },
+                );
+                conversationId = record.id;
+            }
 
             const cleaned = this.clean(params.messages);
             const modelMsgs = await convertToModelMessages(cleaned);

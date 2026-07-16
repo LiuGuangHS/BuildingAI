@@ -5,7 +5,7 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { DatasetsDocument, DatasetsSegments } from "@buildingai/db/entities";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { getProviderSecret } from "@buildingai/utils";
+import { normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { AiModelService } from "@modules/ai/model/services/ai-model.service";
 import { Injectable, Logger } from "@nestjs/common";
 import { embedMany } from "ai";
@@ -126,10 +126,7 @@ export class VectorizationRunnerService {
         const providerSecret = await this.secretService.getConfigKeyValuePairs(
             model.provider.bindSecretId!,
         );
-        const provider = getProviderForEmbedding(model.provider.provider, {
-            apiKey: getProviderSecret("apiKey", providerSecret),
-            baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-        });
+        const provider = getProviderForEmbedding(model.provider.provider, normalizeProviderConfig(providerSecret));
         const embeddingModel = provider(model.model);
         const batchSize = getMaxChunksFromModelConfig(model.modelConfig) ?? 10;
 

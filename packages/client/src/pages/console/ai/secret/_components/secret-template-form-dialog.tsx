@@ -61,6 +61,10 @@ type SecretTemplateFormDialogProps = {
   onSuccess?: () => void;
 };
 
+const DEFAULT_PROVIDER_FIELD_CONFIG = [
+  { name: "baseUrl", required: false, placeholder: "请输入 baseUrl" },
+];
+
 export const SecretTemplateFormDialog = ({
   open,
   onOpenChange,
@@ -74,7 +78,7 @@ export const SecretTemplateFormDialog = ({
     defaultValues: {
       name: "",
       icon: "",
-      fieldConfig: [{ name: "baseUrl", required: false, placeholder: "请输入baseUrl" }],
+      fieldConfig: DEFAULT_PROVIDER_FIELD_CONFIG,
       isEnabled: true,
       sortOrder: 0,
     },
@@ -98,7 +102,7 @@ export const SecretTemplateFormDialog = ({
                   required: f.required ?? false,
                   placeholder: f.placeholder || "",
                 }))
-              : [{ name: "baseUrl", required: false, placeholder: "请输入baseUrl" }],
+              : DEFAULT_PROVIDER_FIELD_CONFIG,
           isEnabled: template.isEnabled === BooleanNumber.YES,
           sortOrder: template.sortOrder,
         });
@@ -106,7 +110,7 @@ export const SecretTemplateFormDialog = ({
         form.reset({
           name: "",
           icon: "",
-          fieldConfig: [{ name: "baseUrl", required: false, placeholder: "请输入baseUrl" }],
+          fieldConfig: DEFAULT_PROVIDER_FIELD_CONFIG,
           isEnabled: true,
           sortOrder: 0,
         });

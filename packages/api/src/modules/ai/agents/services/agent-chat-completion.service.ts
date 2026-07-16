@@ -31,7 +31,7 @@ import { In } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import type { ChatMessageUsage, ChatUIMessage } from "@buildingai/types";
 import type { ModelReference } from "@buildingai/types/ai/agent-config.interface";
-import { getProviderSecret } from "@buildingai/utils";
+import { normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { UserService } from "@modules/user/services/user.service";
 import { Injectable, Logger } from "@nestjs/common";
 import type { LanguageModel, Tool, UIMessage } from "ai";
@@ -415,6 +415,7 @@ export class AgentChatCompletionService {
                         });
                         result.consumeStream();
 
+                        let streamFailed = false;
                         const uiMessageStream = result.toUIMessageStream({
                             sendStart: false,
                             originalMessages: params.isToolApprovalFlow
@@ -457,6 +458,8 @@ export class AgentChatCompletionService {
                                         ? this.mergeUsage(previousApprovalUsage, baseUsage)
                                         : baseUsage;
                                     if (
+                                        !streamFailed &&
+                                        !aborted &&
                                         !hasPendingApproval &&
                                         saveConversation &&
                                         conversationId &&
@@ -482,6 +485,8 @@ export class AgentChatCompletionService {
                                     let extraTokens = 0;
                                     let extraPower = 0;
                                     if (
+                                        !streamFailed &&
+                                        !aborted &&
                                         saveConversation &&
                                         conversationId &&
                                         !params.isToolApprovalFlow
@@ -628,6 +633,7 @@ export class AgentChatCompletionService {
                                 }
                             },
                             onError: (error) => {
+                                streamFailed = true;
                                 const msg = this.errMsg(error);
                                 this.logger.error(`Stream error: ${msg}`);
                                 closeMcpClients(mcpClients).catch(() => {});
@@ -665,10 +671,7 @@ export class AgentChatCompletionService {
         const providerSecret = await this.secretService.getConfigKeyValuePairs(
             model.provider.bindSecretId,
         );
-        const provider = getProvider(model.provider.provider, {
-            apiKey: getProviderSecret("apiKey", providerSecret),
-            baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-        });
+        const provider = getProvider(model.provider.provider, normalizeProviderConfig(providerSecret));
         const languageModel = provider(model.model).model as LanguageModel;
 
         return { languageModel, dbModel: model };

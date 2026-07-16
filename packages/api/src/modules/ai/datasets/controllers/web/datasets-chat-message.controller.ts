@@ -25,20 +25,14 @@ export class DatasetsChatMessageWebController extends BaseController {
         @Req() req: Request,
     ) {
         const abortController = new AbortController();
-        const abortSignal =
-            (req as any).signal instanceof AbortSignal
-                ? (req as any).signal
-                : abortController.signal;
-
-        if (!((req as any).signal instanceof AbortSignal)) {
-            const handleDisconnect = () => {
-                if (!res.writableEnded && !abortSignal.aborted) abortController.abort();
-            };
-            req.on("close", handleDisconnect);
-            req.on("aborted", handleDisconnect);
-            res.on("close", handleDisconnect);
-            if (req.aborted || req.socket?.destroyed) abortController.abort();
-        }
+        const abortSignal = abortController.signal;
+        // Node 24 aborts IncomingMessage.signal when the request body completes, before SSE ends.
+        const handleDisconnect = () => {
+            if (!res.writableEnded && !abortSignal.aborted) abortController.abort();
+        };
+        req.once("aborted", handleDisconnect);
+        res.once("close", handleDisconnect);
+        if (req.aborted || req.socket?.destroyed) abortController.abort();
 
         const conversationId = dto.id && dto.id !== "new" ? dto.id : dto.conversationId;
         const isRegenerate = dto.trigger === "regenerate-message" && !!dto.messageId;

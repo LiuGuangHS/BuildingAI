@@ -9,7 +9,7 @@ import { AgentAnnotation, AgentChatMessage } from "@buildingai/db/entities";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import type { AnnotationConfig } from "@buildingai/types/ai/agent-config.interface";
-import { getProviderSecret } from "@buildingai/utils";
+import { normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { AiModelService } from "@modules/ai/model/services/ai-model.service";
 import { Injectable, Logger } from "@nestjs/common";
 import { embed } from "ai";
@@ -50,10 +50,7 @@ export class AgentAnnotationService extends BaseService<AgentAnnotation> {
             const providerSecret = await this.secretService.getConfigKeyValuePairs(
                 model.provider.bindSecretId!,
             );
-            const provider = getProviderForEmbedding(model.provider.provider, {
-                apiKey: getProviderSecret("apiKey", providerSecret),
-                baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-            });
+            const provider = getProviderForEmbedding(model.provider.provider, normalizeProviderConfig(providerSecret));
             const embeddingModel = provider(model.model);
             const result = await embed({ model: embeddingModel.model, value: input });
             const emb = result.embedding;

@@ -288,6 +288,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     },
     onError: (error) => {
       console.error("Error streaming chat", error);
+      const message = error?.message || "Unknown error";
       setStatusOverride("error");
       setChatMessages((prev) => {
         if (prev.length === 0) return prev;
@@ -301,11 +302,17 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
               ...(lastMessage.parts || []),
               {
                 type: "data-error",
-                data: error?.message || "Unknown error",
+                data: message,
               },
             ],
           };
+          return updated;
         }
+        updated.push({
+          id: crypto.randomUUID(),
+          role: "assistant",
+          parts: [{ type: "data-error", data: message }],
+        });
         return updated;
       });
     },

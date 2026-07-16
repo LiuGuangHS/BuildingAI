@@ -3,7 +3,7 @@ import { BaseController } from "@buildingai/base";
 import { SecretService } from "@buildingai/core/modules";
 import { BuildFileUrl } from "@buildingai/decorators/file-url.decorator";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { getProviderSecret } from "@buildingai/utils";
+import { normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { ConsoleController } from "@common/decorators/controller.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import {
@@ -98,19 +98,15 @@ export class AiProviderConsoleController extends BaseController {
         name: "更新AI供应商",
     })
     async update(@Param("id") id: string, @Body() dto: UpdateAiProviderDto) {
-        // 如果要启用供应商，检查是否已填写 apiKey
         if (dto.isActive === true) {
             const provider = await this.aiProviderService.findOneById(id);
             if (!provider) {
                 throw HttpErrorFactory.business("AI供应商不存在");
             }
 
-            // 检查当前 apiKey 和更新的 apiKey
             const finalbindSecretId =
                 dto.bindSecretId !== undefined ? dto.bindSecretId : provider.bindSecretId;
-            if (!finalbindSecretId || finalbindSecretId.trim() === "") {
-                throw HttpErrorFactory.business("请先完善密钥配置后再启用供应商");
-            }
+            await this.assertUsableProviderSecret(finalbindSecretId);
         }
 
         return await this.aiProviderService.updateProvider(id, dto);
@@ -205,7 +201,6 @@ export class AiProviderConsoleController extends BaseController {
         name: "更新AI供应商",
     })
     async toggleActive(@Param("id") id: string, @Body("isActive") isActive: boolean) {
-        // 如果要启用供应商，检查是否已填写 apiKey
         if (typeof isActive !== "boolean") {
             throw HttpErrorFactory.business("参数 isActive 必须是布尔值");
         }
@@ -214,8 +209,8 @@ export class AiProviderConsoleController extends BaseController {
             throw HttpErrorFactory.business("AI供应商不存在");
         }
 
-        if (!provider.bindSecretId || provider.bindSecretId.trim() === "") {
-            throw HttpErrorFactory.business("请先完善密钥配置后再启用供应商");
+        if (isActive) {
+            await this.assertUsableProviderSecret(provider.bindSecretId);
         }
 
         return await this.aiProviderService.updateProvider(
@@ -250,16 +245,34 @@ export class AiProviderConsoleController extends BaseController {
             const providerSecret = await this.secretService.getConfigKeyValuePairs(
                 providerEntity.bindSecretId,
             );
+            const providerConfig = normalizeProviderConfig(providerSecret);
 
             const provider = getProvider(providerEntity.provider, {
-                apiKey: getProviderSecret("apiKey", providerSecret),
-                baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
+                ...providerConfig,
+                baseURL: providerConfig.baseURL || undefined,
             });
 
             return await provider.listModels();
         } catch (error) {
             console.error(error);
             return [];
+        }
+    }
+
+    private async assertUsableProviderSecret(bindSecretId?: string | null) {
+        const secretId = bindSecretId?.trim();
+        if (!secretId) {
+            throw HttpErrorFactory.business("请先完善密钥配置后再启用供应商");
+        }
+
+        const fields = await this.secretService.getConfigKeyValuePairs(secretId);
+        const missingRequiredField = Object.entries(fields).find(
+            ([, field]) => field.required && !field.value.trim(),
+        );
+        if (missingRequiredField) {
+            throw HttpErrorFactory.business(
+                `密钥配置缺少必填字段 ${missingRequiredField[0]}`,
+            );
         }
     }
 }

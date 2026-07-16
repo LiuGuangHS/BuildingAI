@@ -3,7 +3,7 @@ import { SecretService } from "@buildingai/core/modules";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { DatasetsDocument } from "@buildingai/db/entities";
 import { Repository } from "@buildingai/db/typeorm";
-import { getProviderSecret } from "@buildingai/utils";
+import { normalizeProviderConfig } from "@buildingai/extension-sdk";
 import { AiModelService } from "@modules/ai/model/services/ai-model.service";
 import { DatasetsConfigService } from "@modules/config/services/datasets-config.service";
 import { Injectable, Logger } from "@nestjs/common";
@@ -53,10 +53,7 @@ export class DocumentSummaryService {
             const providerSecret = await this.secretService.getConfigKeyValuePairs(
                 model.provider.bindSecretId!,
             );
-            const provider = getProvider(model.provider.provider, {
-                apiKey: getProviderSecret("apiKey", providerSecret),
-                baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-            });
+            const provider = getProvider(model.provider.provider, normalizeProviderConfig(providerSecret));
 
             const result = await generateText({
                 model: provider(model.model).model,

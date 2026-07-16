@@ -33,10 +33,10 @@ import {
 } from "@buildingai/ai-toolkit/utils";
 import { SecretService } from "@buildingai/core/modules";
 import { UserDictService } from "@buildingai/dict";
-import { HttpErrorFactory } from "@buildingai/errors";
+import { HttpError, HttpErrorFactory, HttpStatus } from "@buildingai/errors";
+import { normalizeProviderConfig, type NormalizedProviderConfig, type ProviderSecretFieldValue } from "@buildingai/extension-sdk";
 import type { ChatMessageUsage } from "@buildingai/types";
 import type { ChatUIMessage } from "@buildingai/types";
-import { getProviderSecret } from "@buildingai/utils";
 import { UserService } from "@modules/user/services/user.service";
 import { Injectable, Logger } from "@nestjs/common";
 import type { LanguageModel, Tool } from "ai";
@@ -115,10 +115,8 @@ export class ChatCompletionService {
         const providerSecret = await this.secretService.getConfigKeyValuePairs(
             model.provider.bindSecretId,
         );
-        const provider = getProvider(model.provider.provider, {
-            apiKey: getProviderSecret("apiKey", providerSecret),
-            baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-        });
+        const providerConfig = this.getUsableProviderConfig(providerSecret);
+        const provider = getProvider(model.provider.provider, providerConfig);
         return {
             model: provider(model.model).model,
             providerId: model.provider.provider,
@@ -133,14 +131,6 @@ export class ChatCompletionService {
         const needTitle = isNew && !params.title;
 
         try {
-            if (isNew) {
-                conversationId = (
-                    await this.aiChatRecordService.createConversation(params.userId, {
-                        title: params.title,
-                    })
-                ).id;
-            }
-
             const model = await this.aiModelService.findOne({
                 where: { id: params.modelId, isActive: true },
                 relations: ["provider"],
@@ -153,11 +143,16 @@ export class ChatCompletionService {
             const providerSecret = await this.secretService.getConfigKeyValuePairs(
                 model.provider.bindSecretId,
             );
+            const providerConfig = this.getUsableProviderConfig(providerSecret);
+            const provider = getProvider(model.provider.provider, providerConfig);
 
-            const provider = getProvider(model.provider.provider, {
-                apiKey: getProviderSecret("apiKey", providerSecret),
-                baseURL: getProviderSecret("baseUrl", providerSecret) || undefined,
-            });
+            if (isNew) {
+                conversationId = (
+                    await this.aiChatRecordService.createConversation(params.userId, {
+                        title: params.title,
+                    })
+                ).id;
+            }
 
             const messages = isToolApprovalFlow
                 ? await this.buildApprovalMessages(conversationId!, params.messages[0])
@@ -279,6 +274,7 @@ export class ChatCompletionService {
                             abortSignal: params.abortSignal,
                         });
                         result.consumeStream();
+                        let streamFailed = false;
 
                         const uiMessageStream = result.toUIMessageStream({
                             sendStart: false,
@@ -327,7 +323,13 @@ export class ChatCompletionService {
                                         ? this.mergeUsage(previousApprovalUsage, baseUsage)
                                         : baseUsage;
 
-                                    if (!hasPendingApproval && model.billingRule && billingUsage) {
+                                    if (
+                                        !streamFailed &&
+                                        !aborted &&
+                                        !hasPendingApproval &&
+                                        model.billingRule &&
+                                        billingUsage
+                                    ) {
                                         try {
                                             userConsumedPower =
                                                 await this.chatBillingHandler.deduct({
@@ -343,7 +345,12 @@ export class ChatCompletionService {
                                         }
                                     }
 
-                                    if (!isToolApprovalFlow && finished.length > 0) {
+                                    if (
+                                        !streamFailed &&
+                                        !aborted &&
+                                        !isToolApprovalFlow &&
+                                        finished.length > 0
+                                    ) {
                                         const { extraTokens, extraPower } =
                                             await this.applyPostProcessingUsage({
                                                 needTitle,
@@ -462,6 +469,7 @@ export class ChatCompletionService {
                                 }
                             },
                             onError: (error) => {
+                                streamFailed = true;
                                 const errorMsg = this.getErrorMsg(error);
                                 const errorObj: Record<string, unknown> = {
                                     name: error instanceof Error ? error.name : "Error",
@@ -886,11 +894,24 @@ export class ChatCompletionService {
     private handleError(error: unknown, response: ServerResponse): void {
         if (response.headersSent) return;
 
-        response.writeHead(500, { "Content-Type": "text/event-stream" });
+        const status = error instanceof HttpError
+            ? error.httpStatus
+            : HttpStatus.INTERNAL_SERVER_ERROR;
+        response.writeHead(status, { "Content-Type": "text/event-stream" });
         response.write(
             `data: ${JSON.stringify({ type: "error", error: this.getErrorMsg(error) })}\n\n`,
         );
         response.end();
+    }
+
+    private getUsableProviderConfig(
+        providerSecret: Record<string, ProviderSecretFieldValue>,
+    ): Omit<NormalizedProviderConfig, "baseURL"> & { baseURL?: string } {
+        const providerConfig = normalizeProviderConfig(providerSecret);
+        return {
+            ...providerConfig,
+            baseURL: providerConfig.baseURL || undefined,
+        };
     }
 
     private clean(messages: UIMessage[]): UIMessage[] {

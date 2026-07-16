@@ -542,7 +542,8 @@ export class AiChatRecordService extends BaseService<AiChatRecord> {
                 }>(),
         ]);
 
-        const msgMap = new Map(messageRows.map((r) => [r.conversationId, r]));
+        const msgMap = new Map<string, (typeof messageRows)[number]>();
+        messageRows.forEach((row) => msgMap.set(row.conversationId, row));
         const emptyFb = { total: 0, likeCount: 0, dislikeCount: 0, likeRate: 0, dislikeRate: 0 };
         const fbMap = new Map(
             feedbackRows.map((r) => {
