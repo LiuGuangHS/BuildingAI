@@ -1,0 +1,1 @@
+function e(e=`/`){return new URL(e,`${window.location.origin}/`).toString()}export{e as t};

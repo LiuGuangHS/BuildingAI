@@ -1,0 +1,1 @@
+import{n as e}from"./calendar-yhCzcK0-.js";function t(t,n,r){return e(t,-n,r)}export{t};
