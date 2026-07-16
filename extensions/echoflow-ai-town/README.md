@@ -67,12 +67,15 @@
 
 ## 入口与页面
 
-| 入口 | 路径 | 文件 | 职责 |
+主系统用户入口是 `/apps/echoflow-ai-town/*`；extension bundle / local dev base 是 `/extension/echoflow-ai-town/*`。小镇当前 Console 文档使用完整 dev/base 路径，等价的 `consoleRoutes` 相对路径为 `/console/...`。
+
+| 入口语义 | 路径 | 文件 | 职责 |
 |---|---|---|---|
-| Web | `/extension/echoflow-ai-town/` | `src/web/pages/index.tsx` | 小镇主场景、存档、行动、聊天、事件、日结和目标。 |
-| Console | `/extension/echoflow-ai-town/console/` | `src/web/pages/console/saves/list.tsx` | 存档列表、详情、预算、记忆和异常诊断。 |
-| Console | `/extension/echoflow-ai-town/console/ai-config` | `src/web/pages/console/ai-config.tsx` | LLM 模型、温度、token、fallback、每日限制和测试生成。 |
-| Console | `/extension/echoflow-ai-town/console/content-pack` | `src/web/pages/console/content-pack.tsx` | 内容包、赛季、seed、章节、活动和存档覆盖诊断。 |
+| 主系统 Web | `/apps/echoflow-ai-town/*` | `packages/client/src/pages/apps/[identifier]` | 主系统 iframe 宿主入口，加载本插件用户端。 |
+| Extension bundle/dev | `/extension/echoflow-ai-town/` | `src/web/pages/index.tsx` | 小镇主场景、存档、行动、聊天、事件、日结和目标。 |
+| Console full dev/base | `/extension/echoflow-ai-town/console/` | `src/web/pages/console/saves/list.tsx` | 存档列表、详情、预算、记忆和异常诊断。 |
+| Console full dev/base | `/extension/echoflow-ai-town/console/ai-config` | `src/web/pages/console/ai-config.tsx` | LLM 模型、温度、token、fallback、每日限制和测试生成。 |
+| Console full dev/base | `/extension/echoflow-ai-town/console/content-pack` | `src/web/pages/console/content-pack.tsx` | 内容包、赛季、seed、章节、活动和存档覆盖诊断。 |
 
 路由由 `src/web/routes.tsx` 注册。为避免用户端首页同步拉入 Console Layout 和动态图标包，小镇保留官方 iframe 导航同步、登录守卫和 Console Layout 语义，但将 Console 外壳改为 lazy import；后续如主系统 `defineRouteOption()` 支持 Console lazy 注册，可再收敛回公共路由工厂。
 
@@ -154,17 +157,17 @@ pnpm --filter echoflow-ai-town test
 pnpm --filter echoflow-ai-town build:publish
 ```
 
-当前已知验证状态：
+验证证据：
 
-| 命令 | 状态 | 说明 |
-|---|---|---|
-| `check-types` | pass | 已在当前 Node 24 / pnpm 10.20.0 基线复核通过。 |
-| `test` | pass | 覆盖规则闭环、内容包边界、前端首屏约束、AI 计费边界、限流和 UI 组件复用。 |
-| Console 图标白名单 | covered | 小镇静态测试覆盖 Console 静态映射和未登记图标 fallback，类型层不再引用 `lucide-react/dynamic`。 |
-| `build:api` | pass | API 产物已包含 catalog、migration 和 `0.0.1` upgrade。 |
-| `build:web` | pass | Vite Web 构建通过，首屏不再预加载 Console 和大图标块。 |
-| `build:publish` | pass | 已重新完成 `clean -> build:web -> build:api` 发布构建链路；Vite Web 构建和 tsup API 构建均通过。 |
-| 真实浏览器 smoke | blocked | 当前只能确认 Vite 用户端可启动到 `http://localhost:5176/extension/echoflow-ai-town`；Codex Browser 连接对象断开，Playwright 缺少 Chromium 二进制，系统 Chrome/Edge 未找到，因此没有新的桌面/移动截图证据。 |
+| 范围 | 证据状态 | 命令/场景 | 环境基线 | 结论 | 后续条件 |
+|---|---|---|---|---|---|
+| 类型检查 | historical | `pnpm --filter echoflow-ai-town check-types` | Node 24 / pnpm 10.20.0 历史记录；当前仓库基线为 Node 22.20 / pnpm 10.20.0 | 历史通过。 | 作为发布证据前需在当前 Node 22.20 / pnpm 10.20.0 重新验证。 |
+| 单测 | current | `pnpm --filter echoflow-ai-town test` | README 当前记录 | 覆盖规则闭环、内容包边界、前端首屏约束、AI 计费边界、限流和 UI 组件复用。 | 规则、计费或 UI 边界变更后重新执行。 |
+| Console 图标白名单 | current | 静态测试 | README 当前记录 | 覆盖 Console 静态映射和未登记图标 fallback，类型层不再引用 `lucide-react/dynamic`。 | 新增 Console 菜单图标时同步扩展白名单和测试。 |
+| API 构建 | current | `pnpm --filter echoflow-ai-town build:api` | README 当前记录 | API 产物已包含 catalog、migration 和 `0.0.1` upgrade。 | API 构建配置、catalog、migration 或 upgrade 变更后重新执行。 |
+| Web 构建 | current | `pnpm --filter echoflow-ai-town build:web` | README 当前记录 | Vite Web 构建通过，首屏不再预加载 Console 和大图标块。 | Web 入口、Vite 配置或 Console lazy 边界变更后重新执行。 |
+| 发布构建 | current | `pnpm --filter echoflow-ai-town build:publish` | README 当前记录 | 已完成 `clean -> build:web -> build:api` 发布构建链路；Vite Web 构建和 tsup API 构建均通过。 | 发布交付前重新执行，并检查 release allowlist。 |
+| 真实浏览器 smoke | blocked | Vite 用户端 `http://localhost:5176/extension/echoflow-ai-town` 与桌面/移动截图 | Codex Browser 连接对象断开；Playwright 缺少 Chromium；系统 Chrome/Edge 未找到 | 只能确认 Vite 用户端可启动，没有新的桌面/移动截图证据。 | 恢复 Playwright Chromium、系统浏览器或可连接浏览器后再按主系统插件容器复验。 |
 
 ## 已知风险
 
@@ -173,7 +176,7 @@ pnpm --filter echoflow-ai-town build:publish
 | AI 上下文与写回分阶段 | 并发行动时 AI 文案可能基于稍早状态，资源结算仍以锁内最新状态为准。 | 如需强一致叙事，引入 action revision 或处理中状态。 |
 | 内容包仍是代码 manifest | 首发包已有版本、赛季、seed 策略和 Console 只读运营页，但还没有数据库化内容配置或发布审核流。 | 后续把可运营内容扩展为 catalog + seed/config 管理页，并保持 service 只做事务、校验和编排。 |
 | 计费真实联调未完成 | 静态边界和类型检查已覆盖事件 ID associationNo、默认 0 免费、fallback 不扣费和失败退款路径，但还未在真实余额账号上跑扣费/退款数据库联调。 | 待 Docker/WSL 挂载恢复后准备测试用户、余额和模型，记录脱敏事件 ID、扣费日志和退款日志。 |
-| 本地依赖重建曾阻塞发布构建 | 本轮 `node_modules` 链接层已恢复，`check-types` 和 `build:publish` 已通过；若后续再次缺少 optional native binding 或根链接，优先完成一次干净的 pnpm 安装再跑构建。 | 保留构建验证记录；浏览器交互 smoke 仍需等待主站 node 容器完成全仓 build/start。 |
+| 本地依赖重建曾阻塞发布构建 | 历史记录显示 `node_modules` 链接层恢复后 `check-types` 和 `build:publish` 通过；若后续再次缺少 optional native binding 或根链接，优先在人工确认后完成一次干净的 pnpm 安装再跑构建。 | 保留构建验证记录；浏览器交互 smoke 仍需等待主站 node 容器完成全仓 build/start。 |
 | 主站公共模块 DI 回归 | 通知/微信/认证链路异常会阻断所有插件真实 E2E，而不只是小镇。 | 根 `AGENTS.md` 已记录主系统服务复用规则；保留 `packages/api/src/common/modules/wechat/wechat-module-boundary.test.mjs`，后续公共模块改动先跑该边界测试和 `@buildingai/api check-types`。 |
 | 浏览器自动化环境缺口 | 无法用当前 Codex Browser 或本机 Playwright 生成新的桌面/移动截图证据，阻断视觉 QA 和真实交互 smoke。 | 先恢复 Playwright Chromium 或可连接浏览器，再按根 `AGENTS.md` 的浏览器 QA 规则确认端口、标题、业务文案和截图状态。 |
 | Console 菜单图标白名单 | 菜单图标已从动态图库收敛为主系统静态白名单，并有 `@buildingai/ui` 包级测试覆盖；新插件若使用未登记图标会回退为帮助图标。 | 新增 Console 菜单图标时同步扩展主系统白名单和测试，避免退回动态图标方案。 |

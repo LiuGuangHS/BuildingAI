@@ -13,6 +13,23 @@ This skill guides creation of distinctive, production-grade frontend interfaces 
 "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details
 and creative choices.
 
+## BuildingAI embedded UI override
+
+When changing `extensions/echoflow-*` plugin UI or `packages/client`, first read `AGENTS.md` and the
+target plugin/package README. Plugin user pages run inside the main system `/apps/<identifier>/*`
+iframe and extension RootLayout; do not duplicate the App Header, account area, global navigation,
+marketing hero, sidebar shell, or full standalone app chrome.
+
+For EchoFlow plugin page design, redesign, Design Gallery, or UI contract work, use
+`skills/echoflow-ui-workflow/SKILL.md`. Its embedded-product, operational-density, capability, and
+cleanup rules take precedence over the generic high-expression visual guidance below. Main-system
+Console and operational tools should remain restrained, scan-friendly, and work-focused.
+
+For plugin UI tasks, prefer the real plugin over a separate prototype. Use `@buildingai/ui`,
+`@buildingai/web-core`, `@buildingai/stores`, and `createPluginHttpClients()` where appropriate.
+Creative visual choices must serve the plugin business context and cannot override platform routing,
+Secret/provider/billing/upload, or embedded layout boundaries.
+
 The user provides frontend requirements: a component, page, application, or interface to build. They
 may include context about the purpose, audience, or technical constraints.
 

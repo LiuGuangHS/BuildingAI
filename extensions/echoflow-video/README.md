@@ -31,19 +31,22 @@
 
 ## 入口与页面
 
-| 入口 | 路径 | 文件 | 职责 |
+主系统用户入口是 `/apps/echoflow-video/*`；extension bundle / local dev base 是 `/extension/echoflow-video/*`。下表 Console 路径是 `consoleRoutes` 相对路径，完整 dev/base 路径形如 `/extension/echoflow-video/console/...`。
+
+| 入口语义 | 路径 | 文件 | 职责 |
 |---|---|---|---|
-| Web | `/extension/echoflow-video/` | `src/web/pages/index.tsx` | 视频生成工作台。 |
-| Web | `/extension/echoflow-video/history` | `src/web/pages/history.tsx` | 当前用户生成历史。 |
-| Web | `/extension/echoflow-video/:id` | `src/web/pages/detail.tsx` | 当前用户任务详情。 |
-| Web | `/extension/echoflow-video/studio` | `src/web/pages/studio.tsx` | 短视频制作 reserved 入口。 |
-| Console | `/console/` | `src/web/pages/console/index.tsx` | 运营概览。 |
-| Console | `/console/models` | `src/web/pages/console/models.tsx` | 主站视频模型运营配置和模型级计费入口。 |
-| Console | `/console/policies` | `src/web/pages/console/policies.tsx` | 风控限流。 |
-| Console | `/console/templates` | `src/web/pages/console/templates.tsx` | 模板预设。 |
-| Console | `/console/history` | `src/web/pages/console/history.tsx` | 全量任务历史。 |
-| Console | `/console/config` | `src/web/pages/console/config.tsx` | 提示词优化模型。 |
-| Console | `/console/studio` | `src/web/pages/console/studio.tsx` | 短视频制作 reserved 管理入口。 |
+| 主系统 Web | `/apps/echoflow-video/*` | `packages/client/src/pages/apps/[identifier]` | 主系统 iframe 宿主入口，加载本插件用户端。 |
+| Extension bundle/dev | `/extension/echoflow-video/` | `src/web/pages/index.tsx` | 视频生成工作台。 |
+| Extension bundle/dev | `/extension/echoflow-video/history` | `src/web/pages/history.tsx` | 当前用户生成历史。 |
+| Extension bundle/dev | `/extension/echoflow-video/:id` | `src/web/pages/detail.tsx` | 当前用户任务详情。 |
+| Extension bundle/dev | `/extension/echoflow-video/studio` | `src/web/pages/studio.tsx` | 短视频制作 reserved 入口。 |
+| Console route | `/console/` | `src/web/pages/console/index.tsx` | 运营概览。 |
+| Console route | `/console/models` | `src/web/pages/console/models.tsx` | 主站视频模型运营配置和模型级计费入口。 |
+| Console route | `/console/policies` | `src/web/pages/console/policies.tsx` | 风控限流。 |
+| Console route | `/console/templates` | `src/web/pages/console/templates.tsx` | 模板预设。 |
+| Console route | `/console/history` | `src/web/pages/console/history.tsx` | 全量任务历史。 |
+| Console route | `/console/config` | `src/web/pages/console/config.tsx` | 提示词优化模型。 |
+| Console route | `/console/studio` | `src/web/pages/console/studio.tsx` | 短视频制作 reserved 管理入口。 |
 
 路由由 `src/web/routes.tsx` 使用 `defineRouteOption()` 注册。
 
@@ -122,13 +125,15 @@ pnpm --filter echoflow-video test:e2e # 需要 ADMIN_AUTH_TOKEN / WEB_USER_AUTH_
 pnpm --filter echoflow-video build:publish
 ```
 
-| 项目 | 状态 |
-|---|---|
-| 类型、构建与边界测试 | 本地按上述命令验证；测试桩需随主系统 SDK 导出同步。 |
-| Web public 边界 | 由 `tests/video-public-api-boundary.test.mjs` 约束 Web/Console 字段分离、RootLayout、SDK 限流、provider HTTP、public serializer 和常驻路径依赖。 |
-| 发布包边界 | 由 `tests/video-manifest-boundary.test.mjs` 约束 manifest/package/registry、发布 allowlist、静态资产和运行时目录排除。 |
-| 真实端到端 | 仍需真实主站视频模型、余额和存储覆盖提交、失败退款、转存和通知。 |
-| 主系统安装 | release zip 内容检查不等于安装完成；只有在主系统成功安装、迁移、重启并打开 Web/Console 后才能声明通过。 |
+验证证据：
+
+| 范围 | 证据状态 | 命令/场景 | 环境基线 | 结论 | 后续条件 |
+|---|---|---|---|---|---|
+| 类型、构建与边界测试 | historical | README 记录的 package scripts | 既有本地验证记录 | 曾按上述命令验证；测试桩需随主系统 SDK 导出同步。 | 交付前用当前 Node 22.20 / pnpm 10.20.0 重新执行最小验证矩阵。 |
+| Web public 边界 | current | `tests/video-public-api-boundary.test.mjs` | 静态测试约束 | 约束 Web/Console 字段分离、RootLayout、SDK 限流、provider HTTP、public serializer 和常驻路径依赖。 | Web/API serializer、RootLayout 或 SDK 边界变更后重新执行。 |
+| 发布包边界 | current | `tests/video-manifest-boundary.test.mjs` | 静态测试约束 | 约束 manifest/package/registry、发布 allowlist、静态资产和运行时目录排除。 | metadata、release allowlist 或发布脚本变更后重新执行。 |
+| 真实端到端 | pending | 真实主站视频模型、余额和存储 | 需要真实环境 | 未覆盖提交、失败退款、转存和通知闭环。 | 准备真实主站视频模型、余额、存储和测试素材后执行。 |
+| 主系统安装 | pending | release zip 安装 smoke | 需要主系统安装/迁移/重启 | release zip 内容检查不等于安装完成。 | 只有在主系统成功安装、迁移、重启并打开 Web/Console 后才能声明通过。 |
 
 ## 已知风险
 
@@ -149,4 +154,3 @@ pnpm --filter echoflow-video build:publish
 | P2 真实上传与 provider URL smoke | 平台上传、素材校验、provider 结果 URL | 覆盖上传记录创建、归属、存储读取、历史素材重传、删除后提交、公网/跳转/凭据 URL 边界。 |
 | P2 体验与体积复核 | Web build 输出、桌面和 390px 移动端 | 主入口体积和 CSS 继续收敛；无横向溢出、文本遮挡、console error/warn。 |
 | P3 短视频制作转正式前置 | Web/Console `studio`、数据/队列/计费设计 | 明确素材编排、分镜、批量生成、剪辑导出或模板化发布边界后再转正式能力。 |
-

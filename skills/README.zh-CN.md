@@ -1,265 +1,118 @@
 # Skills 管理指南
 
-本项目使用统一的 skills 管理系统，通过 node 命令将根目录 `skills/`
-文件夹下的 skills 同步到各个 AI 编辑器的配置目录中。仅用于开发环境，我们的 skill 默认不生效，仅在你运行`同步`命令后， skill 会自动生效与你的 AI 编辑器中， 在根目录可以查看到对应后缀 如 .cursor/skills/xxx。
+本仓库把项目 skills 存放在根目录 `skills/`，并通过 `scripts/sync-skills.mjs` 同步到各 AI 编辑器的配置目录。
 
-初始化：通常情况下开发你仅需要运行 `pnpm skills sync 编辑器名称即可` 如 `pnpm skills sync cursor`
+根目录 `skills/` 是事实源；`.claude/skills/<name>/` 这类目录是编辑器运行时副本，不应成为第二套事实源。
 
-## 支持的 AI 编辑器
+当通用上游 skill 与本仓库规则冲突时，以 `skills/skill-developer/SKILL.md`、本 README、`AGENTS.md` 和 `scripts/sync-skills.mjs` 为准。BuildingAI 项目 skill 不要直接编辑生成的 `.claude/skills/<name>/` 副本。
 
-Skills 会自动同步到以下 AI 编辑器的配置目录：
+## 支持的编辑器
 
-- `.agent/skills/` - Agent 编辑器
-- `.agents/skills/` - Agents 编辑器
-- `.gemini/skills/` - Gemini 编辑器
-- `.kiro/skills/` - Kiro 编辑器
-- `.trae/skills/` - Trae 编辑器
-- `.windsurf/skills/` - Windsurf 编辑器
-- `.cursor/skills/` - Cursor 编辑器
+支持的编辑器名称以 `scripts/sync-skills.mjs` 中的 `EDITOR_MAP` 为准：
 
-## 命令使用
+| 编辑器名称 | 同步目录 |
+|---|---|
+| `agent` | `.agent/skills/` |
+| `agents` | `.agents/skills/` |
+| `gemini` | `.gemini/skills/` |
+| `kiro` | `.kiro/skills/` |
+| `trae` | `.trae/skills/` |
+| `windsurf` | `.windsurf/skills/` |
+| `cursor` | `.cursor/skills/` |
+| `claude` | `.claude/skills/` |
+| `vercel` | `.vercel/skills/` |
 
-### 同步单个 skill
+## 常用命令
 
-同步到所有编辑器：
-
-```bash
-pnpm skills sync <skill-name>
-```
-
-同步到特定编辑器：
+在非交互环境下，为避免 pnpm wrapper 意外触发安装行为，可以直接使用 node 脚本：
 
 ```bash
-pnpm skills sync <skill-name> <editor>
-```
+# 同步单个 skill 到单个编辑器
+node scripts/sync-skills.mjs sync <skill-name> <editor>
 
-示例：
+# 同步单个 skill 到所有编辑器
+node scripts/sync-skills.mjs sync <skill-name>
 
-```bash
-# 同步到所有编辑器
-pnpm skills sync project-architecture
+# 同步所有 skills 到单个编辑器
+node scripts/sync-skills.mjs sync <editor>
 
-# 仅同步到 Cursor 编辑器
-pnpm skills sync project-architecture cursor
-```
-
-### 同步全部 skills
-
-同步到所有编辑器：
-
-```bash
-pnpm skills sync all
-```
-
-同步到特定编辑器：
-
-```bash
-pnpm skills sync <editor>
-```
-
-示例：
-
-```bash
 # 同步所有 skills 到所有编辑器
-pnpm skills sync all
+node scripts/sync-skills.mjs sync all
 
-# 同步所有 skills 到 Cursor 编辑器
-pnpm skills sync cursor
+# 从单个编辑器移除单个 skill
+node scripts/sync-skills.mjs remove <skill-name> <editor>
+
+# 从单个编辑器移除所有 skills
+node scripts/sync-skills.mjs remove all <editor>
 ```
 
-### 删除单个 skill
-
-从所有编辑器删除：
+也可以使用 pnpm wrapper：
 
 ```bash
-pnpm skills remove <skill-name>
+pnpm skills sync claude
+pnpm skills sync repo-verify claude
+pnpm skills remove repo-verify claude
 ```
 
-从特定编辑器删除：
+如果 pnpm wrapper 在非交互环境中触发安装或其他额外行为，改用 node 脚本并在交付说明中说明原因。
 
-```bash
-pnpm skills remove <skill-name> <editor>
-```
+## 新增或更新 skill
 
-示例：
+1. 创建或编辑 `skills/<skill-name>/SKILL.md`。
+2. 保持 frontmatter 的 `name` 与目录名一致。
+3. 长期仓库事实放在 `AGENTS.md` 或对应插件/包 README；skill 负责工作流和路由，不维护第二套架构事实。
+4. 如果该 skill 需要在 Claude Code 中生效，只同步目标 skill：
 
-```bash
-# 从所有编辑器删除
-pnpm skills remove project-architecture
+   ```bash
+   node scripts/sync-skills.mjs sync <skill-name> claude
+   ```
 
-# 仅从 Cursor 编辑器删除
-pnpm skills remove project-architecture cursor
-```
+5. 如果 skill 是用户显式调用，并且可能建议重验证、发布打包、部署或外部调用，使用 `disable-model-invocation: true`。
+6. 不默认执行依赖安装/升级、`pnpm format`、`pnpm lint:fix`、Docker/PM2 生命周期、数据库写入、生成 artifact 写入或真实外部模型/Secret/计费调用。若确实需要，先说明原因并取得明确授权。
 
-### 删除全部 skills
+## Frontmatter 策略
 
-从所有编辑器删除：
+必填字段：
 
-```bash
-pnpm skills remove all
-```
+- `name`
+- `description`
 
-从特定编辑器删除：
+有明确用途时允许：
 
-```bash
-pnpm skills remove all <editor>
-```
+- `disable-model-invocation`：用户显式调用，且可能触发重检查、发布打包、部署、外部调用或其他副作用的流程。
+- `allowed-tools`：只读或安全敏感流程的工具收窄。
+- `license`：vendor/upstream license 指针。
+- `metadata`：不控制 BuildingAI 行为的 vendor/upstream 元数据。
 
-示例：
+新增其他 frontmatter 字段前，先更新本策略和 `skills/skill-developer/SKILL.md`。
 
-```bash
-# 从所有编辑器删除所有 skills
-pnpm skills remove all
+## 当前主要 BuildingAI skills
 
-# 从 Cursor 编辑器删除所有 skills
-pnpm skills remove all cursor
-```
+### `repo-verify`
 
-### 支持的编辑器
+按路径选择最小验证矩阵。代码改动后或交付前使用，用于选择 typecheck、lint、test、build 和文档检查。
 
-可用的编辑器名称：
+### `extension-release-check`
 
-- `cursor` - Cursor 编辑器
-- `trae` - Trae 编辑器
-- `agent` - Agent
-- `agents` - Agents
-- `gemini` - Gemini 编辑器
-- `kiro` - Kiro 编辑器
-- `windsurf` - Windsurf 编辑器
+用户显式调用的插件发布/交付检查清单。插件打包、发布或交付前使用。
 
-## Skills 管理流程
+## 其他可用 skills
 
-### 现有 Skills 位置
+这些 skill 可按需同步，但它们不是仓库事实的最高权威：
 
-所有 skills 都存放在项目根目录的 `skills/` 文件夹下，每个 skill 都是一个独立的文件夹。
+- `project-architecture`：monorepo 导航和事实源路由。
+- `skill-developer`：创建和维护 BuildingAI 项目 skills。
+- `ai-sdk`：AI SDK 使用指导；依赖变更仍需说明原因并获得明确授权。
+- `frontend-design`：前端设计指导；BuildingAI 嵌入式插件 UI 约束以 `AGENTS.md` 和插件 README 为准。
+- `postgresql-table-design`：PostgreSQL 表结构设计指导。
+- `skill-creator` / `skill-writer`：通用 skill 编写参考；若与 root `skills/` + sync 流程冲突，以 `skill-developer` 为准。
+- `web-artifacts-builder`：低频独立 artifact/project 生成指导；可能涉及安装、独立项目或 bundle 产物，只有用户明确要求 artifact/原型时才使用。
 
-### 新增 Skill 流程
+## 文档路由
 
-1. 在 `skills/` 目录下创建新的 skill 文件夹
-2. 添加 skill 相关文件（如 `SKILL.md`、`references/` 等）
-3. 执行同步命令：
-
-    ```bash
-    # 同步到所有编辑器
-    pnpm skills sync <skill-name>
-
-    # 或仅同步到特定编辑器
-    pnpm skills sync <skill-name> <editor>
-
-    # 或同步全部 skills
-    pnpm skills sync all
-    ```
-
-### 删除 Skill 流程
-
-1. 先执行删除命令，从 AI 编辑器配置目录中移除：
-
-    ```bash
-    # 从所有编辑器删除
-    pnpm skills remove <skill-name>
-
-    # 或从特定编辑器删除
-    pnpm skills remove <skill-name> <editor>
-
-    # 或删除全部
-    pnpm skills remove all
-    ```
-
-2. 然后手动删除根目录 `skills/` 文件夹下对应的 skill 文件夹
-
-## 查找和添加 Skills
-
-你可以在 [https://skillsmp.com/](https://skillsmp.com/)
-上查找和发现更多可用的 skills。找到合适的 skill 后，执行以下步骤：1.在终端添加 skill 时，选择安装到 project 然后选择 copy 而不是软连接下载。2.下载完成可以在任意 .agent/skills/ 文件夹中查看 skill。3.如果这个 skill 仅用于你自己的 AI 应用程序，不需要给其他开发者，那么你可以选择不复制到 根目录的 skills 文件夹下。4.如果你希望这个 skill 给别人使用，那么你需要把 .agent/skills/你下载的 skill 文件复制到根目录的 skills 文件夹下， 然后提交即可
-
-## 现有 Skills 说明
-
-### ai-sdk
-
-**作用**：提供 AI SDK 相关的文档和帮助，用于构建 AI 驱动的功能。
-
-**使用场景**：
-
-- 询问 AI SDK 函数（如 `generateText`、`streamText`、`ToolLoopAgent`、`tools` 等）
-- 构建 AI 代理、聊天机器人或文本生成功能
-- 了解 AI 提供商（OpenAI、Anthropic 等）、流式传输、工具调用或结构化输出
-
-### frontend-design
-
-**作用**：创建独特、生产级的前端界面，具有高质量的设计。
-
-**使用场景**：
-
-- 构建 Web 组件、页面、应用程序
-- 设计网站、落地页、仪表板、React 组件、HTML/CSS 布局
-- 美化或样式化任何 Web UI
-
-**特点**：避免通用的 AI 美学，生成具有创意和精致代码的 UI 设计。
-
-### postgresql-table-design
-
-**作用**：设计 PostgreSQL 特定的数据库架构。
-
-**使用场景**：
-
-- 设计数据库表结构
-- 了解 PostgreSQL 最佳实践
-- 数据类型选择、索引、约束、性能模式
-- PostgreSQL 高级特性
-
-**特点**：涵盖 PostgreSQL 特有的最佳实践、数据类型、索引、约束、性能模式和高级特性。
-
-### project-architecture
-
-**作用**：BuildingAI monorepo 项目结构和架构指南。
-
-**使用场景**：
-
-- 理解项目组织结构
-- 定位文件位置
-- 理解包关系和依赖
-- 查找特定功能的实现位置
-- 导航代码库结构
-
-**特点**：对于任何需要理解项目布局、导入模式、模块组织或跨包依赖的开发任务都至关重要。
-
-### skill-creator
-
-**作用**：创建有效 skills 的指南。
-
-**使用场景**：
-
-- 创建新的 skill
-- 更新现有 skill
-- 扩展 Claude 的能力，提供专业知识、工作流或工具集成
-
-**特点**：提供创建模块化、自包含 skill 包的指导，这些包通过提供专业知识、工作流和工具来扩展 Claude 的能力。
-
-### skill-developer
-
-**作用**：创建和管理 Claude Code skills，遵循 Anthropic 最佳实践。
-
-**使用场景**：
-
-- 创建新 skills
-- 修改 skill-rules.json
-- 理解触发模式
-- 使用 hooks
-- 调试 skill 激活
-- 实现渐进式披露
-
-**特点**：涵盖 skill 结构、YAML
-frontmatter、触发类型（关键词、意图模式、文件路径、内容模式）、执行级别（block、suggest、warn）、hook 机制（UserPromptSubmit、PreToolUse）、会话跟踪和 500 行规则。
-
-### skill-writer
-
-**作用**：指导用户为 Claude Code 创建 Agent Skills。
-
-**使用场景**：
-
-- 创建、编写、设计新的 Skill
-- 处理 SKILL.md 文件
-- 设计 skill 结构和 frontmatter
-- 故障排除 skill 发现问题
-
-**特点**：帮助创建结构良好的 Agent Skills，遵循最佳实践和验证要求。
+- 跨仓库规则：`AGENTS.md`。
+- Claude Code 入口：`CLAUDE.md`。
+- 插件事实：`extensions/<identifier>/README.md`。
+- 验证流程：`skills/repo-verify/SKILL.md`。
+- 插件发布：`skills/extension-release-check/SKILL.md`。
+- 同步实现：`scripts/sync-skills.mjs`。

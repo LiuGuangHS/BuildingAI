@@ -1,472 +1,104 @@
 ---
 name: skill-developer
-description:
-    Create and manage Claude Code skills following Anthropic best practices. Use when creating new
-    skills, modifying skill-rules.json, understanding trigger patterns, working with hooks,
-    debugging skill activation, or implementing progressive disclosure. Covers skill structure, YAML
-    frontmatter, trigger types (keywords, intent patterns, file paths, content patterns),
-    enforcement levels (block, suggest, warn), hook mechanisms (UserPromptSubmit, PreToolUse),
-    session tracking, and the 500-line rule.
+description: Create and maintain BuildingAI project skills. Use when adding or updating root skills, syncing them to supported editor folders, checking SKILL.md frontmatter, or aligning skills with this repository's hooks and documentation routing.
 ---
 
-# Skill Developer Guide
+# BuildingAI Skill Developer Guide
 
-## Purpose
+Use this skill when creating, updating, syncing, or reviewing skills in this repository. It is the main BuildingAI entrypoint for skill maintenance; generic `skill-writer` and `skill-creator` guidance is only a reference when it does not conflict with this file.
 
-Comprehensive guide for creating and managing skills in Claude Code with auto-activation system,
-following Anthropic's official best practices including the 500-line rule and progressive disclosure
-pattern.
+## Repository-specific model
 
-## When to Use This Skill
+This repository uses normal editor skill loading plus a project sync script. It does **not** use a custom skill activation rules JSON.
 
-Automatically activates when you mention:
+Current sources of truth:
 
-- Creating or adding skills
-- Modifying skill triggers or rules
-- Understanding how skill activation works
-- Debugging skill activation issues
-- Working with skill-rules.json
-- Hook system mechanics
-- Claude Code best practices
-- Progressive disclosure
-- YAML frontmatter
-- 500-line rule
+- Source skills live in `skills/<name>/`.
+- Editor-specific copies are generated under folders such as `.agents/skills/<name>/` and `.claude/skills/<name>/` by `scripts/sync-skills.mjs`; do not edit generated copies as the source.
+- Shared Claude Code hooks live in `.claude/hooks/pretool-guard.mjs` and `.claude/hooks/changed-files-verify.mjs`.
+- Shared Claude Code settings live in `.claude/settings.json`.
+- Project-wide rules live in `AGENTS.md`; editor-specific entrypoints such as `CLAUDE.md` stay short and route back to it.
 
----
+Do not add or document hidden skill activation config or extra hook layers unless the repository actually introduces them.
 
-## System Overview
+## When to update a skill
 
-### Two-Hook Architecture
+Update a skill when:
 
-**1. UserPromptSubmit Hook** (Proactive Suggestions)
+- The user asks for a repeatable workflow, checklist, or slash-command style process.
+- A project rule is procedural enough to be executed step by step, such as verification or extension release checks.
+- Existing skill guidance points at stale paths, package names, commands, or hooks.
+- A skill should explicitly route the active agent to `AGENTS.md`, a plugin README, or a package README.
 
-- **File**: `.claude/hooks/skill-activation-prompt.ts`
-- **Trigger**: BEFORE Claude sees user's prompt
-- **Purpose**: Suggest relevant skills based on keywords + intent patterns
-- **Method**: Injects formatted reminder as context (stdout → Claude's input)
-- **Use Cases**: Topic-based skills, implicit work detection
+Do not put product architecture facts only in a skill. Skills are workflow aids, not the highest authority for repository facts.
 
-**2. Stop Hook - Error Handling Reminder** (Gentle Reminders)
+## Creating or editing a project skill
 
-- **File**: `.claude/hooks/error-handling-reminder.ts`
-- **Trigger**: AFTER Claude finishes responding
-- **Purpose**: Gentle reminder to self-assess error handling in code written
-- **Method**: Analyzes edited files for risky patterns, displays reminder if needed
-- **Use Cases**: Error handling awareness without blocking friction
+1. Create or edit `skills/<skill-name>/SKILL.md`.
+2. Keep frontmatter accurate:
 
-**Philosophy Change (2025-10-27):** We moved away from blocking PreToolUse for Sentry/error
-handling. Instead, use gentle post-response reminders that don't block workflow but maintain code
-quality awareness.
+   ```yaml
+   ---
+   name: skill-name
+   description: Clear trigger/use description for this repository.
+   # disable-model-invocation: true  # only for user-invoked workflows with side effects/heavy checks
+   ---
+   ```
 
-### Configuration File
+3. Keep `SKILL.md` focused and scannable. Put long examples under reference files only when they are stable and intentionally maintained.
 
-**Location**: `.claude/skills/skill-rules.json`
+   Frontmatter policy:
+   - Required: `name`, `description`.
+   - Allowed with a clear reason: `disable-model-invocation`, `allowed-tools`, `license`, `metadata`.
+   - Do not add arbitrary fields until `skills/README.md` and this skill are updated.
+4. Make source-of-truth routing explicit:
+   - Cross-repo rules: read `AGENTS.md`.
+   - Plugin facts: read `extensions/<identifier>/README.md`.
+   - Verification: use `skills/repo-verify/SKILL.md`.
+   - Extension release: use `skills/extension-release-check/SKILL.md`.
+5. Avoid hardcoding package trees or script lists that can be derived from `pnpm-workspace.yaml` or `package.json` unless the skill also says how to refresh them.
 
-Defines:
+## Syncing skills
 
-- All skills and their trigger conditions
-- Enforcement levels (block, suggest, warn)
-- File path patterns (glob)
-- Content detection patterns (regex)
-- Skip conditions (session tracking, file markers, env vars)
-
----
-
-## Skill Types
-
-### 1. Guardrail Skills
-
-**Purpose:** Enforce critical best practices that prevent errors
-
-**Characteristics:**
-
-- Type: `"guardrail"`
-- Enforcement: `"block"`
-- Priority: `"critical"` or `"high"`
-- Block file edits until skill used
-- Prevent common mistakes (column names, critical errors)
-- Session-aware (don't repeat nag in same session)
-
-**Examples:**
-
-- `database-verification` - Verify table/column names before Prisma queries
-- `frontend-dev-guidelines` - Enforce React/TypeScript patterns
-
-**When to Use:**
-
-- Mistakes that cause runtime errors
-- Data integrity concerns
-- Critical compatibility issues
-
-### 2. Domain Skills
-
-**Purpose:** Provide comprehensive guidance for specific areas
-
-**Characteristics:**
-
-- Type: `"domain"`
-- Enforcement: `"suggest"`
-- Priority: `"high"` or `"medium"`
-- Advisory, not mandatory
-- Topic or domain-specific
-- Comprehensive documentation
-
-**Examples:**
-
-- `backend-dev-guidelines` - Node.js/Express/TypeScript patterns
-- `frontend-dev-guidelines` - React/TypeScript best practices
-- `error-tracking` - Sentry integration guidance
-
-**When to Use:**
-
-- Complex systems requiring deep knowledge
-- Best practices documentation
-- Architectural patterns
-- How-to guides
-
----
-
-## Quick Start: Creating a New Skill
-
-### Step 1: Create Skill File
-
-**Location:** `.claude/skills/{skill-name}/SKILL.md`
-
-**Template:**
-
-```markdown
----
-name: my-new-skill
-description:
-    Brief description including keywords that trigger this skill. Mention topics, file types, and
-    use cases. Be explicit about trigger terms.
----
-
-# My New Skill
-
-## Purpose
-
-What this skill helps with
-
-## When to Use
-
-Specific scenarios and conditions
-
-## Key Information
-
-The actual guidance, documentation, patterns, examples
-```
-
-**Best Practices:**
-
-- ✅ **Name**: Lowercase, hyphens, gerund form (verb + -ing) preferred
-- ✅ **Description**: Include ALL trigger keywords/phrases (max 1024 chars)
-- ✅ **Content**: Under 500 lines - use reference files for details
-- ✅ **Examples**: Real code examples
-- ✅ **Structure**: Clear headings, lists, code blocks
-
-### Step 2: Add to skill-rules.json
-
-See [SKILL_RULES_REFERENCE.md](SKILL_RULES_REFERENCE.md) for complete schema.
-
-**Basic Template:**
-
-```json
-{
-    "my-new-skill": {
-        "type": "domain",
-        "enforcement": "suggest",
-        "priority": "medium",
-        "promptTriggers": {
-            "keywords": ["keyword1", "keyword2"],
-            "intentPatterns": ["(create|add).*?something"]
-        }
-    }
-}
-```
-
-### Step 3: Test Triggers
-
-**Test UserPromptSubmit:**
+Use the repository script; do not manually maintain generated copies as a second source of truth.
 
 ```bash
-echo '{"session_id":"test","prompt":"your test prompt"}' | \
-  npx tsx .claude/hooks/skill-activation-prompt.ts
+node scripts/sync-skills.mjs sync <skill-name> <editor>
+node scripts/sync-skills.mjs sync <editor>
 ```
 
-**Test PreToolUse:**
+The pnpm wrapper exists, but if it unexpectedly triggers install behavior in a non-interactive environment, use the node script directly and report why.
 
-```bash
-cat <<'EOF' | npx tsx .claude/hooks/skill-verification-guard.ts
-{"session_id":"test","tool_name":"Edit","tool_input":{"file_path":"test.ts"}}
-EOF
-```
+Supported editor names are defined in `scripts/sync-skills.mjs` (`EDITOR_MAP`). Keep `skills/README.md` and `skills/README.zh-CN.md` aligned with that script.
 
-### Step 4: Refine Patterns
+## Project skill conventions
 
-Based on testing:
+- User-invoked skills that may recommend heavy validation, release packaging, deployment, or external calls should set `disable-model-invocation: true`.
+- Skills with side effects must say what they may run and what they must not run by default.
+- For this repository, do not recommend `pnpm install`, dependency changes, `pnpm format`, `pnpm lint:fix`, Docker/PM2 lifecycle, or database writes unless the user explicitly asks or the task requires it.
+- If a skill changes root `skills/`, sync the required runtime targets defined by `EDITOR_MAP`; do not assume `.claude/skills/` is the only consumer.
 
-- Add missing keywords
-- Refine intent patterns to reduce false positives
-- Adjust file path patterns
-- Test content patterns against actual files
+## Review checklist
 
-### Step 5: Follow Anthropic Best Practices
+Before finishing a skill change, verify:
 
-✅ Keep SKILL.md under 500 lines ✅ Use progressive disclosure with reference files ✅ Add table of
-contents to reference files > 100 lines ✅ Write detailed description with trigger keywords ✅ Test
-with 3+ real scenarios before documenting ✅ Iterate based on actual usage
+- Frontmatter is valid YAML and the `name` matches the folder name.
+- The skill does not contradict `AGENTS.md` or `CLAUDE.md`.
+- Paths mentioned by the skill exist or are clearly described as examples.
+- Commands match this repository's package manager and scripts.
+- The skill explains whether it is model-invocable or user-invoked only.
+- Generated copies are synced to the editor runtimes that need the skill.
 
----
+## Supporting references
 
-## Enforcement Levels
+- `SKILL_RULES_REFERENCE.md`: frontmatter and sync reference for this repository.
+- `HOOK_MECHANISMS.md`: current project hook notes.
+- `TRIGGER_TYPES.md`: skill discovery and routing notes.
+- `PATTERNS_LIBRARY.md`: reusable skill writing snippets.
+- `TROUBLESHOOTING.md`: sync and discovery troubleshooting.
 
-### BLOCK (Critical Guardrails)
+## Related active skills
 
-- Physically prevents Edit/Write tool execution
-- Exit code 2 from hook, stderr → Claude
-- Claude sees message and must use skill to proceed
-- **Use For**: Critical mistakes, data integrity, security issues
-
-**Example:** Database column name verification
-
-### SUGGEST (Recommended)
-
-- Reminder injected before Claude sees prompt
-- Claude is aware of relevant skills
-- Not enforced, just advisory
-- **Use For**: Domain guidance, best practices, how-to guides
-
-**Example:** Frontend development guidelines
-
-### WARN (Optional)
-
-- Low priority suggestions
-- Advisory only, minimal enforcement
-- **Use For**: Nice-to-have suggestions, informational reminders
-
-**Rarely used** - most skills are either BLOCK or SUGGEST.
-
----
-
-## Skip Conditions & User Control
-
-### 1. Session Tracking
-
-**Purpose:** Don't nag repeatedly in same session
-
-**How it works:**
-
-- First edit → Hook blocks, updates session state
-- Second edit (same session) → Hook allows
-- Different session → Blocks again
-
-**State File:** `.claude/hooks/state/skills-used-{session_id}.json`
-
-### 2. File Markers
-
-**Purpose:** Permanent skip for verified files
-
-**Marker:** `// @skip-validation`
-
-**Usage:**
-
-```typescript
-// @skip-validation
-import { PrismaService } from "./prisma";
-// This file has been manually verified
-```
-
-**NOTE:** Use sparingly - defeats the purpose if overused
-
-### 3. Environment Variables
-
-**Purpose:** Emergency disable, temporary override
-
-**Global disable:**
-
-```bash
-export SKIP_SKILL_GUARDRAILS=true  # Disables ALL PreToolUse blocks
-```
-
-**Skill-specific:**
-
-```bash
-export SKIP_DB_VERIFICATION=true
-export SKIP_ERROR_REMINDER=true
-```
-
----
-
-## Testing Checklist
-
-When creating a new skill, verify:
-
-- [ ] Skill file created in `.claude/skills/{name}/SKILL.md`
-- [ ] Proper frontmatter with name and description
-- [ ] Entry added to `skill-rules.json`
-- [ ] Keywords tested with real prompts
-- [ ] Intent patterns tested with variations
-- [ ] File path patterns tested with actual files
-- [ ] Content patterns tested against file contents
-- [ ] Block message is clear and actionable (if guardrail)
-- [ ] Skip conditions configured appropriately
-- [ ] Priority level matches importance
-- [ ] No false positives in testing
-- [ ] No false negatives in testing
-- [ ] Performance is acceptable (<100ms or <200ms)
-- [ ] JSON syntax validated: `jq . skill-rules.json`
-- [ ] **SKILL.md under 500 lines** ⭐
-- [ ] Reference files created if needed
-- [ ] Table of contents added to files > 100 lines
-
----
-
-## Reference Files
-
-For detailed information on specific topics, see:
-
-### [TRIGGER_TYPES.md](TRIGGER_TYPES.md)
-
-Complete guide to all trigger types:
-
-- Keyword triggers (explicit topic matching)
-- Intent patterns (implicit action detection)
-- File path triggers (glob patterns)
-- Content patterns (regex in files)
-- Best practices and examples for each
-- Common pitfalls and testing strategies
-
-### [SKILL_RULES_REFERENCE.md](SKILL_RULES_REFERENCE.md)
-
-Complete skill-rules.json schema:
-
-- Full TypeScript interface definitions
-- Field-by-field explanations
-- Complete guardrail skill example
-- Complete domain skill example
-- Validation guide and common errors
-
-### [HOOK_MECHANISMS.md](HOOK_MECHANISMS.md)
-
-Deep dive into hook internals:
-
-- UserPromptSubmit flow (detailed)
-- PreToolUse flow (detailed)
-- Exit code behavior table (CRITICAL)
-- Session state management
-- Performance considerations
-
-### [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-
-Comprehensive debugging guide:
-
-- Skill not triggering (UserPromptSubmit)
-- PreToolUse not blocking
-- False positives (too many triggers)
-- Hook not executing at all
-- Performance issues
-
-### [PATTERNS_LIBRARY.md](PATTERNS_LIBRARY.md)
-
-Ready-to-use pattern collection:
-
-- Intent pattern library (regex)
-- File path pattern library (glob)
-- Content pattern library (regex)
-- Organized by use case
-- Copy-paste ready
-
-### [ADVANCED.md](ADVANCED.md)
-
-Future enhancements and ideas:
-
-- Dynamic rule updates
-- Skill dependencies
-- Conditional enforcement
-- Skill analytics
-- Skill versioning
-
----
-
-## Quick Reference Summary
-
-### Create New Skill (5 Steps)
-
-1. Create `.claude/skills/{name}/SKILL.md` with frontmatter
-2. Add entry to `.claude/skills/skill-rules.json`
-3. Test with `npx tsx` commands
-4. Refine patterns based on testing
-5. Keep SKILL.md under 500 lines
-
-### Trigger Types
-
-- **Keywords**: Explicit topic mentions
-- **Intent**: Implicit action detection
-- **File Paths**: Location-based activation
-- **Content**: Technology-specific detection
-
-See [TRIGGER_TYPES.md](TRIGGER_TYPES.md) for complete details.
-
-### Enforcement
-
-- **BLOCK**: Exit code 2, critical only
-- **SUGGEST**: Inject context, most common
-- **WARN**: Advisory, rarely used
-
-### Skip Conditions
-
-- **Session tracking**: Automatic (prevents repeated nags)
-- **File markers**: `// @skip-validation` (permanent skip)
-- **Env vars**: `SKIP_SKILL_GUARDRAILS` (emergency disable)
-
-### Anthropic Best Practices
-
-✅ **500-line rule**: Keep SKILL.md under 500 lines ✅ **Progressive disclosure**: Use reference
-files for details ✅ **Table of contents**: Add to reference files > 100 lines ✅ **One level
-deep**: Don't nest references deeply ✅ **Rich descriptions**: Include all trigger keywords (max
-1024 chars) ✅ **Test first**: Build 3+ evaluations before extensive documentation ✅ **Gerund
-naming**: Prefer verb + -ing (e.g., "processing-pdfs")
-
-### Troubleshoot
-
-Test hooks manually:
-
-```bash
-# UserPromptSubmit
-echo '{"prompt":"test"}' | npx tsx .claude/hooks/skill-activation-prompt.ts
-
-# PreToolUse
-cat <<'EOF' | npx tsx .claude/hooks/skill-verification-guard.ts
-{"tool_name":"Edit","tool_input":{"file_path":"test.ts"}}
-EOF
-```
-
-See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for complete debugging guide.
-
----
-
-## Related Files
-
-**Configuration:**
-
-- `.claude/skills/skill-rules.json` - Master configuration
-- `.claude/hooks/state/` - Session tracking
-- `.claude/settings.json` - Hook registration
-
-**Hooks:**
-
-- `.claude/hooks/skill-activation-prompt.ts` - UserPromptSubmit
-- `.claude/hooks/error-handling-reminder.ts` - Stop event (gentle reminders)
-
-**All Skills:**
-
-- `.claude/skills/*/SKILL.md` - Skill content files
-
----
-
-**Skill Status**: COMPLETE - Restructured following Anthropic best practices ✅ **Line Count**: <
-500 (following 500-line rule) ✅ **Progressive Disclosure**: Reference files for detailed
-information ✅
-
-**Next**: Create more skills, refine patterns based on usage
+- `repo-verify`: path-aware verification and handoff checklist.
+- `extension-release-check`: user-invoked extension release/delivery checklist.
+- `project-architecture`: repository navigation and source-of-truth routing.

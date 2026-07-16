@@ -26,12 +26,15 @@
 
 ## 入口与页面
 
-| 入口 | 路径 | 文件 | 职责 |
+主系统用户入口是 `/apps/simple-blog/*`；extension bundle / local dev base 是 `/extension/simple-blog/*`。下表 Console 路径是 `consoleRoutes` 相对路径，完整 dev/base 路径形如 `/extension/simple-blog/console/...`。
+
+| 入口语义 | 路径 | 文件 | 职责 |
 |---|---|---|---|
-| Web | `/extension/simple-blog/` | `src/web/pages/index.tsx` | 博客首页、文章列表、分类筛选。 |
-| Web | `/extension/simple-blog/article/:id` | `src/web/pages/article/[id].tsx` | 文章详情页。 |
-| Console | `/console/column` | `src/web/pages/console/column/list.tsx` | 分类管理列表/编辑。 |
-| Console | `/console/article` | `src/web/pages/console/article/list.tsx` | 文章管理列表/新增/编辑。 |
+| 主系统 Web | `/apps/simple-blog/*` | `packages/client/src/pages/apps/[identifier]` | 主系统 iframe 宿主入口，加载本示例插件用户端。 |
+| Extension bundle/dev | `/extension/simple-blog/` | `src/web/pages/index.tsx` | 博客首页、文章列表、分类筛选。 |
+| Extension bundle/dev | `/extension/simple-blog/article/:id` | `src/web/pages/article/[id].tsx` | 文章详情页。 |
+| Console route | `/console/column` | `src/web/pages/console/column/list.tsx` | 分类管理列表/编辑。 |
+| Console route | `/console/article` | `src/web/pages/console/article/list.tsx` | 文章管理列表/新增/编辑。 |
 
 路由由 `src/web/routes.tsx` 注册；前端通过 `consoleHttpClient` 和 `apiHttpClient` 分别调用 Console/Web API。
 
@@ -86,15 +89,16 @@ pnpm --filter simple-blog build:web
 pnpm --filter simple-blog build:publish
 ```
 
-| 项目 | 状态 |
-|---|---|
-| `check-types` | pass |
-| `build:api` | pass |
-| `build:web` | pass |
-| 事务安全 | 写操作事务边界已覆盖文章和分类计数联动。 |
-| 原子计数 | 分类计数和浏览量均使用 SQL 原子操作。 |
+验证证据：
+
+| 范围 | 证据状态 | 命令/场景 | 环境基线 | 结论 | 后续条件 |
+|---|---|---|---|---|---|
+| 类型检查 | historical | `pnpm --filter simple-blog check-types` | 既有 README 记录 | 历史通过。 | 交付前用当前 Node 22.20 / pnpm 10.20.0 重新验证。 |
+| API 构建 | historical | `pnpm --filter simple-blog build:api` | 既有 README 记录 | 历史通过。 | API 结构、migration、upgrade 或发布边界变更后重新验证。 |
+| Web 构建 | historical | `pnpm --filter simple-blog build:web` | 既有 README 记录 | 历史通过。 | Web 路由、Vite 配置或 UI 入口变更后重新验证。 |
+| 事务安全 | current | 代码边界说明 | 当前 README 事实 | 写操作事务边界已覆盖文章和分类计数联动。 | 文章/分类写路径变更后补 focused test 或复验。 |
+| 原子计数 | current | 代码边界说明 | 当前 README 事实 | 分类计数和浏览量均使用 SQL 原子操作。 | 计数逻辑变更后复核 SQL 原子性。 |
 
 ## 作为参考模板
 
 `simple-blog` 是官方示例插件，重点展示标准插件结构、Web/Console 双入口、插件实体、事务写入、原子计数和发布验证。通用开发规范以根 `AGENTS.md` 为准，不在本 README 重复维护。
-

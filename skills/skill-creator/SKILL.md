@@ -11,6 +11,27 @@ license: Complete terms in LICENSE.txt
 
 This skill provides guidance for creating effective skills.
 
+## BuildingAI project override
+
+For this repository, `skills/skill-developer/SKILL.md` is the main maintenance guide. Root
+`skills/<name>/` is the source of truth, and editor-specific folders such as `.agents/skills/` and
+`.claude/skills/` are generated runtime copies from `scripts/sync-skills.mjs`. Do not edit generated
+copies directly for BuildingAI project skills. The Claude-specific material below remains an
+upstream reference; BuildingAI maintenance follows `skill-developer`.
+
+When creating or updating BuildingAI project skills:
+
+1. Edit `skills/<skill-name>/SKILL.md` directly unless the user explicitly asks to create a packaged
+   upstream `.skill` artifact.
+2. Keep durable repository facts in `AGENTS.md` or the relevant package/plugin README.
+3. Sync only to the editor runtime that needs the skill; supported names come from `EDITOR_MAP`:
+   ```bash
+   node scripts/sync-skills.mjs sync <skill-name> <editor>
+   ```
+4. Do not default to dependency installs/upgrades, `pnpm format`, `pnpm lint:fix`, Docker/PM2
+   lifecycle, database writes, generated artifact writes, packaging scripts, or real external
+   model/secret/billing calls.
+
 ## About Skills
 
 Skills are modular, self-contained packages that extend Claude's capabilities by providing
@@ -75,9 +96,10 @@ skill-name/
 
 Every SKILL.md consists of:
 
-- **Frontmatter** (YAML): Contains `name` and `description` fields. These are the only fields that
-  Claude reads to determine when the skill gets used, thus it is very important to be clear and
-  comprehensive in describing what the skill is, and when it should be used.
+- **Frontmatter** (YAML): Contains `name` and `description` fields, which are the primary fields
+  Claude reads to determine when the skill gets used. BuildingAI also allows documented fields such
+  as `disable-model-invocation`, `allowed-tools`, `license`, and `metadata` when they have a clear
+  purpose.
 - **Body** (Markdown): Instructions and guidance for using the skill. Only loaded AFTER the skill
   triggers (if at all).
 
@@ -310,9 +332,10 @@ At this point, it is time to actually create the skill.
 Skip this step only if the skill being developed already exists, and iteration or packaging is
 needed. In this case, continue to the next step.
 
-When creating a new skill from scratch, always run the `init_skill.py` script. The script
-conveniently generates a new template skill directory that automatically includes everything a skill
-requires, making the skill creation process much more efficient and reliable.
+When creating a new upstream packaged skill from scratch, the `init_skill.py` script can generate a
+template skill directory. In BuildingAI, do not run initialization scripts by default for project
+skills; create or edit `skills/<skill-name>/SKILL.md` directly unless the user explicitly wants the
+packaged upstream workflow.
 
 Usage:
 
@@ -382,7 +405,11 @@ Write the YAML frontmatter with `name` and `description`:
       Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes,
       (4) Adding comments, or any other document tasks"
 
-Do not include any other fields in YAML frontmatter.
+For BuildingAI project skills, the frontmatter policy is:
+
+- Required: `name`, `description`.
+- Allowed with a clear reason: `disable-model-invocation`, `allowed-tools`, `license`, `metadata`.
+- Do not add arbitrary fields until `skills/README.md` and `skills/skill-developer/SKILL.md` are updated.
 
 ##### Body
 
@@ -390,9 +417,10 @@ Write instructions for using the skill and its bundled resources.
 
 ### Step 5: Packaging a Skill
 
-Once development of the skill is complete, it must be packaged into a distributable .skill file that
-gets shared with the user. The packaging process automatically validates the skill first to ensure
-it meets all requirements:
+For upstream distributable skills, package the skill into a `.skill` file after development. For
+BuildingAI project skills, do not package by default; sync the root skill to the required editor only
+when runtime activation is needed. The upstream packaging process automatically validates the skill
+first to ensure it meets all requirements:
 
 ```bash
 scripts/package_skill.py <path/to/skill-folder>

@@ -1,0 +1,58 @@
+{
+  "skillListingMaxDescChars": 512,
+  "skillListingBudgetFraction": 0.005,
+  "permissions": {
+    "allow": [
+      "Bash(pnpm --filter echoflow-image check-types)",
+      "Bash(node --experimental-strip-types --test extensions/echoflow-image/tests/*.test.mjs)",
+      "mcp__context7__resolve-library-id",
+      "Bash(git diff *)"
+    ]
+  },
+  "enableAllProjectMcpServers": false,
+  "enabledMcpjsonServers": [
+    "context7"
+  ],
+  "skillOverrides": {
+    "skill-creator": "user-invocable-only",
+    "skill-writer": "user-invocable-only",
+    "web-artifacts-builder": "user-invocable-only"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/pretool-guard.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/changed-files-verify.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/changed-files-verify.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

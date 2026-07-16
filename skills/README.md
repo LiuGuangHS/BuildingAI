@@ -1,287 +1,123 @@
 # Skills Management Guide
 
-This project uses a unified skills management system, which syncs skills from the root directory's
-`skills/` folder to the configuration directories of various AI editors via node commands. It is
-intended for the development environment only. By default, our skills are not active. They will
-automatically take effect in your AI editor only after you run the `sync` command. You can find the
-corresponding folders in the root directory with suffixes like `.cursor/skills/xxx`.
+This repository keeps project skills in the root `skills/` directory and syncs them into AI editor-specific folders with `scripts/sync-skills.mjs`.
 
-Initialization: Typically for development, you only need to run `pnpm skills sync <editor-name>`,
-for example: `pnpm skills sync cursor`.
+The root `skills/` folder is the source of truth. Generated copies such as `.claude/skills/<name>/` are editor runtime copies and should not become a second source of truth.
 
-## Supported AI Editors
+When generic upstream skills conflict with this repository, follow `skills/skill-developer/SKILL.md`, this README, `AGENTS.md`, and `scripts/sync-skills.mjs`. Do not edit generated `.claude/skills/<name>/` copies directly for BuildingAI project skills.
 
-Skills are automatically synced to the configuration directories of the following AI editors:
+## Supported editors
 
-- `.agent/skills/` - Agent Editor
-- `.agents/skills/` - Agents Editor
-- `.gemini/skills/` - Gemini Editor
-- `.kiro/skills/` - Kiro Editor
-- `.trae/skills/` - Trae Editor
-- `.windsurf/skills/` - Windsurf Editor
-- `.cursor/skills/` - Cursor Editor
+The supported editor names come from `EDITOR_MAP` in `scripts/sync-skills.mjs`:
 
-## Command Usage
+| Editor name | Target directory |
+|---|---|
+| `agent` | `.agent/skills/` |
+| `agents` | `.agents/skills/` |
+| `gemini` | `.gemini/skills/` |
+| `kiro` | `.kiro/skills/` |
+| `trae` | `.trae/skills/` |
+| `windsurf` | `.windsurf/skills/` |
+| `cursor` | `.cursor/skills/` |
+| `claude` | `.claude/skills/` |
+| `vercel` | `.vercel/skills/` |
 
-### Sync a Single Skill
+## Common commands
 
-Sync to all editors:
-
-```bash
-pnpm skills sync <skill-name>
-```
-
-Sync to a specific editor:
+Use the node script directly when you want to avoid package-manager side effects in a non-interactive environment.
 
 ```bash
-pnpm skills sync <skill-name> <editor>
-```
+# Sync one skill to one editor
+node scripts/sync-skills.mjs sync <skill-name> <editor>
 
-Examples:
+# Sync one skill to all editors
+node scripts/sync-skills.mjs sync <skill-name>
 
-```bash
-# Sync to all editors
-pnpm skills sync project-architecture
+# Sync all skills to one editor
+node scripts/sync-skills.mjs sync <editor>
 
-# Sync to the Cursor editor only
-pnpm skills sync project-architecture cursor
-```
-
-### Sync All Skills
-
-Sync to all editors:
-
-```bash
-pnpm skills sync all
-```
-
-Sync to a specific editor:
-
-```bash
-pnpm skills sync <editor>
-```
-
-Examples:
-
-```bash
 # Sync all skills to all editors
-pnpm skills sync all
+node scripts/sync-skills.mjs sync all
 
-# Sync all skills to the Cursor editor
-pnpm skills sync cursor
+# Remove one skill from one editor
+node scripts/sync-skills.mjs remove <skill-name> <editor>
+
+# Remove all skills from one editor
+node scripts/sync-skills.mjs remove all <editor>
 ```
 
-### Remove a Single Skill
-
-Remove from all editors:
+The pnpm wrapper is also available:
 
 ```bash
-pnpm skills remove <skill-name>
+pnpm skills sync claude
+pnpm skills sync repo-verify claude
+pnpm skills remove repo-verify claude
 ```
 
-Remove from a specific editor:
+If the pnpm wrapper unexpectedly triggers install behavior, use the node script and report why.
 
-```bash
-pnpm skills remove <skill-name> <editor>
-```
+## Adding or updating a skill
 
-Examples:
+1. Create or edit `skills/<skill-name>/SKILL.md`.
+2. Keep the `name` frontmatter aligned with the folder name.
+3. Keep long-lived repository facts in `AGENTS.md` or the relevant plugin/package README; skills should provide workflows and routing, not a second architecture source.
+4. If the skill should be active in Claude Code, sync only the required skill:
 
-```bash
-# Remove from all editors
-pnpm skills remove project-architecture
+   ```bash
+   node scripts/sync-skills.mjs sync <skill-name> claude
+   ```
 
-# Remove from the Cursor editor only
-pnpm skills remove project-architecture cursor
-```
+5. If the skill is user-invoked and may recommend heavy validation, release packaging, deployment, or external calls, set `disable-model-invocation: true`.
+6. Do not default to dependency installs/upgrades, `pnpm format`, `pnpm lint:fix`, Docker/PM2 lifecycle, database writes, generated artifact writes, or real external model/secret/billing calls. If such a step is required, state why and get explicit authorization.
 
-### Remove All Skills
+## Frontmatter policy
 
-Remove from all editors:
+Required fields:
 
-```bash
-pnpm skills remove all
-```
+- `name`
+- `description`
 
-Remove from a specific editor:
+Allowed fields when the skill has a clear reason:
 
-```bash
-pnpm skills remove all <editor>
-```
+- `disable-model-invocation`: user-invoked workflows that may trigger heavy checks, release packaging, deployment, external calls, or other side effects.
+- `allowed-tools`: narrow tool access for read-only or security-sensitive workflows.
+- `license`: vendor/upstream license pointer.
+- `metadata`: vendor/upstream metadata that does not control BuildingAI behavior.
 
-Examples:
+Do not add arbitrary new frontmatter fields until this policy and `skills/skill-developer/SKILL.md` are updated.
 
-```bash
-# Remove all skills from all editors
-pnpm skills remove all
+## Active BuildingAI skills
 
-# Remove all skills from the Cursor editor
-pnpm skills remove all cursor
-```
+### `repo-verify`
 
-### Supported Editors
+Path-aware verification workflow for BuildingAI/EchoFlow changes. Use after code changes or before handoff to choose the smallest relevant typecheck, lint, test, build, and documentation checks.
 
-Available editor names:
+### `extension-release-check`
 
-- `cursor` - Cursor Editor
-- `trae` - Trae Editor
-- `agent` - Agent Editor
-- `agents` - Agents Editor
-- `gemini` - Gemini Editor
-- `kiro` - Kiro Editor
-- `windsurf` - Windsurf Editor
+User-invoked extension release and delivery checklist. Use before packaging, publishing, or handing off an EchoFlow extension.
 
-## Skills Management Process
+### `echoflow-ui-workflow`
 
-### Location of Existing Skills
+EchoFlow 插件 UI 设计与前后端契约工作流。用于插件页面从零设计、已有页面迭代、Design Gallery、2-3 个设计稿并行探索、浏览器选择、选中方案迁移和落选代码清理。
 
-All skills are stored in the `skills/` folder in the project root directory. Each skill is an
-independent folder.
+## Other available skills
 
-### Process for Adding a New Skill
+These skills may be useful when synced, but they are not the primary authority for repository facts:
 
-1.  Create a new skill folder under the `skills/` directory.
-2.  Add skill-related files (e.g., `SKILL.md`, `references/`, etc.).
-3.  Execute the sync command:
+- `project-architecture`: navigation and source-of-truth routing for this monorepo.
+- `skill-developer`: creating and maintaining BuildingAI project skills.
+- `ai-sdk`: AI SDK usage guidance; dependency changes still require explicit reason and approval.
+- `frontend-design`: frontend design guidance; BuildingAI embedded-plugin UI constraints in `AGENTS.md` and plugin README take precedence.
+- `postgresql-table-design`: PostgreSQL schema design guidance.
+- `skill-creator` / `skill-writer`: generic skill authoring references.
+- `web-artifacts-builder`: low-frequency artifact/project generation guidance; use cautiously because it may involve installs or separate artifact projects.
 
-    ```bash
-    # Sync to all editors
-    pnpm skills sync <skill-name>
+## Documentation routing
 
-    # Or sync to a specific editor only
-    pnpm skills sync <skill-name> <editor>
-
-    # Or sync all skills
-    pnpm skills sync all
-    ```
-
-### Process for Removing a Skill
-
-1.  First, execute the remove command to remove it from the AI editor configuration directories:
-
-    ```bash
-    # Remove from all editors
-    pnpm skills remove <skill-name>
-
-    # Or remove from a specific editor
-    pnpm skills remove <skill-name> <editor>
-
-    # Or remove all
-    pnpm skills remove all
-    ```
-
-2.  Then, manually delete the corresponding skill folder under the root directory's `skills/`
-    folder.
-
-## Finding and Adding Skills
-
-You can find and discover more available skills at [https://skillsmp.com/](https://skillsmp.com/).
-After finding a suitable skill, follow these steps:
-
-1.  When adding the skill via the terminal, choose to install to the project and select **copy**
-    instead of a symbolic link download.
-2.  After the download is complete, you can view the skill in any `.agent/skills/` folder.
-3.  If this skill is only for your own AI application and not needed by other developers, you may
-    choose **not** to copy it to the root directory's `skills` folder.
-4.  If you want this skill to be available for others, you need to copy the downloaded skill files
-    from `.agent/skills/<your-downloaded-skill>` to the root directory's `skills` folder, and then
-    commit the changes.
-
-## Description of Existing Skills
-
-### ai-sdk
-
-**Purpose**: Provides AI SDK-related documentation and assistance for building AI-driven features.
-
-**Use Cases**:
-
-- Inquiring about AI SDK functions (e.g., `generateText`, `streamText`, `ToolLoopAgent`, `tools`,
-  etc.)
-- Building AI agents, chatbots, or text generation features
-- Understanding AI providers (OpenAI, Anthropic, etc.), streaming, tool calling, or structured
-  outputs
-
-### frontend-design
-
-**Purpose**: Creates unique, production-grade frontend interfaces with high-quality design.
-
-**Use Cases**:
-
-- Building web components, pages, applications
-- Designing websites, landing pages, dashboards, React components, HTML/CSS layouts
-- Beautifying or styling any web UI
-
-**Features**: Avoids generic AI aesthetics and generates UI designs with creative and polished code.
-
-### postgresql-table-design
-
-**Purpose**: Designs PostgreSQL-specific database schemas.
-
-**Use Cases**:
-
-- Designing database table structures
-- Understanding PostgreSQL best practices
-- Data type selection, indexing, constraints, performance patterns
-- PostgreSQL advanced features
-
-**Features**: Covers PostgreSQL-specific best practices, data types, indexing, constraints,
-performance patterns, and advanced features.
-
-### project-architecture
-
-**Purpose**: BuildingAI monorepo project structure and architecture guide.
-
-**Use Cases**:
-
-- Understanding project organizational structure
-- Locating file positions
-- Understanding package relationships and dependencies
-- Finding the implementation location of specific features
-- Navigating the codebase structure
-
-**Features**: Crucial for any development task that requires understanding the project layout,
-import patterns, module organization, or cross-package dependencies.
-
-### skill-creator
-
-**Purpose**: Guide for creating effective skills.
-
-**Use Cases**:
-
-- Creating a new skill
-- Updating an existing skill
-- Extending Claude's capabilities by providing expertise, workflows, or tool integrations
-
-**Features**: Provides guidance for creating modular, self-contained skill packages that extend
-Claude's capabilities by offering expertise, workflows, and tools.
-
-### skill-developer
-
-**Purpose**: Creates and manages Claude Code skills, following Anthropic best practices.
-
-**Use Cases**:
-
-- Creating new skills
-- Modifying skill-rules.json
-- Understanding trigger patterns
-- Using hooks
-- Debugging skill activation
-- Implementing progressive disclosure
-
-**Features**: Covers skill structure, YAML frontmatter, trigger types (keywords, intent patterns,
-file paths, content patterns), execution levels (block, suggest, warn), hook mechanisms
-(UserPromptSubmit, PreToolUse), session tracking, and the 500-line rule.
-
-### skill-writer
-
-**Purpose**: Guides users in creating Agent Skills for Claude Code.
-
-**Use Cases**:
-
-- Creating, writing, designing new Skills
-- Handling SKILL.md files
-- Designing skill structure and frontmatter
-- Troubleshooting skill discovery issues
-
-**Features**: Helps create well-structured Agent Skills, following best practices and validation
-requirements.
+- Cross-repo rules: `AGENTS.md`.
+- Claude Code entrypoint: `CLAUDE.md`.
+- Plugin facts: `extensions/<identifier>/README.md`.
+- Verification: `skills/repo-verify/SKILL.md`.
+- Extension release: `skills/extension-release-check/SKILL.md`.
+- Plugin UI workflow: `skills/echoflow-ui-workflow/SKILL.md` and `.claude/design-workflow.md`.
+- Skill sync implementation: `scripts/sync-skills.mjs`.

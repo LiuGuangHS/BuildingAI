@@ -10,6 +10,17 @@ license: Complete terms in LICENSE.txt
 
 # Web Artifacts Builder
 
+## BuildingAI repository guardrails
+
+This is a generic artifact-building skill. In BuildingAI, do not default to creating standalone
+artifact projects, installing dependencies, writing generated bundles, or running packaging scripts.
+If the user asks for EchoFlow plugin UI work, build inside the real target plugin and follow
+`AGENTS.md`, `.claude/design-workflow.md`, the target plugin README, and `echoflow-ui-workflow`
+instead.
+
+Only use the artifact initialization/bundling flow when the user explicitly asks for a claude.ai HTML
+artifact or separate prototype and accepts the write/install/bundle implications.
+
 To build powerful frontend claude.ai artifacts, follow these steps:
 
 1. Initialize the frontend repo using `scripts/init-artifact.sh`
@@ -71,6 +82,9 @@ inlined. This file can be directly shared in Claude conversations as an artifact
 - Creates `.parcelrc` config with path alias support
 - Builds with Parcel (no source maps)
 - Inlines all assets into single HTML using html-inline
+
+In BuildingAI, treat those as explicit side effects: do not run this step unless the user asked for an
+artifact bundle and authorized the install/build behavior.
 
 ### Step 4: Share Artifact with User
 

@@ -1,169 +1,125 @@
 ---
 name: project-architecture
-description:
-    BuildingAI monorepo project structure and architecture guide. Use when AI needs to understand
-    project organization, locate files, understand package relationships, find where specific
-    functionality is implemented, or navigate the codebase structure. Essential for any development
-    task that requires understanding the project layout, import patterns, module organization, or
-    cross-package dependencies.
+description: BuildingAI monorepo navigation and source-of-truth guide. Use when locating code, understanding package boundaries, identifying plugin entry points, or deciding which docs and package manifests to read before a change.
 ---
 
 # BuildingAI Project Architecture
 
-Comprehensive guide to BuildingAI monorepo structure, packages, and development patterns.
+Use this skill to navigate the BuildingAI/EchoFlow monorepo. Treat machine-readable config and source files as authority for what the system actually does.
 
-## When to Use
+## Source-of-truth order
 
-Use this skill when you need to:
+1. Machine config: `package.json`, `.nvmrc`, `pnpm-workspace.yaml`, `turbo.json`, `.env.example`, `extensions/extensions.json`, package/plugin `package.json`, plugin `manifest.json`.
+2. Source code entry points: API startup, extension loader, SDK exports, routing/build helpers.
+3. Repository rules: `AGENTS.md` for cross-repo rules and `CLAUDE.md` for Claude Code routing.
+4. Plugin facts: `extensions/<identifier>/README.md` for plugin-specific behavior and verification evidence.
+5. Package READMEs: package-local references only; do not let them override code/package exports.
 
-- Locate where specific functionality is implemented
-- Understand package relationships and dependencies
-- Find the correct import paths and patterns
-- Navigate module organization and structure
-- Understand development patterns and conventions
-- Know what each package provides and how to use it
+## Workspace shape
 
-## Instructions
+The workspace membership is defined by `pnpm-workspace.yaml`:
 
-### Understanding the Monorepo Structure
-
-The BuildingAI project is a pnpm workspace monorepo with the following structure:
-
-```
-buildingai/
-├── packages/
-│   ├── @buildingai/              # Shared packages
-│   │   ├── ai-sdk/                 # AI SDK (legacy)
-│   │   ├── ai-sdk-new/             # AI SDK (Vercel AI SDK 6.x)
-│   │   ├── base/                   # BaseController, BaseService
-│   │   ├── cache/                  # CacheService, RedisService
-│   │   ├── config/                 # Configuration management
-│   │   ├── constants/               # Shared constants
-│   │   ├── db/                     # TypeORM, entities, migrations
-│   │   ├── decorators/             # Custom decorators
-│   │   ├── di/                     # Dependency injection utilities
-│   │   ├── dict/                   # Dictionary/configuration management
-│   │   ├── dto/                    # Shared DTOs
-│   │   ├── errors/                 # HttpErrorFactory
-│   │   ├── eslint-config/          # ESLint configuration
-│   │   ├── extension-sdk/          # Extension development SDK
-│   │   ├── logger/                 # Logging utilities
-│   │   ├── pipe/                   # Validation pipes
-│   │   ├── types/                  # TypeScript type definitions
-│   │   ├── typescript-config/      # TypeScript configurations
-│   │   ├── upgrade/                # Version upgrade scripts
-│   │   ├── utils/                  # Utility functions, HTTP client
-│   │   ├── web/                    # Frontend shared packages
-│   │   │   ├── hooks/              # React hooks
-│   │   │   ├── http/               # HTTP client
-│   │   │   ├── services/           # Frontend services
-│   │   │   ├── stores/             # State management (Pinia)
-│   │   │   ├── types/              # TypeScript types
-│   │   │   └── ui/                 # UI components
-│   │   ├── di/                     # Dependency injection utilities
-│   │   └── wechat-sdk/             # WeChat integration SDK
-│   ├── api/                        # Main NestJS API application
-│   ├── core/                       # Reusable business logic modules
-│   ├── cli/                        # CLI tooling
-│   └── client/                     # Desktop client (Tauri + React)
-├── skills/                         # AI skills for development guidance
-├── extensions/                     # Plugin extensions (runtime loaded)
-├── public/                         # Static web assets
-└── scripts/                        # Build and utility scripts
+```text
+packages/*
+extensions/*
+packages/@buildingai/*
+packages/@buildingai/web/*
 ```
 
-### Using Reference Files
+Do not rely on a hardcoded package tree when precision matters. Read `pnpm-workspace.yaml` and the relevant directory's `package.json`.
 
-For detailed information about each package, consult the corresponding reference file in
-`references/`:
+Pnpm dependency governance lives in `pnpm-workspace.yaml`: `catalog`, `catalogs`, `overrides`, `peerDependencyRules`, and `onlyBuiltDependencies`. Do not treat root `package.json` top-level `overrides` as a pnpm source of truth.
 
-**@buildingai Packages:**
+## Main applications
 
-- `references/base.md` - BaseController, BaseService
-- `references/cache.md` - CacheService, RedisService
-- `references/config.md` - Configuration management
-- `references/constants.md` - Shared constants
-- `references/db.md` - Database layer (TypeORM, entities)
-- `references/decorators.md` - Custom decorators
-- `references/dict.md` - Dictionary management
-- `references/dto.md` - Shared DTOs
-- `references/errors.md` - Error handling
-- `references/logger.md` - Logging utilities
-- `references/utils.md` - Utility functions, HTTP client
-- `references/ai-sdk.md` - AI SDK packages
-- `references/web.md` - Frontend packages
-- `references/extension-sdk.md` - Extension SDK
-- `references/pipe.md` - Validation pipes
-- `references/types.md` - TypeScript types
-- `references/upgrade.md` - Version upgrade scripts
-- `references/di.md` - Dependency injection utilities
-- `references/wechat-sdk.md` - WeChat integration SDK
+- `packages/api/`: NestJS API application.
+  - Startup: `packages/api/src/main.ts`
+  - Dynamic app module: `packages/api/src/modules/app.module.ts`
+  - Important domains: AI, auth, extension, finance, membership, notification, upload, secret, user.
+- `packages/client/`: React 19 + Vite 8 + Tauri client.
+  - Entry: `packages/client/src/main.tsx`
+  - Router: `packages/client/src/router/index.tsx`
+  - Main extension host route: `/apps/:identifier/*`.
+- `packages/cli/`: BuildingAI CLI and extension create/release tooling.
+  - Extension commands and release allowlist: `packages/cli/src/commands/extension.js`.
 
-**Main Packages:**
+## Shared packages
 
-- `references/api.md` - Main NestJS API application
-- `references/core.md` - Reusable business logic
-- `references/cli.md` - CLI tooling
-- `references/client.md` - Desktop client
+Active shared packages live under `packages/@buildingai/*` and `packages/@buildingai/web/*`. Examples include:
 
-Load these reference files when you need detailed information about a specific package's exports,
-usage patterns, or implementation details.
+- `@buildingai/core`: platform modules and extension decorators.
+- `@buildingai/db`: TypeORM entities, migrations, seeds, database helpers.
+- `@buildingai/extension-sdk`: extension-facing AI, billing, notification, rate limit, provider, URL, download, and build helpers.
+- `@buildingai/base`, `@buildingai/decorators`, `@buildingai/dto`, `@buildingai/errors`, `@buildingai/pipe`, `@buildingai/utils`.
+- Frontend shared packages under `packages/@buildingai/web/*`: `core`, `http`, `i18n`, `hooks`, `services`, `stores`, `types`, `ui`.
 
-### Import Patterns
+Important source files:
 
-**Backend (API/Core) Import Order:**
+- `packages/@buildingai/extension-sdk/src/index.ts`: public SDK exports.
+- `packages/@buildingai/extension-sdk/src/tsup.ts`: extension API build helper defaults.
+- `packages/@buildingai/web/core/src/defineRouteOption.tsx`: extension router wrapper.
+- `packages/@buildingai/web/core/src/vite/defineExtensionViteConfig.ts`: extension Vite base/output helper.
+- `packages/@buildingai/web/services/src/base.ts`: plugin Web/Console HTTP clients.
 
-1. `@buildingai/*` packages
-2. `@nestjs/*` packages
-3. `@common/*` (API only)
-4. `@modules/*` (API only)
-5. `@core/*` (API only)
-6. Third-party packages
-7. Relative paths
+## Extension system
 
-**Path Aliases (API):**
+Extension registry:
 
-- `@common/*` → `src/common/*`
-- `@modules/*` → `src/modules/*`
-- `@core/*` → `src/core/*`
-- `@assets/*` → `src/assets/*`
+- `extensions/extensions.json`
 
-### Development Patterns
+Business plugins currently live under `extensions/echoflow-*`. `extensions/simple-blog/` is a disabled example plugin; `templates/extension-starter/` is the starter template.
 
-**Service Pattern:**
+Typical extension structure:
 
-- Extend `BaseService<Entity>` from `@buildingai/base` for CRUD operations
-- Use dependency injection with `@InjectRepository()` for repositories
-- See `references/base.md` for available methods and features
+```text
+extensions/<identifier>/
+├── manifest.json
+├── package.json
+├── README.md
+├── src/api/index.ts
+├── src/api/modules/app.module.ts
+├── src/api/db/entities/
+├── src/api/db/migrations/
+├── src/api/upgrade/<version>/
+├── src/web/main.tsx
+├── src/web/routes.tsx
+├── vite.config.*
+└── tsup.config.ts
+```
 
-**Controller Pattern:**
+Runtime loading imports built backend output from `extensions/<identifier>/build/index.js`, so source changes require an API build before runtime install/load validation.
 
-- Use `@ConsoleController(path, groupName)` for admin APIs (auto auth + permissions)
-- Use `@WebController(path)` for frontend APIs (requires auth by default)
-- Use `@Playground()` decorator to get current user
-- See `references/decorators.md` and `references/api.md` for details
+## Common navigation routes
 
-\*\*Module Structure: `src/modules/{module-name}/` with controllers, services, and DTOs
+| Task | Start with |
+|---|---|
+| API feature or bug | `packages/api/src/modules/<domain>/`, then `packages/api/ai-rules.md` if API conventions matter |
+| Client route/UI | `packages/client/src/router/index.tsx`, then `packages/client/src/pages/` or shared UI package |
+| Main runtime starts but a feature fails | `docs/troubleshooting/main-runtime.md`, persisted API logs, then the affected API/Client source path |
+| Extension feature | `extensions/<identifier>/README.md`, `package.json`, `manifest.json`, then `src/api` or `src/web` |
+| Extension release | `skills/extension-release-check/SKILL.md`, plugin metadata, `packages/cli/src/commands/extension.js` |
+| Verification choice | `skills/repo-verify/SKILL.md` |
+| SDK/export change | package `src/index.ts`, `package.json.exports`, build config, consuming plugins/tests |
+| Workspace/dependency change | `pnpm-workspace.yaml` for pnpm catalogs/overrides/policies, root `package.json` for packageManager/scripts, lockfile impact |
 
-### Quick Navigation
+## Commands and validation
 
-When implementing features, reference the appropriate package:
+Use `skills/repo-verify/SKILL.md` to choose the smallest relevant validation. Do not default to install, format fixers, Docker/PM2 lifecycle, or database writes.
 
-- **Authentication**: `references/decorators.md` (`@Playground()`), `references/api.md` (guards)
-- **Database**: `references/db.md` (entities), `references/base.md` (BaseService CRUD)
-- **Error Handling**: `references/errors.md` (HttpErrorFactory)
-- **Caching**: `references/cache.md` (CacheService, RedisService)
-- **File Upload**: `references/core.md` (upload services)
-- **AI Functionality**: `references/ai-sdk.md`, `references/api.md` (AI modules)
-- **Frontend**: `references/web.md` (services, stores, UI components)
+Common shapes:
 
-### Skills Integration
+```bash
+pnpm --filter @buildingai/api check-types
+pnpm -C packages/client lint
+pnpm --filter @buildingai/<pkg> check-types
+pnpm --filter <identifier> check-types
+pnpm --filter <identifier> test
+pnpm --filter <identifier> build:api
+pnpm --filter <identifier> build:web
+```
 
-This skill works with other skills:
+Always check the target package's own `package.json`; extension scripts differ.
 
-- **`postgresql-table-design`** - For database schema design
-- **`frontend-design`** - For frontend UI development
-- **`ai-sdk`** - For AI functionality implementation
+## Runtime diagnosis order
 
-When implementing features, reference the appropriate package reference file to understand what's
-available and how to use it.
+When the main system starts successfully but a user workflow fails, avoid broad rollback guesses. Read persisted logs first, identify the final endpoint/status/error category, then compare the affected code with upstream and only after that test Runtime, dependency, Docker, or browser hypotheses. Treat credential errors as configuration failures unless source evidence shows the credential was transformed incorrectly.

@@ -37,14 +37,17 @@
 
 ## 入口与页面
 
-| 入口 | 路径 | 文件 | 职责 |
+主系统用户入口是 `/apps/echoflow-astrology-fortune/*`；extension bundle / local dev base 是 `/extension/echoflow-astrology-fortune/*`。下表 Console 路径是 `consoleRoutes` 相对路径，完整 dev/base 路径形如 `/extension/echoflow-astrology-fortune/console/...`。
+
+| 入口语义 | 路径 | 文件 | 职责 |
 |---|---|---|---|
-| Web | `/extension/echoflow-astrology-fortune/` | `src/web/pages/index.tsx` | 用户档案、报告生成、历史、结果、反馈和继续追问。 |
-| Console | `/console/` | `src/web/pages/console.tsx` section=`overview` | 运营概览。 |
-| Console | `/console/settings` | `src/web/pages/console.tsx` section=`settings` | 模型与价格。 |
-| Console | `/console/reports` | `src/web/pages/console.tsx` section=`reports` | 报告记录。 |
-| Console | `/console/tasks` | `src/web/pages/console.tsx` section=`tasks` | 超时任务、失败和退款排查。 |
-| Console | `/console/profiles` | `src/web/pages/console.tsx` section=`profiles` | 用户档案运营。 |
+| 主系统 Web | `/apps/echoflow-astrology-fortune/*` | `packages/client/src/pages/apps/[identifier]` | 主系统 iframe 宿主入口，加载本插件用户端。 |
+| Extension bundle/dev | `/extension/echoflow-astrology-fortune/` | `src/web/pages/index.tsx` | 用户档案、报告生成、历史、结果、反馈和继续追问。 |
+| Console route | `/console/` | `src/web/pages/console.tsx` section=`overview` | 运营概览。 |
+| Console route | `/console/settings` | `src/web/pages/console.tsx` section=`settings` | 模型与价格。 |
+| Console route | `/console/reports` | `src/web/pages/console.tsx` section=`reports` | 报告记录。 |
+| Console route | `/console/tasks` | `src/web/pages/console.tsx` section=`tasks` | 超时任务、失败和退款排查。 |
+| Console route | `/console/profiles` | `src/web/pages/console.tsx` section=`profiles` | 用户档案运营。 |
 
 路由由 `src/web/routes.tsx` 使用 `defineRouteOption()` 注册，Console 使用 `consoleRoutes` + `consoleMenus`。
 
@@ -138,16 +141,16 @@ pnpm --filter echoflow-astrology-fortune smoke:web
 | `ASTROLOGY_SMOKE_GENERATE=1` | 开启真实生成、轮询、反馈和继续追问验证；未设置时只做非扣费边界 smoke。 |
 | `ASTROLOGY_SMOKE_TIMEOUT_MS` / `ASTROLOGY_SMOKE_POLL_INTERVAL_MS` | 真实生成轮询超时和间隔。 |
 
-当前验证缺口：
+验证证据：
 
-| 项目 | 状态 |
-|---|---|
-| 单测 | 已覆盖 AI SDK 边界、AI 输出契约、常见 SDK 文本返回形态、模型输出异常失败归一化、标题/摘要非空、评分 scores 必填且包含 overall、关键词 keywords 与幸运锚点 lucky 必填非空、判断依据 evidence、判断依据来源白名单、洞察段落 sections 的洞察/机会/风险/行动覆盖、结构化行动建议 actions `{ item, reason, timebox }`、结构化风险提醒 warnings `{ title, detail }`、AI 复盘清单 reviewChecklist 和模型生成追问 followUps 的必填/非空下限、复盘清单依据可追溯性、继续追问可执行性、继续追问来源在问问区可见并可清除、继续追问 prompt 带入上一份报告的带置信度判断依据、行动/风险/复盘和脱敏反馈，并约束 high/medium/low 置信度在追问里的使用方式、复制/下载/成功通知保留评分、关键词、幸运锚点、带置信度 AI 依据、复盘清单与追问，用户端、Console 和复制/下载统一使用“高/中/低置信”标签，compact 报告卡展示前三条判断依据以保留完整置信层级，通知摘要过滤 raw provider 字段且不会把缺置信度的依据发给用户、问题质量上下文、问题质量面板的已包含/建议补充/输出影响说明、公开生成依据中的脱敏问题质量、追问来源上下文入队与 prompt、反馈反哺、反馈 metadata、用户端反馈短备注进入提交 payload、报告时间不依赖额外 i18n provider、结构化行动/风险对象安全渲染与导出、Web/Console public 类型边界、公开生成状态和不可用禁用入口、用户端 compact 报告卡 AI 锚点、Console 详情失败归因与 AI 评分/关键词/幸运锚点/依据/复盘清单/行动建议/风险提醒/继续追问展示、用户端样式边界、嵌入式工作区不使用 `self-stretch` 拉伸输入面板、路由分包、RootLayout 查询上下文边界、构建产物入口 smoke、Web API smoke 脚本公开路径/标准响应壳/Token 必填/真实生成 opt-in 边界、通知规则、报告回收规则、公开生成上下文、扣费幂等、失败退款顺序，以及队列入队失败、Worker 崩溃和超时回收归因边界；仍需补真实模型联调和账务数据库集成测试。 |
-| Redis/Worker | 需要真实 smoke 成功、失败、超时、删除保护和多实例恢复。 |
-| 真实 LLM | 需要主站真实模型、Secret、余额和测试档案覆盖报告生成与失败退款。 |
-| Web 构建 | 已在当前 Node 24 / pnpm 10 基线通过 `build:web`；Web 首页和 Console 管理页通过 lazy route 独立拆包，Vite preview HTTP smoke 可访问 HTML、JS 和 CSS 产物。 |
-| 浏览器 QA | 2026-06-20 先发现 `http://localhost:5173/extension/echoflow-astrology-fortune` 实际由视频插件 dev server 提供，Vite 提示 base URL 为 `/extension/echoflow-video`；星盘前端应使用本插件 dev server 输出的实际端口访问，例如本轮 Vite 输出 `http://localhost:5177/extension/echoflow-astrology-fortune`。本轮 in-app browser 验证空态可打开，无 error boundary、无横向溢出、无 `[object Object]`；多列今日工作区左侧输入面板不再被右侧报告撑成等高整页卡。Playwright/Edge 以主系统标准响应壳 `code: 20000` mock `localhost:4090` 的档案、公开 generation-status 和报告接口后，1366x900 与 390x844 报告态均可见 AI 摘要 `Alert`、分数 `Progress`、状态/关键词/依据 `Badge`、“高/中/低置信”三档判断依据、结构化行动 `reason/timebox`、风险 `detail`、AI 复盘清单、继续追问和反馈入口；无 React page error，未出现页面横向滚动。mock 环境中未拦截的主站资源可能产生 `ERR_CONNECTION_RESET/EMPTY_RESPONSE` 资源日志，不作为插件渲染错误。 |
-| 当前 CLI 复验 | 2026-06-20 本轮 `pnpm --filter echoflow-astrology-fortune test` 共 94 项全通过；聚焦 `astrology-report-ai-result.test.mjs` 已覆盖每条判断依据必须由模型给出 low/medium/high 置信度、不可用/猜测来源即使包含白名单词也会被拒绝，且用户可见 AI 报告内容不能使用确定性承诺；`astrology-prompt-boundary.test.mjs` 已覆盖主生成 prompt 明确要求 `confidence` 只能是 low/medium/high，并覆盖主生成 prompt 与格式修复 prompt 都明确禁止确定性承诺；`astrology-web-report-actions.test.mjs` 已覆盖复制/下载文本从结构化结果重建、保留“高/中/低置信”标签，并要求 compact 报告卡展示前三条判断依据；`astrology-web-style-boundary.test.mjs` 已覆盖嵌入式工作区不用 `self-stretch` 把输入面板拉成完整应用壳；`astrology-web-smoke-script.test.mjs` 已覆盖 Web smoke 对 AI 修复审计字段的公开 API 过滤断言，并要求真实生成 smoke 逐条校验 `evidence.source`、`evidence.insight` 和 `evidence.confidence`。`check-types`、`build:api`、`build:web` 和 `build:publish` 均通过；`smoke:web` 在未提供 token 时按设计失败并提示需要 `ASTROLOGY_SMOKE_TOKEN` 或 `BUILDINGAI_ACCESS_TOKEN`。本轮同时重建了 `@buildingai/extension-sdk` dist，确认 `utils/pure`、`provider-config` 等公开导出产物存在；星盘后端纯解析服务从 `@buildingai/extension-sdk/utils/pure` 导入 `safeJsonParse` / `buildDefinedWhere`，避免为了 JSON/where helper 拉起 SDK 根入口的 Nest/DB/低层 AI provider。Web 用户端主入口约 910 KB，Console 管理页独立 chunk 约 47 KB，仍有 Vite chunk warning；`build:publish` 已改为直接串联底层 CLI，避免嵌套 pnpm 触发 Windows/Corepack 版本守卫。 |
+| 范围 | 证据状态 | 命令/场景 | 环境基线 | 结论 | 后续条件 |
+|---|---|---|---|---|---|
+| 单测边界 | current | `pnpm --filter echoflow-astrology-fortune test` 和 focused tests | 2026-06-20 记录 | 覆盖 AI SDK 边界、结构化输出契约、置信度、来源白名单、确定性承诺过滤、复盘清单、继续追问、反馈、通知摘要、public 类型边界、样式边界、RootLayout、Web smoke 脚本、扣费幂等、失败退款顺序、队列入队失败、Worker 崩溃和超时回收归因等边界；仍需补真实模型联调和账务数据库集成测试。 | 相关源码变更或发布前重新执行当前环境下的 targeted test / package test。 |
+| Redis/Worker | pending | 真实 Redis/Worker smoke | 需要真实 Redis/Worker 环境 | 未覆盖成功、失败、超时、删除保护和多实例恢复真实闭环。 | 准备服务后执行成功、失败、超时、删除保护和多实例恢复 smoke。 |
+| 真实 LLM | pending | 主站真实模型、Secret、余额和测试档案 | 需要真实模型与账务环境 | 未覆盖报告生成与失败退款真实闭环。 | 准备主站真实模型、Secret、余额和测试档案。 |
+| Web 构建 | historical | `pnpm --filter echoflow-astrology-fortune build:web` | Node 24 / pnpm 10 历史记录；当前仓库基线为 Node 22.20 / pnpm 10.20.0 | 历史通过；Web 首页和 Console 管理页通过 lazy route 独立拆包，Vite preview HTTP smoke 可访问 HTML、JS 和 CSS 产物。 | 作为发布证据前需在当前 Node 22.20 / pnpm 10.20.0 重新验证。 |
+| 浏览器 QA | historical | Vite dev server 与 Playwright/Edge mock 浏览器 QA | 2026-06-20 浏览器记录 | 曾发现 `localhost:5173` 实际是视频插件 dev server，星盘应确认本插件 dev server 输出端口；mock 环境下 1366x900 与 390x844 报告态可见 AI 摘要、分数、关键词/依据、三档置信、行动、风险、复盘、继续追问和反馈入口，无 React page error 与横向滚动。 | 当前交付前需重新确认端口、title、业务文案和桌面/移动截图；mock 未拦截资源日志不作为真实主站错误。 |
+| CLI 复验 | historical | `check-types`、`build:api`、`build:web`、`build:publish`、`smoke:web` token 缺失 fail-closed | 2026-06-20 记录 | 当时通过类型、API/Web/发布构建；`smoke:web` 在未提供 token 时按设计失败；同时确认 `@buildingai/extension-sdk` dist 中 `utils/pure`、`provider-config` 等公开导出产物存在。 | 当前发布证据需重新执行最小验证；真实生成 smoke 必须提供 token 且显式设置真实生成开关。 |
 
 ## 已知风险
 

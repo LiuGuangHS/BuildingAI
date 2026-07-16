@@ -31,12 +31,15 @@
 
 ## 入口与页面
 
-| 入口 | 路径 | 文件 | 职责 |
+主系统用户入口是 `/apps/echoflow-contract-generation/*`；extension bundle / local dev base 是 `/extension/echoflow-contract-generation/*`。下表 Console 路径是 `consoleRoutes` 相对路径，完整 dev/base 路径形如 `/extension/echoflow-contract-generation/console/...`。
+
+| 入口语义 | 路径 | 文件 | 职责 |
 |---|---|---|---|
-| Web | `/extension/echoflow-contract-generation/` | `src/web/pages/index.tsx` | 合同起草、上传审查、编辑、导出和任务状态。 |
-| Console | `/console/` | `src/web/pages/console/config.tsx` | 模型配置和基础策略。 |
-| Console | `/console/templates` | `src/web/pages/console/templates.tsx` | 合同模板管理。 |
-| Console | `/console/tasks` | `src/web/pages/console/tasks.tsx` | 任务列表、失败、退款和运维排查。 |
+| 主系统 Web | `/apps/echoflow-contract-generation/*` | `packages/client/src/pages/apps/[identifier]` | 主系统 iframe 宿主入口，加载本插件用户端。 |
+| Extension bundle/dev | `/extension/echoflow-contract-generation/` | `src/web/pages/index.tsx` | 合同起草、上传审查、编辑、导出和任务状态。 |
+| Console route | `/console/` | `src/web/pages/console/config.tsx` | 模型配置和基础策略。 |
+| Console route | `/console/templates` | `src/web/pages/console/templates.tsx` | 合同模板管理。 |
+| Console route | `/console/tasks` | `src/web/pages/console/tasks.tsx` | 任务列表、失败、退款和运维排查。 |
 
 路由由 `src/web/routes.tsx` 使用 `defineRouteOption()` 注册。
 
@@ -121,13 +124,14 @@ pnpm --filter echoflow-contract-generation build:publish
 
 `build:web` 使用 `vite --configLoader native`。若 Vite/Rolldown 在配置加载或 HTML entry 解析阶段失败，先用最小 HTML smoke 区分工具链问题与插件业务代码问题。
 
-前端体验改动的最小验证：
+验证证据：
 
-- Node 测试覆盖 view-model、public/admin 类型边界、AI 推理文案、路由分包、RootLayout 查询上下文、Web 高成本入口 SDK 限流、纯文本编辑器 source 边界和任务恢复规则。
-- Web 构建验证 Tailwind 工具类、BuildingAI UI 组件和 Vite 打包。
-- Windows 环境优先使用根目录 `pnpm --filter echoflow-contract-generation ...` 命令；若工具链失败，记录当前命令、错误和是否属于插件代码。
-- 浏览器检查至少覆盖当前嵌入式宽度和一个移动宽度：首屏应为任务条、输入栏、合同正文、上下文 Inspector；不得出现主系统导航/账号/全局统计/Provider/Secret/原始响应。
-- 临时计划和 QA checklist 不作为长期文档保留；有效结论合并回本 README。
+| 范围 | 证据状态 | 命令/场景 | 环境基线 | 结论 | 后续条件 |
+|---|---|---|---|---|---|
+| Node 边界测试 | current | 插件测试覆盖 view-model、public/admin 类型边界、AI 推理文案、路由分包、RootLayout 查询上下文、Web 高成本入口 SDK 限流、纯文本编辑器 source 边界和任务恢复规则 | README 当前记录 | 现有测试约束前端体验和 public/Admin 边界。 | 修改编辑器、serializer、路由分包、任务恢复或限流后重新执行相关 package test。 |
+| Web 构建 | pending | `pnpm --filter echoflow-contract-generation build:web` | 当前任务未执行 | 需要验证 Tailwind 工具类、BuildingAI UI 组件和 Vite 打包。 | Web 体验、Vite 配置或 UI 依赖变更后执行；若 Vite/Rolldown 失败，记录命令、错误和是否属于插件代码。 |
+| 浏览器检查 | pending | 当前嵌入式宽度和一个移动宽度 | 需要真实主系统插件容器或确认属本插件的 dev server | 未记录当前浏览器证据。 | 首屏应为任务条、输入栏、合同正文、上下文 Inspector；不得出现主系统导航/账号/全局统计/Provider/Secret/原始响应。 |
+| 长期文档收口 | current | README 维护规则 | 当前 README 事实 | 临时计划和 QA checklist 不作为长期文档保留；有效结论合并回本 README。 | 新 QA 结论只合并仍有效事实、风险和下一步。 |
 
 ## 已知风险
 
