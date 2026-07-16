@@ -1,16 +1,37 @@
-import { DictService } from "@buildingai/dict";
+import { resolveProjectPath } from "@buildingai/config/project-paths";
 import { Cron } from "@buildingai/core/@nestjs/schedule";
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from "@nestjs/common";
+import { DataSource } from "@buildingai/db/typeorm";
+import { DictService } from "@buildingai/dict";
+import {
+    BadRequestException,
+    ConflictException,
+    Injectable,
+    InternalServerErrorException,
+    Logger,
+    NotFoundException,
+} from "@nestjs/common";
 import { spawn } from "child_process";
-import { createWriteStream, existsSync, mkdirSync, readdirSync, statSync, unlinkSync, createReadStream } from "fs";
+import {
+    createReadStream,
+    createWriteStream,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    renameSync,
+    statSync,
+    unlinkSync,
+} from "fs";
 import { resolve } from "path";
-import { createGzip } from "zlib";
 import { pipeline } from "stream/promises";
+import { createGzip } from "zlib";
 
-const BACKUP_DIR = resolve(process.cwd(), "..", "..", "storage", "backups");
+const BACKUP_DIR = resolveProjectPath("storage", "backups");
 const BACKUP_CONFIG_GROUP = "db_backup_config";
 const BACKUP_SCHEDULE = "0 2 * * *";
-const BACKUP_FILENAME_REGEX = /^backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.sql\.gz$/;
+const BACKUP_FILENAME_REGEX =
+    /^backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:-\d{3})?\.sql\.gz$/;
+const BACKUP_LOCK_NAME = "echoflow:database-backup";
+const PG_DUMP_TIMEOUT_MS = 10 * 60 * 1000;
 
 function validateBackupFilename(filename: string): string {
     if (typeof filename !== "string" || !BACKUP_FILENAME_REGEX.test(filename)) {
@@ -35,7 +56,10 @@ export interface BackupFile {
 export class BackupService {
     private readonly logger = new Logger(BackupService.name);
 
-    constructor(private readonly dictService: DictService) {}
+    constructor(
+        private readonly dictService: DictService,
+        private readonly dataSource: DataSource,
+    ) {}
 
     async getConfig() {
         const [enabled, retentionDays] = await Promise.all([
@@ -78,7 +102,7 @@ export class BackupService {
                 return {
                     filename,
                     size: stats.size,
-                    createdAt: stats.birthtime,
+                    createdAt: stats.mtime,
                 };
             })
             .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -87,14 +111,38 @@ export class BackupService {
     }
 
     async createBackup(): Promise<{ filename: string; size: number }> {
+        const queryRunner = this.dataSource.createQueryRunner();
+        await queryRunner.connect();
+
+        try {
+            const [{ locked }] = await queryRunner.query(
+                "SELECT pg_try_advisory_lock(hashtext($1)) AS locked",
+                [BACKUP_LOCK_NAME],
+            );
+            if (!locked) {
+                throw new ConflictException("A database backup is already running");
+            }
+
+            try {
+                return await this.createBackupWithLock();
+            } finally {
+                await queryRunner.query("SELECT pg_advisory_unlock(hashtext($1))", [BACKUP_LOCK_NAME]);
+            }
+        } finally {
+            await queryRunner.release();
+        }
+    }
+
+    private async createBackupWithLock(): Promise<{ filename: string; size: number }> {
         if (!existsSync(BACKUP_DIR)) {
             mkdirSync(BACKUP_DIR, { recursive: true });
         }
 
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 23);
         const filename = `backup_${timestamp}.sql.gz`;
         const filePath = resolve(BACKUP_DIR, filename);
         const tempSqlPath = resolve(BACKUP_DIR, `temp_${Date.now()}.sql`);
+        const partFilePath = `${filePath}.part`;
 
         try {
             const dbHost = process.env.DB_HOST || "localhost";
@@ -106,6 +154,7 @@ export class BackupService {
             this.logger.log(`Starting database backup to ${filename}...`);
 
             await new Promise<void>((resolvePromise, reject) => {
+                let settled = false;
                 const pgDump = spawn("pg_dump", [
                     "-h", dbHost,
                     "-p", dbPort,
@@ -122,10 +171,20 @@ export class BackupService {
 
                 let stderr = "";
                 pgDump.stderr.on("data", (data) => {
-                    stderr += data.toString();
+                    stderr = `${stderr}${data.toString()}`.slice(-4000);
                 });
 
+                const timeoutId = setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    pgDump.kill("SIGTERM");
+                    reject(new Error(`pg_dump timed out after ${PG_DUMP_TIMEOUT_MS}ms`));
+                }, PG_DUMP_TIMEOUT_MS);
+
                 pgDump.on("close", (code) => {
+                    clearTimeout(timeoutId);
+                    if (settled) return;
+                    settled = true;
                     if (code === 0) {
                         resolvePromise();
                     } else {
@@ -134,21 +193,29 @@ export class BackupService {
                 });
 
                 pgDump.on("error", (err) => {
+                    clearTimeout(timeoutId);
+                    if (settled) return;
+                    settled = true;
                     reject(err);
                 });
             });
 
             const gzip = createGzip();
             const source = createReadStream(tempSqlPath);
-            const destination = createWriteStream(filePath);
+            const destination = createWriteStream(partFilePath);
             await pipeline(source, gzip, destination);
 
             unlinkSync(tempSqlPath);
+            renameSync(partFilePath, filePath);
 
             const stats = statSync(filePath);
             this.logger.log(`Backup completed: ${filename} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
 
-            await this.cleanupOldBackups();
+            try {
+                await this.cleanupOldBackups();
+            } catch (error) {
+                this.logger.warn(`Backup cleanup failed: ${this.errorMessage(error)}`);
+            }
 
             return {
                 filename,
@@ -158,9 +225,17 @@ export class BackupService {
             if (existsSync(tempSqlPath)) {
                 try { unlinkSync(tempSqlPath); } catch {}
             }
-            this.logger.error(`Backup failed: ${error.message}`);
-            throw new InternalServerErrorException(`Backup failed: ${error.message}`);
+            if (existsSync(partFilePath)) {
+                try { unlinkSync(partFilePath); } catch {}
+            }
+            const message = this.errorMessage(error);
+            this.logger.error(`Backup failed: ${message}`);
+            throw new InternalServerErrorException(`Backup failed: ${message}`);
         }
+    }
+
+    private errorMessage(error: unknown): string {
+        return error instanceof Error ? error.message : String(error);
     }
 
     async deleteBackup(filename: string): Promise<void> {
@@ -201,7 +276,7 @@ export class BackupService {
             this.logger.log("Starting scheduled database backup...");
             await this.createBackup();
         } catch (error) {
-            this.logger.error(`Scheduled backup failed: ${error.message}`);
+            this.logger.error(`Scheduled backup failed: ${this.errorMessage(error)}`);
         }
     }
 }

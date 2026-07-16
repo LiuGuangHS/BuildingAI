@@ -6,8 +6,9 @@ import { Body, Delete, Get, Ip, Logger, Param, Post, Req } from "@nestjs/common"
 import type { Request } from "express";
 import { Permissions } from "src/common/decorators/permissions.decorator";
 
-import { SystemService } from "../../services/system.service";
+import { UpdateBackupConfigDto } from "../../dto/update-backup-config.dto";
 import { BackupService } from "../../services/backup.service";
+import { SystemService } from "../../services/system.service";
 
 /**
  * 系统控制器
@@ -80,7 +81,7 @@ export class SystemConsoleController {
         code: "backup:config",
         name: "更新备份配置",
     })
-    async updateBackupConfig(@Body() dto: { enabled?: boolean; retentionDays?: number }) {
+    async updateBackupConfig(@Body() dto: UpdateBackupConfigDto) {
         return this.backupService.updateConfig(dto);
     }
 
