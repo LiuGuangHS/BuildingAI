@@ -198,6 +198,7 @@ async function buildProject() {
             cwd: rootDir,
             // stdio: ["ignore", "ignore", "inherit"],
         });
+        await executeCommand("node", ["scripts/release.mjs"], { cwd: rootDir });
         Logger.success("Build", "Project build completed.");
     } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);

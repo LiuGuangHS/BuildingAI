@@ -66,6 +66,11 @@
             "inputs": ["$TURBO_DEFAULT$", ".env*"],
             "outputs": ["dist/**", "build/**", ".output/**"]
         },
+        "build:publish": {
+            "dependsOn": ["^build"],
+            "inputs": ["$TURBO_DEFAULT$", ".env*"],
+            "outputs": ["build/**", ".output/**"]
+        },
         "lint": {
             "dependsOn": ["^lint"]
         },
