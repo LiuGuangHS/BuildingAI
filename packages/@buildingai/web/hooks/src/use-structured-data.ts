@@ -1,9 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
-function injectScript(data: Record<string, unknown>) {
+function currentSiteUrl(path = "/") {
+  if (typeof window === "undefined") return path;
+  return new URL(path, `${window.location.origin}/`).toString();
+}
+
+function injectScript(serializedData: string) {
   const script = document.createElement("script");
   script.type = "application/ld+json";
-  script.textContent = JSON.stringify(data);
+  script.textContent = serializedData;
   document.head.appendChild(script);
   return () => {
     document.head.removeChild(script);
@@ -11,17 +16,18 @@ function injectScript(data: Record<string, unknown>) {
 }
 
 export function useStructuredData(data: Record<string, unknown>): void {
+  const serializedData = useMemo(() => JSON.stringify(data), [data]);
+
   useEffect(() => {
-    return injectScript(data);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return injectScript(serializedData);
+  }, [serializedData]);
 }
 
 export function useOrganizationStructuredData({
   name = "清云AI",
-  url = "https://ai.echoflow.cn",
+  url = currentSiteUrl(),
   description = "清云AI 提供 AI 智能对话、智能体、知识库等人工智能服务，让每个人都能轻松使用 AI。",
-  logo = "https://ai.echoflow.cn/echoflowai-favicon.ico",
+  logo = currentSiteUrl("/echoflowai-favicon.ico"),
 }: {
   name?: string;
   url?: string;
@@ -40,7 +46,7 @@ export function useOrganizationStructuredData({
 
 export function useWebApplicationStructuredData({
   name = "清云AI",
-  url = "https://ai.echoflow.cn",
+  url = currentSiteUrl(),
   description = "AI 智能助手工作台，提供智能对话、智能体、知识库等 AI 服务",
 }: {
   name?: string;

@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
+import { siteUrl } from "@/utils/site-url";
+
 /**
  * Resolve the base URL for extension iframe.
  * - Dev: uses VITE_DEVELOP_APP_BASE_URL or falls back to localhost:4090
@@ -50,12 +52,12 @@ export default function AppIframePage() {
     ogTitle: extDisplayName,
     ogDescription: extDescription,
     ogImage: extIcon,
-    canonical: identifier ? `https://ai.echoflow.cn/apps/${identifier}` : undefined,
+    canonical: identifier ? siteUrl(`/apps/${identifier}`) : undefined,
   });
 
   useSoftwareApplicationStructuredData({
     name: extDisplayName,
-    url: `https://ai.echoflow.cn/apps/${identifier}`,
+    url: siteUrl(`/apps/${identifier}`),
     description: extDescription,
     image: extIcon,
   });

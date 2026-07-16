@@ -29,11 +29,7 @@ import AlipayReturnPage from "../pages/payment/alipay-return";
 
 export const router = createBrowserRouter([
   {
-    element: (
-      <>
-        <MainLayout />
-      </>
-    ),
+    element: <MainLayout />,
     errorElement: <GlobalError />,
     children: [
       {

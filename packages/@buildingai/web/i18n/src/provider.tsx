@@ -34,7 +34,7 @@ function getInitialLocale(
     const stored = localStorage.getItem(storageKey);
     if (stored && availableLocales.includes(stored)) return stored;
 
-    return defaultLocale;
+    return detectBrowserLocale(availableLocales, defaultLocale);
 }
 
 export function I18nProvider({

@@ -1,9 +1,20 @@
+import { useSidebar } from "@buildingai/ui/components/ui/sidebar";
+import { useEffect, useRef } from "react";
 import { Outlet } from "react-router-dom";
 
 import { DatasetsNavbar } from "./navbar";
 import { DatasetsSidebar } from "./sidebar";
 
 const KnowledgeLayout = () => {
+  const { setOpen } = useSidebar();
+  const collapsedOnEntry = useRef(false);
+
+  useEffect(() => {
+    if (collapsedOnEntry.current) return;
+    collapsedOnEntry.current = true;
+    setOpen(false);
+  }, [setOpen]);
+
   return (
     <div className="flex h-full min-h-0">
       <DatasetsSidebar />

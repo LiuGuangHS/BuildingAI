@@ -24,6 +24,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDebounceValue } from "usehooks-ts";
 
+import { siteUrl } from "@/utils/site-url";
+
 const PAGE_SIZE = 20;
 
 export const meta = definePageMeta({
@@ -44,7 +46,7 @@ const KnowledgeIndexPage = () => {
     title: "知识库广场",
     description: "发现优质 AI 知识库，与知识库进行智能交互，获取专业知识问答",
     keywords: "AI知识库,知识库,RAG,AI问答,智能知识库",
-    canonical: "https://ai.echoflow.cn/datasets",
+    canonical: siteUrl("/datasets"),
   });
 
   const { data: tagsData } = useDatasetTags();

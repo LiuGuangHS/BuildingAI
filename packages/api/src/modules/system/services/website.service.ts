@@ -4,7 +4,6 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Dict } from "@buildingai/db/entities";
 import { Repository } from "@buildingai/db/typeorm";
 import { DictService } from "@buildingai/dict";
-import { safeJsonParse } from "@buildingai/extension-sdk";
 import { Injectable } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
@@ -120,8 +119,11 @@ export class WebsiteService extends BaseService<Dict> {
             !Number.isNaN(Number(value));
         if (!looksJsonLike) return value as unknown as T;
 
-        const parsed = safeJsonParse<T>(value);
-        return parsed === undefined ? value as unknown as T : parsed;
+        try {
+            return JSON.parse(value) as T;
+        } catch {
+            return value as unknown as T;
+        }
     }
 
     /**

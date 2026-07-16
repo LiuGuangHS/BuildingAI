@@ -33,6 +33,8 @@ import { ChevronRight, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { siteUrl } from "@/utils/site-url";
+
 export const meta = definePageMeta({
   title: "应用中心",
   description: "探索 AI 应用，扩展你的 AI 工作台能力，发现更多 AI 工具",
@@ -93,7 +95,7 @@ const AppsIndexPage = () => {
     title: "应用中心",
     description: "探索 AI 应用，扩展你的 AI 工作台能力，发现更多 AI 工具",
     keywords: "AI应用,AI插件,AI工具,AI扩展,AI视频,AI绘画",
-    canonical: "https://ai.echoflow.cn/apps",
+    canonical: siteUrl("/apps"),
   });
 
   // 搜索防抖

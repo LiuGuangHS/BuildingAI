@@ -13,6 +13,7 @@ import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { AssistantProvider } from "@/components/ask-assistant-ui";
+import { siteUrl } from "@/utils/site-url";
 
 import { ChatContainer, DEFAULT_SUGGESTIONS } from "./_components/chat";
 import { DatasetActions } from "./_components/dataset-actions";
@@ -86,14 +87,17 @@ export default function DatasetDetailPage() {
     ogTitle: dataset?.name || "知识库详情",
     ogDescription: dataset?.description || undefined,
     ogImage: dataset?.coverUrl || undefined,
-    canonical: id ? `https://ai.echoflow.cn/datasets/${id}` : undefined,
+    canonical: id ? siteUrl(`/datasets/${id}`) : undefined,
   });
 
   useBreadcrumbStructuredData({
     items: [
-      { name: "清云AI", url: "https://ai.echoflow.cn" },
-      { name: "知识库广场", url: "https://ai.echoflow.cn/datasets" },
-      { name: dataset?.name || "知识库详情", url: id ? `https://ai.echoflow.cn/datasets/${id}` : "https://ai.echoflow.cn/datasets" },
+      { name: "清云AI", url: siteUrl() },
+      { name: "知识库广场", url: siteUrl("/datasets") },
+      {
+        name: dataset?.name || "知识库详情",
+        url: siteUrl(id ? `/datasets/${id}` : "/datasets"),
+      },
     ],
   });
 

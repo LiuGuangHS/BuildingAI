@@ -43,6 +43,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDebounceValue } from "usehooks-ts";
 
+import { siteUrl } from "@/utils/site-url";
+
 // import { ProviderIcon } from "../../components/provider-icons";
 
 const PAGE_SIZE = 20;
@@ -66,7 +68,7 @@ const AgentsIndexPage = () => {
     title: "智能体广场",
     description: "浏览海量 AI 智能体，覆盖写作、编程、翻译、设计等场景，选择你想要的智能助手",
     keywords: "AI智能体,AI Agent,智能助手,AI对话,人工智能",
-    canonical: "https://ai.echoflow.cn/agents",
+    canonical: siteUrl("/agents"),
   });
 
   const { data: decorateConfig } = useWebAgentDecorateQuery();

@@ -4,10 +4,10 @@ import { Datasets, SquarePublishStatus } from "@buildingai/db/entities/datasets.
 import { Extension } from "@buildingai/db/entities/extension.entity";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Public } from "@buildingai/decorators/public.decorator";
-import { Controller, Get, Header } from "@nestjs/common";
+import { Controller, Get, Header, Req } from "@nestjs/common";
 import { Repository } from "@buildingai/db/typeorm";
+import type { Request } from "express";
 
-const BASE_URL = "https://ai.echoflow.cn";
 const CACHE_KEY = "sitemap_xml";
 const CACHE_TTL = 3600; // 1 hour in seconds
 
@@ -26,16 +26,18 @@ export class SitemapController {
   @Get("sitemap.xml")
   @Public()
   @Header("Content-Type", "application/xml")
-  async generateSitemap(): Promise<string> {
-    const cached = await this.cacheService.get<string>(CACHE_KEY);
+  async generateSitemap(@Req() request: Request): Promise<string> {
+    const baseUrl = this.resolveBaseUrl(request);
+    const cacheKey = `${CACHE_KEY}:${baseUrl}`;
+    const cached = await this.cacheService.get<string>(cacheKey);
     if (cached) return cached;
 
     const urls: string[] = [];
 
-    urls.push(this.urlEntry("/", "1.0"));
-    urls.push(this.urlEntry("/agents", "0.9"));
-    urls.push(this.urlEntry("/datasets", "0.8"));
-    urls.push(this.urlEntry("/apps", "0.8"));
+    urls.push(this.urlEntry(baseUrl, "/", "1.0"));
+    urls.push(this.urlEntry(baseUrl, "/agents", "0.9"));
+    urls.push(this.urlEntry(baseUrl, "/datasets", "0.8"));
+    urls.push(this.urlEntry(baseUrl, "/apps", "0.8"));
 
     const agents = await this.agentRepo.find({
       where: {
@@ -45,7 +47,7 @@ export class SitemapController {
       select: ["id", "updatedAt"],
     });
     for (const agent of agents) {
-      urls.push(this.urlEntry(`/agents/${agent.id}/chat`, "0.8", agent.updatedAt));
+      urls.push(this.urlEntry(baseUrl, `/agents/${agent.id}/chat`, "0.8", agent.updatedAt));
     }
 
     const extensions = await this.extensionRepo.find({
@@ -53,7 +55,7 @@ export class SitemapController {
       select: ["identifier", "updatedAt"],
     });
     for (const ext of extensions) {
-      urls.push(this.urlEntry(`/apps/${ext.identifier}`, "0.7", ext.updatedAt));
+      urls.push(this.urlEntry(baseUrl, `/apps/${ext.identifier}`, "0.7", ext.updatedAt));
     }
 
     const datasets = await this.datasetRepo.find({
@@ -61,7 +63,7 @@ export class SitemapController {
       select: ["id", "updatedAt"],
     });
     for (const ds of datasets) {
-      urls.push(this.urlEntry(`/datasets/${ds.id}`, "0.7", ds.updatedAt));
+      urls.push(this.urlEntry(baseUrl, `/datasets/${ds.id}`, "0.7", ds.updatedAt));
     }
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -69,16 +71,26 @@ export class SitemapController {
 ${urls.join("\n")}
 </urlset>`;
 
-    await this.cacheService.set(CACHE_KEY, xml, CACHE_TTL);
+    await this.cacheService.set(cacheKey, xml, CACHE_TTL);
     return xml;
   }
 
-  private urlEntry(loc: string, priority: string, lastmod?: Date | null): string {
+  private resolveBaseUrl(request: Request): string {
+    const configured = process.env.APP_DOMAIN?.trim();
+    const candidate = configured || `${request.protocol}://${request.get("host")}`;
+    const url = new URL(candidate);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("APP_DOMAIN must use http or https");
+    }
+    return url.origin;
+  }
+
+  private urlEntry(baseUrl: string, loc: string, priority: string, lastmod?: Date | null): string {
     const lastmodStr = lastmod
       ? `\n    <lastmod>${lastmod.toISOString().split("T")[0]}</lastmod>`
       : "";
     return `  <url>
-    <loc>${BASE_URL}${loc}</loc>
+    <loc>${baseUrl}${loc}</loc>
     <priority>${priority}</priority>${lastmodStr}
   </url>`;
   }

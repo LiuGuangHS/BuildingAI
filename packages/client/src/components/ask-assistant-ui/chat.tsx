@@ -263,6 +263,21 @@ const InputArea = memo(function InputArea({
             )}
             <span>{websiteConfig?.copyright.displayName}</span>
           </a>
+          {(websiteConfig?.copyright.displayName || websiteConfig?.copyright.iconUrl) &&
+            (websiteConfig?.copyright.copyrightText || websiteConfig?.copyright.copyrightBrand) && (
+              <span>|</span>
+            )}
+          <span className="space-x-1">
+            <span>{websiteConfig?.copyright.copyrightText}</span>
+            <a
+              className="text-primary font-bold"
+              href={websiteConfig?.copyright.copyrightUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {websiteConfig?.copyright.copyrightBrand}
+            </a>
+          </span>
         </div>
       </div>
     </div>
