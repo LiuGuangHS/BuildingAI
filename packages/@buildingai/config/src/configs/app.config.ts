@@ -9,6 +9,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { getProjectRoot } from "./project-paths";
+
 export interface AppConfigType {
     name: string;
     version: string;
@@ -19,9 +21,7 @@ export interface AppConfigType {
  */
 function getVersionFromPackageJson(): string {
     try {
-        // Use process.cwd() to get the execution root directory
-        // In production, cwd is packages/api, so we need to go up 2 levels to reach monorepo root
-        const rootDir = path.resolve(process.cwd(), "..", "..");
+        const rootDir = getProjectRoot();
         const packageJsonPath = path.join(rootDir, "package.json");
 
         if (fs.existsSync(packageJsonPath)) {

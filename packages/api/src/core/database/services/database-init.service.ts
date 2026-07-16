@@ -1,4 +1,5 @@
 import { AppConfig } from "@buildingai/config/app.config";
+import { resolveProjectPath } from "@buildingai/config/project-paths";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Menu } from "@buildingai/db/entities";
 import {
@@ -30,6 +31,7 @@ import fse from "fs-extra";
 import * as path from "path";
 
 import { ExtensionUpgradeOrchestratorService } from "../extension-upgrade/extension-upgrade-orchestrator.service";
+import { migrateLegacyVersionState } from "../upgrade/legacy-version-state";
 import { VersionManagerService } from "./version-manager.service";
 
 /**
@@ -62,6 +64,11 @@ export class DatabaseInitService implements OnModuleInit {
         this.logger.log("Checking database initialization status...");
 
         try {
+            const migratedMarkers = await migrateLegacyVersionState();
+            if (migratedMarkers.length > 0) {
+                this.logger.log(`Migrated legacy version markers: ${migratedMarkers.join(", ")}`);
+            }
+
             // Scan controllers for permission sync
             this.permissionService.scanControllers();
 
@@ -202,7 +209,7 @@ export class DatabaseInitService implements OnModuleInit {
             }
 
             // 检查 .installed 文件是否存在
-            const installFilePath = path.join(process.cwd(), "..", "..", "storage", "data", ".installed");
+            const installFilePath = resolveProjectPath("storage", "data", ".installed");
             const fileExists = await fse.pathExists(installFilePath);
 
             // 如果数据库标记为已安装，但.installed文件不存在，自动创建文件
@@ -250,7 +257,7 @@ export class DatabaseInitService implements OnModuleInit {
     private async createInstallFile(): Promise<void> {
         try {
             // 创建 storage/data 目录（如果不存在）
-            const dataDir = path.join(process.cwd(), "..", "..", "storage", "data");
+            const dataDir = resolveProjectPath("storage", "data");
             await fse.ensureDir(dataDir);
 
             // 创建 .installed 文件
@@ -283,7 +290,7 @@ export class DatabaseInitService implements OnModuleInit {
     private async markSystemAsInstalled(): Promise<void> {
         try {
             // 创建 storage/data 目录（如果不存在）
-            const dataDir = path.join(process.cwd(), "..", "..", "storage", "data");
+            const dataDir = resolveProjectPath("storage", "data");
             await fse.ensureDir(dataDir);
 
             // 创建 .installed 文件
@@ -318,7 +325,7 @@ export class DatabaseInitService implements OnModuleInit {
      * @param version Version number
      */
     private async writeVersionFile(version: string): Promise<void> {
-        const versionsDir = path.join(process.cwd(), "..", "..", "storage", "data", "versions");
+        const versionsDir = resolveProjectPath("storage", "data", "versions");
         await fse.ensureDir(versionsDir);
 
         const versionFilePath = path.join(versionsDir, version);

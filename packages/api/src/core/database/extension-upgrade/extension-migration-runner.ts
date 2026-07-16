@@ -5,6 +5,8 @@ import fse from "fs-extra";
 import path from "path";
 import semver from "semver";
 
+import { parseMigrationName } from "../upgrade/migration-name";
+
 interface MigrationFile {
     name: string;
     path: string;
@@ -17,22 +19,6 @@ interface MigrationConstructor {
         up: (queryRunner: QueryRunner) => Promise<void>;
         down: (queryRunner: QueryRunner) => Promise<void>;
     };
-}
-
-function parseMigrationName(file: string) {
-    const match = file.match(/^(\d+)-(.+)\.js$/);
-    if (!match) return null;
-
-    const [, timestamp, rest] = match;
-    const parts = rest.split("-");
-    for (let i = parts.length; i > 0; i--) {
-        const version = parts.slice(0, i).join("-");
-        if (semver.valid(version)) {
-            return { timestamp: parseInt(timestamp, 10), version };
-        }
-    }
-
-    return null;
 }
 
 /**

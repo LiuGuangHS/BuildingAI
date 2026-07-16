@@ -3,6 +3,8 @@ import fse from "fs-extra";
 import * as path from "path";
 import * as semver from "semver";
 
+import { parseMigrationName } from "../upgrade/migration-name";
+
 /**
  * Extension version information interface
  */
@@ -17,19 +19,6 @@ export interface ExtensionVersionInfo {
     needsUpgrade: boolean;
     /** Versions that need to be upgraded through */
     upgradeVersions: string[];
-}
-
-function parseMigrationVersion(file: string) {
-    const match = file.match(/^\d+-(.+)\.js$/);
-    if (!match) return null;
-
-    const parts = match[1].split("-");
-    for (let i = parts.length; i > 0; i--) {
-        const version = parts.slice(0, i).join("-");
-        if (semver.valid(version)) return version;
-    }
-
-    return null;
 }
 
 /**
@@ -142,8 +131,8 @@ export class ExtensionVersionDetector {
                 const migrationFiles = await fse.readdir(migrationsDir);
                 migrationFiles.forEach((file) => {
                     if (file.endsWith(".js")) {
-                        const version = parseMigrationVersion(file);
-                        if (version) allVersions.add(version);
+                        const parsed = parseMigrationName(file);
+                        if (parsed) allVersions.add(parsed.version);
                     }
                 });
             }

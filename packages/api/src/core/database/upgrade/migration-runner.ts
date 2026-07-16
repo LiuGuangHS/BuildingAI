@@ -1,9 +1,12 @@
+import { resolveProjectPath } from "@buildingai/config/project-paths";
 import { DataSource, QueryRunner } from "@buildingai/db/typeorm";
 import { TerminalLogger } from "@buildingai/logger";
 import { Logger } from "@nestjs/common";
 import fse from "fs-extra";
 import * as path from "path";
 import * as semver from "semver";
+
+import { parseMigrationName } from "./migration-name";
 
 /**
  * Migration file interface
@@ -26,28 +29,6 @@ interface MigrationConstructor {
     };
 }
 
-function parseMigrationName(file: string) {
-    const match = file.match(/^(\d+)-(.+)\.js$/);
-    if (!match) return null;
-
-    const [, timestampStr, rest] = match;
-    const parts = rest.split("-");
-    if (parts.length === 0) return null;
-
-    // Same convention as parseMigrationVersion in version-detector.ts
-    const versionParts = [parts[0]];
-    if (!semver.valid(parts[0])) return null;
-
-    if (parts.length > 1 && /^(alpha|beta|rc|next)\.\d+$/.test(parts[1])) {
-        versionParts.push(parts[1]);
-    }
-
-    const version = versionParts.join("-");
-    if (!semver.valid(version)) return null;
-
-    return { timestamp: parseInt(timestampStr, 10), version };
-}
-
 /**
  * Migration runner
  *
@@ -64,7 +45,7 @@ export class MigrationRunner {
         const dbPackagePath = require.resolve("@buildingai/db");
         const dbDistPath = path.dirname(dbPackagePath);
         this.migrationsDir = path.join(dbDistPath, "migrations");
-        this.versionsDir = path.join(process.cwd(), "..", "..", "storage", "data", "versions");
+        this.versionsDir = resolveProjectPath("storage", "data", "versions");
     }
 
     /**

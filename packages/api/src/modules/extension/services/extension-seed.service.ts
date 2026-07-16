@@ -119,10 +119,6 @@ export class ExtensionSeedService {
                 return;
             }
 
-            if (this.dataSource.options.synchronize === false) {
-                await this.dataSource.synchronize();
-            }
-
             const seedRunner = new SeedRunner(this.dataSource);
             await seedRunner.run(seeders);
 

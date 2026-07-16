@@ -1,7 +1,10 @@
+import { resolveProjectPath } from "@buildingai/config/project-paths";
 import { Logger } from "@nestjs/common";
 import fse from "fs-extra";
 import * as path from "path";
 import * as semver from "semver";
+
+import { parseMigrationName } from "./migration-name";
 
 /**
  * Version information interface
@@ -17,51 +20,6 @@ export interface VersionInfo {
     upgradeVersions: string[];
 }
 
-function parseMigrationVersion(file: string) {
-    const match = file.match(/^\d+-(.+)\.js$/);
-    if (!match) return null;
-
-    const parts = match[1].split("-");
-    if (parts.length === 0) return null;
-
-    // Migration naming: <timestamp>-<version>[-<prerelease>]-<description>.js
-    // - First segment is always the major.minor.patch base version (e.g. 26.1.2)
-    // - Second segment, if it matches <tag>.<number> (rc.1 / beta.2 / alpha.1 / next.3),
-    //   is the prerelease identifier and part of the version.
-    // - Everything after that is the human-readable description.
-    const versionParts = [parts[0]];
-    if (!semver.valid(parts[0])) return null;
-
-    if (parts.length > 1 && /^(alpha|beta|rc|next)\.\d+$/.test(parts[1])) {
-        versionParts.push(parts[1]);
-    }
-
-    const version = versionParts.join("-");
-    return semver.valid(version) ? version : null;
-}
-
-/**
- * Walk up from the given directory to find the project root
- * (the directory containing pnpm-workspace.yaml).
- * Falls back to process.cwd() if not found.
- */
-function findProjectRoot(startDir: string): string {
-    let currentDir = startDir;
-    let maxDepth = 10;
-    while (maxDepth > 0) {
-        if (fse.existsSync(path.join(currentDir, "pnpm-workspace.yaml"))) {
-            return currentDir;
-        }
-        const parentDir = path.dirname(currentDir);
-        if (parentDir === currentDir) break;
-        currentDir = parentDir;
-        maxDepth--;
-    }
-    return process.cwd();
-}
-
-const PROJECT_ROOT = findProjectRoot(__dirname);
-
 /**
  * Version detector
  *
@@ -73,12 +31,12 @@ export class VersionDetector {
     private readonly packageJsonPath: string;
 
     constructor() {
-        this.versionsDir = path.join(process.cwd(), "..", "..", "storage", "data", "versions");
-        this.packageJsonPath = path.join(PROJECT_ROOT, "package.json");
+        this.versionsDir = resolveProjectPath("storage", "data", "versions");
+        this.packageJsonPath = resolveProjectPath("package.json");
     }
 
     getProjectRoot(): string {
-        return PROJECT_ROOT;
+        return resolveProjectPath();
     }
 
     getVersionsDir(): string {
@@ -199,8 +157,8 @@ export class VersionDetector {
                 const migrationFiles = await fse.readdir(migrationsDir);
                 migrationFiles.forEach((file) => {
                     if (file.endsWith(".js")) {
-                        const version = parseMigrationVersion(file);
-                        if (version) allVersions.add(version);
+                        const parsed = parseMigrationName(file);
+                        if (parsed) allVersions.add(parsed.version);
                     }
                 });
             }
