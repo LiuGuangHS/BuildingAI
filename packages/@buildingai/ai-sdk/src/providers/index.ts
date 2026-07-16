@@ -10,7 +10,7 @@ export { hunyuan, type HunyuanProviderSettings } from "./hunyuan";
 export { minimax, type MiniMaxProviderSettings } from "./minimax";
 export { moonshot, type MoonshotProviderSettings } from "./moonshot";
 export { ollama, type OllamaProviderSettings } from "./ollama";
-export { openai, type OpenAIProviderSettings } from "./openai";
+export { openai, type OpenAIApiMode, type OpenAIProviderSettings } from "./openai";
 export { openrouter, type OpenRouterProviderSettings } from "./openrouter";
 export * from "./reasoning";
 export { siliconflow, type SiliconFlowProviderSettings } from "./siliconflow";

@@ -62,6 +62,7 @@ export {
     ollama,
     type OllamaProviderSettings,
     openai,
+    type OpenAIApiMode,
     type OpenAIProviderSettings,
     openrouter,
     type OpenRouterProviderSettings,

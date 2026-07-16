@@ -1,3 +1,4 @@
+import type { OpenAIApiMode } from "@buildingai/ai-sdk";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { getProviderSecret } from "@buildingai/utils";
 
@@ -12,6 +13,7 @@ type ProviderSecretValue = { value: string; required: boolean };
 
 const API_KEY_KEYS = new Set(["apiKey", "api_key", "API_KEY", "key", "token"]);
 const BASE_URL_KEYS = new Set(["baseURL", "baseUrl", "base_url", "BASE_URL", "endpoint"]);
+const API_MODE_KEYS = new Set(["apiMode", "api_mode", "API_MODE"]);
 const WEBHOOK_SECRET_KEYS = new Set([
     "webhookSecret",
     "webhook_secret",
@@ -25,7 +27,14 @@ const WEBHOOK_SECRET_KEYS = new Set([
 export type NormalizedProviderConfig = {
     apiKey: string;
     baseURL: string;
+    apiMode?: OpenAIApiMode;
     webhookSecret: string;
+};
+
+export type ProviderRuntimeConfig = {
+    apiKey: string;
+    baseURL?: string;
+    apiMode?: OpenAIApiMode;
 };
 
 export type ProviderEndpointCredentialInput = {
@@ -63,7 +72,19 @@ export function normalizeProviderConfig(
     return {
         apiKey: getProviderSecret("apiKey", providerSecretConfig),
         baseURL: getProviderSecret("baseUrl", providerSecretConfig),
+        apiMode: normalizeOpenAIApiMode(providerSecretConfig.apiMode?.value),
         webhookSecret: getProviderSecret("webhookSecret", providerSecretConfig),
+    };
+}
+
+export function normalizeProviderRuntimeConfig(
+    config: Record<string, ProviderSecretFieldValue> = {},
+): ProviderRuntimeConfig {
+    const values = normalizeProviderConfig(config);
+    return {
+        apiKey: values.apiKey,
+        baseURL: values.baseURL || undefined,
+        apiMode: values.apiMode,
     };
 }
 
@@ -107,6 +128,11 @@ export async function resolveProviderSecretValue(
     return value;
 }
 
+function normalizeOpenAIApiMode(value: string | undefined): OpenAIApiMode | undefined {
+    if (value === "chat" || value === "responses") return value;
+    return undefined;
+}
+
 function normalizeProviderSecretConfig(
     config: Record<string, ProviderSecretFieldValue>,
 ): Record<string, ProviderSecretValue> {
@@ -125,6 +151,9 @@ function normalizeProviderSecretConfig(
         }
         if (BASE_URL_KEYS.has(key)) {
             normalized.baseUrl = { value, required };
+        }
+        if (API_MODE_KEYS.has(key)) {
+            normalized.apiMode = { value, required };
         }
         if (WEBHOOK_SECRET_KEYS.has(key)) {
             normalized.webhookSecret = { value, required };
