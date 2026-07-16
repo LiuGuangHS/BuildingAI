@@ -13,11 +13,21 @@ jest.mock("web-push", () => ({
     },
 }));
 
-jest.mock("@buildingai/errors", () => ({
-    HttpErrorFactory: {
-        badRequest: (message: string) => new Error(message),
-    },
+jest.mock("@buildingai/db/entities", () => ({ PushSubscription: class PushSubscription {} }));
+jest.mock("@buildingai/db/@nestjs/typeorm", () => ({
+    InjectRepository: () => () => undefined,
 }));
+jest.mock("@buildingai/db/typeorm", () => ({}));
+jest.mock("@buildingai/dict", () => ({ DictService: class DictService {} }));
+
+jest.mock("@buildingai/errors", () => {
+    return {
+        ApplicationError: class ApplicationError extends Error {},
+        HttpErrorFactory: {
+            badRequest: (message: string) => new Error(message),
+        },
+    };
+});
 
 jest.mock("@buildingai/utils", () => ({
     isPrivateOrReservedIp: (address: string) => {
@@ -111,6 +121,21 @@ describe("assertSafePushEndpoint", () => {
 });
 
 describe("WebPushService VAPID subject", () => {
+    it("returns only the public VAPID key", async () => {
+        const service = new WebPushService(
+            {} as ConstructorParameters<typeof WebPushService>[0],
+            {
+                get: jest.fn().mockResolvedValue({
+                    publicKey: "public-key",
+                    privateKey: "private-key",
+                }),
+                set: jest.fn(),
+            } as unknown as ConstructorParameters<typeof WebPushService>[1],
+        );
+
+        await expect(service.getPublicKey()).resolves.toEqual({ publicKey: "public-key" });
+    });
+
     it("uses configured site URL first", async () => {
         const { getSubject } = createWebPushService("https://ai.example.com/app");
 

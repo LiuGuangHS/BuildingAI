@@ -242,6 +242,7 @@ export class WebPushService {
                 JSON.stringify(payload),
                 {
                     TTL: 2_419_200,
+                    timeout: 10_000,
                 },
             );
 

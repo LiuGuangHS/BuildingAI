@@ -9,13 +9,16 @@ import {
     FIELD_LIMITS,
 } from "./notification-normalize.util";
 import { getExtensionIdentifierFromStack } from "@buildingai/core/modules";
-import { ExtensionNotificationService } from "../../../../../@buildingai/extension-sdk/src/modules/notification/extension-notification.service";
+import { ExtensionNotificationService } from "@buildingai/extension-sdk/notification";
 
-jest.mock("@buildingai/errors", () => ({
-    HttpErrorFactory: {
-        badRequest: (message: string) => new Error(message),
-    },
-}));
+jest.mock("@buildingai/errors", () => {
+    return {
+        ApplicationError: class ApplicationError extends Error {},
+        HttpErrorFactory: {
+            badRequest: (message: string) => new Error(message),
+        },
+    };
+});
 
 jest.mock("@buildingai/core/modules", () => ({
     EXTENSION_NOTIFICATION_PORT: Symbol.for("EXTENSION_NOTIFICATION_PORT"),
