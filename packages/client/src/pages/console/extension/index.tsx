@@ -549,17 +549,16 @@ const ExtensionIndexPage = () => {
             data?.items.map((extension, index) => (
               <div
                 key={index}
-                className="bg-card group/extension-item relative flex min-h-50 flex-col gap-4 overflow-hidden rounded-xl border p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                className="bg-card group/extension-item relative flex flex-col gap-4 rounded-lg border p-4"
               >
-                <div className="from-primary/10 pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r to-transparent" />
-                <div className="flex items-start gap-3 pr-8">
-                  <Avatar className="relative size-13 rounded-xl ring-1 ring-border/60 after:rounded-xl">
-                    <AvatarImage src={extension.icon} alt={extension.name} className="rounded-xl" />
-                    <AvatarFallback className="bg-primary/10 text-primary size-13 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <Avatar className="relative size-12 rounded-lg after:rounded-lg">
+                    <AvatarImage src={extension.icon} alt={extension.name} className="rounded-lg" />
+                    <AvatarFallback className="size-12 rounded-lg">
                       <SvgIcons.puzzle />
                     </AvatarFallback>
                     <PermissionGuard permissions="extensions:extensions:set-status">
-                      <div className="center absolute inset-0 z-1 rounded-xl bg-black/5 opacity-0 backdrop-blur-xl transition-opacity group-hover/extension-item:opacity-100 dark:bg-black/15">
+                      <div className="center absolute inset-0 z-1 rounded-lg bg-black/5 opacity-0 backdrop-blur-xl transition-opacity group-hover/extension-item:opacity-100 dark:bg-black/15">
                         <Switch
                           checked={extension.status === ExtensionStatus.ENABLED}
                           onCheckedChange={() => handleToggleStatus(extension)}
@@ -568,14 +567,14 @@ const ExtensionIndexPage = () => {
                       </div>
                     </PermissionGuard>
                   </Avatar>
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="truncate text-base font-semibold tracking-tight">{extension.name}</div>
+                  <div className="flex flex-col">
+                    <div>{extension.name}</div>
                     {extension.isCompatible ? (
-                      <p className="text-muted-foreground line-clamp-2 text-xs leading-5">
+                      <p className="text-muted-foreground line-clamp-1 text-xs">
                         {extension.description}
                       </p>
                     ) : (
-                      <p className="text-destructive line-clamp-2 flex items-center gap-0.5 text-xs leading-5">
+                      <p className="text-destructive line-clamp-1 flex items-center gap-0.5 text-xs">
                         <SvgIcons.circleXFilled className="fill-destructive size-3.5" />
                         平台版本不兼容
                       </p>
@@ -652,30 +651,28 @@ const ExtensionIndexPage = () => {
                 </div>
 
                 <div className="flex flex-col gap-4">
-                  <div className="flex min-h-12 flex-wrap items-start gap-2">
+                  <div className="flex min-h-12 flex-wrap gap-2">
                     <StatusBadge active={extension.status === ExtensionStatus.ENABLED} />
 
-                    <Badge variant="secondary" className="rounded-full px-2.5 font-mono">
-                      v{extension.version}
-                    </Badge>
+                    <Badge variant="secondary">v{extension.version}</Badge>
 
-                    {extension.isLocal && <Badge variant="secondary" className="rounded-full px-2.5">本地</Badge>}
                     {extension.supportTerminal?.map((terminal) => (
-                      <Badge key={terminal} variant="outline" className="rounded-full px-2.5">
+                      <Badge key={terminal} variant="secondary">
                         {TERMINAL_LABEL_MAP[terminal] || "未知"}
                       </Badge>
                     ))}
+                    {extension.isLocal && <Badge variant="secondary">本地</Badge>}
                   </div>
 
-                  <div className="mt-auto flex items-end justify-between gap-3 border-t pt-4">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <Avatar className="size-5 shrink-0">
+                  <div className="flex items-end justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Avatar className="size-5">
                         <AvatarImage src={extension.author?.avatar} />
                         <AvatarFallback>
                           <User className="size-3" />
                         </AvatarFallback>
                       </Avatar>
-                      <span className="text-muted-foreground truncate text-xs">
+                      <span className="line-clamp-1 text-xs">
                         {extension.author?.name || "未知作者"}
                       </span>
                     </div>
