@@ -70,7 +70,7 @@ export function CreativeCanvasWorkspace({ generation, onReturnToGenerate, onCont
                         </div>
                         <div className="space-y-1 rounded-lg border bg-background p-3 text-sm">
                             <p className="text-xs font-medium text-muted-foreground">结果</p>
-                            <p>{generation?.resultImages?.length ?? 0} 张图片，可在创作流中继续生成分支。</p>
+                            <p>{generation?.resultImages?.length ?? 0} 张图片，可整理、批注和导出；分支生成待模型支持后开放。</p>
                         </div>
                         <div className="space-y-2 border-t pt-3">
                             <Button className="w-full justify-start gap-2" onClick={onReturnToGenerate}>

@@ -15,12 +15,15 @@ export function WorkspaceShell({ mode, onModeChange, children, quickActions }: W
     const navigate = useNavigate();
 
     return (
-        <div className="min-w-0 bg-muted/20 p-2 sm:p-2.5">
+        <div className="ef-image-workbench min-w-0 bg-muted/20 p-2 sm:p-2.5">
             <div className="flex min-w-0 flex-col gap-2.5">
-                <header className="grid min-w-0 items-center gap-2.5 rounded-lg border bg-card/95 p-2 shadow-sm sm:p-3 md:grid-cols-[minmax(13rem,1fr)_auto_auto]">
+                <header className="ef-image-controlbar grid min-w-0 items-center gap-2.5 rounded-lg border bg-card/95 p-2 shadow-sm sm:p-3 md:grid-cols-[minmax(13rem,1fr)_auto_auto]">
                     <div className="min-w-0 px-1">
-                        <h1 className="truncate text-base font-semibold leading-none">新图片任务</h1>
-                        <p className="mt-1 hidden text-xs text-muted-foreground md:block">输入提示词开始生成，结果可继续整理到画布。</p>
+                        <div className="flex items-center gap-2">
+                            <span aria-hidden="true" className="h-4 w-1 rounded-full bg-[color:var(--ef-image-cyanotype)]" />
+                            <h1 className="truncate text-base font-semibold leading-none">新图片任务</h1>
+                        </div>
+                        <p className="mt-1 hidden text-xs text-muted-foreground md:block">像在灯箱上挑片：先生成，再下载、复用或整理到画布。</p>
                     </div>
 
                     {mode && onModeChange ? <WorkspaceModeSwitch value={mode} onChange={onModeChange} /> : null}

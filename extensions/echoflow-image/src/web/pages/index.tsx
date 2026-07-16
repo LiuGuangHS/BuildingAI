@@ -61,6 +61,10 @@ export default function EchoflowImagePublicPage() {
     } = useWebGenerationListQuery({ page: 1, pageSize: 6 });
     const { data: models = [], isLoading: modelsLoading, isError: modelsError } = useWebImageModelOptionsQuery();
     const { data: templateData } = useWebTemplatesQuery({ page: 1, pageSize: 20 });
+    const canContinueFromImage = useMemo(
+        () => models.some((model) => model.capabilities?.imageToImage === true),
+        [models],
+    );
 
     const createMutation = useWebCreateGenerationMutation();
     const deleteMutation = useWebDeleteGenerationMutation();
@@ -137,6 +141,10 @@ export default function EchoflowImagePublicPage() {
     };
 
     const handleContinueFromImage = (values: Partial<CreateGenerationParams>) => {
+        if (!canContinueFromImage) {
+            toast.info("参考图生成能力将在后续版本开放");
+            return;
+        }
         setReuseValues(values);
         setWorkspaceMode("quick");
         toast.success("已填入参考图，可继续生成分支");
@@ -154,11 +162,12 @@ export default function EchoflowImagePublicPage() {
                 generation={currentGeneration}
                 isLoading={isGenerating && !currentGeneration?.resultImages?.length}
                 variant="stage"
+                onOpenCanvas={() => setWorkspaceMode("canvas")}
                 onUsePrompt={handleUsePrompt}
-                onContinueFromImage={handleContinueFromImage}
+                onContinueFromImage={canContinueFromImage ? handleContinueFromImage : undefined}
             />
         ),
-        [currentGeneration, isGenerating],
+        [currentGeneration, isGenerating, canContinueFromImage],
     );
     const quickHistory = useMemo(
         () =>
@@ -208,7 +217,7 @@ export default function EchoflowImagePublicPage() {
                     <CreativeCanvasWorkspace
                         generation={currentGeneration}
                         onReturnToGenerate={() => setWorkspaceMode("quick")}
-                        onContinueFromImage={handleContinueFromImage}
+                        onContinueFromImage={canContinueFromImage ? handleContinueFromImage : undefined}
                     />
                 </Suspense>
             ) : (

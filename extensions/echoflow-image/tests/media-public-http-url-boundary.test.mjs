@@ -27,12 +27,13 @@ test("media model endpoints reuse extension-sdk public HTTP URL guards", () => {
     }
 });
 
-test("media endpoint persistence validates DNS-backed public Base URLs", () => {
+test("media model config uses main-site models instead of persisting provider endpoints", () => {
     for (const file of files.filter((item) => item.pathname.includes("model-config.service.ts"))) {
         const source = readFileSync(file, "utf8");
 
-        assert.match(source, /assertPublicHttpUrl/);
-        assert.match(source, /normalizeEndpointConfigsForSave/);
+        assert.match(source, /PublicAiModelService/);
+        assert.doesNotMatch(source, /normalizeEndpointConfigsForSave/);
+        assert.doesNotMatch(source, /resolveProviderEndpointCredential/);
     }
 });
 
@@ -45,10 +46,6 @@ test("media provider HTTP requests reuse the extension SDK provider client", () 
         new URL("../src/api/modules/generation/services/generation.service.ts", import.meta.url),
         "utf8",
     );
-    const openaiImageClient = readFileSync(
-        new URL("../src/api/modules/generation/services/openai-image-client.ts", import.meta.url),
-        "utf8",
-    );
     const videoHttpClient = readFileSync(
         new URL("../../echoflow-video/src/api/modules/generation/services/video-http-client.ts", import.meta.url),
         "utf8",
@@ -57,9 +54,8 @@ test("media provider HTTP requests reuse the extension SDK provider client", () 
     assert.match(imageHttpClient, /requestProviderText/);
     assert.match(imageHttpClient, /safeJsonParse/);
     assert.match(imageGenerationService, /safeJsonParse/);
+    assert.match(imageGenerationService, /aiModelService\.generateImage\(modelConfig\.mainModelId/);
     assert.doesNotMatch(imageGenerationService, /JSON\.parse\(text\)/);
-    assert.match(openaiImageClient, /@buildingai\/extension-sdk/);
-    assert.doesNotMatch(openaiImageClient, /safeJsonParse,\s*\n}\s+from\s+"\.\/image-http-client"/);
     assert.match(videoHttpClient, /requestProviderJson/);
     assert.match(videoHttpClient, /testProviderJsonEndpoint/);
     assert.doesNotMatch(videoHttpClient, /\bfetch\(/);

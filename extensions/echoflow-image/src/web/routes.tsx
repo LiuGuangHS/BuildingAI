@@ -1,6 +1,7 @@
 import { defineRouteOption } from "@buildingai/web-core";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { lazy, Suspense, type ReactNode } from "react";
+import type { RouteObject } from "react-router-dom";
 
 import packageJson from "./../../package.json";
 
@@ -27,6 +28,19 @@ function RouteLoading() {
     );
 }
 
+function createDevRoutes(): RouteObject[] {
+    if (!import.meta.env.DEV) return [];
+
+    const DesignSandboxPage = lazy(() => import("./pages/dev/design-sandbox"));
+
+    return [
+        {
+            path: "__design",
+            element: <LazyPage><DesignSandboxPage /></LazyPage>,
+        },
+    ];
+}
+
 export const routeOption = defineRouteOption({
     base: `extension/${packageJson.name}`,
     identifier: packageJson.name,
@@ -35,6 +49,7 @@ export const routeOption = defineRouteOption({
             index: true,
             element: <LazyPage><EchoflowImagePublicPage /></LazyPage>,
         },
+        ...createDevRoutes(),
         {
             path: "history",
             element: <LazyPage><WebHistoryPage /></LazyPage>,

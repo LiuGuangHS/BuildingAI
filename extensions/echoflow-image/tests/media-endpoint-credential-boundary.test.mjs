@@ -7,32 +7,24 @@ const files = [
     new URL("../../echoflow-video/src/api/modules/generation/services/model-config.service.ts", import.meta.url),
 ];
 
-test("image model config keeps the provider default base URL in the model catalog", () => {
-    const serviceSource = readFileSync(files[0], "utf8");
-    const clientSource = readFileSync(new URL("../src/api/modules/generation/services/openai-image-client.ts", import.meta.url), "utf8");
-    const catalogSource = readFileSync(new URL("../src/api/modules/config/services/image-model-catalog.ts", import.meta.url), "utf8");
-
-    assert.match(catalogSource, /export const DEFAULT_IMAGE_GATEWAY_BASE_URL = "https:\/\/api\.openai\.com\/v1";/);
-    assert.match(serviceSource, /DEFAULT_IMAGE_GATEWAY_BASE_URL/);
-    assert.match(clientSource, /DEFAULT_IMAGE_GATEWAY_BASE_URL/);
-    assert.doesNotMatch(serviceSource, /defaultBaseUrl:\s*"https:\/\/api\.openai\.com\/v1"/);
-    assert.doesNotMatch(clientSource, /"https:\/\/api\.openai\.com\/v1"/);
-});
-
-test("media model config services resolve endpoint credentials through the extension SDK", () => {
+test("media model configs reuse main-site models instead of endpoint credentials", () => {
     for (const file of files) {
         const source = readFileSync(file, "utf8");
 
-        assert.match(source, /resolveProviderEndpointCredential/);
-        assert.doesNotMatch(source, /normalizeProviderConfig/);
-        assert.doesNotMatch(source, /getConfigKeyValuePairs\(endpoint\.secretId\)/);
+        assert.match(source, /PublicAiModelService/);
+        assert.match(source, /listActive(?:Image|Video)Models/);
+        assert.doesNotMatch(source, /resolveProviderEndpointCredential/);
+        assert.doesNotMatch(source, /getConfigKeyValuePairs/);
+        assert.doesNotMatch(source, /secretId/);
     }
 });
 
-test("endpoint credential helper is exported from source and dist entrypoints", () => {
-    const sourceEntry = readFileSync(new URL("../../../packages/@buildingai/extension-sdk/src/index.ts", import.meta.url), "utf8");
-    const distEntry = readFileSync(new URL("../../../packages/@buildingai/extension-sdk/dist/index.d.ts", import.meta.url), "utf8");
+test("image generation uses the selected main-site model id", () => {
+    const source = readFileSync(
+        new URL("../src/api/modules/generation/services/generation.service.ts", import.meta.url),
+        "utf8",
+    );
 
-    assert.match(sourceEntry, /resolveProviderEndpointCredential/);
-    assert.match(distEntry, /resolveProviderEndpointCredential/);
+    assert.match(source, /aiModelService\.generateImage\(modelConfig\.mainModelId/);
+    assert.doesNotMatch(source, /openai-image-client/);
 });

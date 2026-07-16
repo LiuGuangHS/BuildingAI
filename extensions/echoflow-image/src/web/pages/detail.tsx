@@ -188,7 +188,6 @@ export default function DetailPage() {
                             )}
                             <div className="grid gap-3 sm:grid-cols-2">
                                 <InfoItem label="模型" value={data.modelName || data.modelId} />
-                                <InfoItem label="Provider" value={data.provider || "-"} />
                                 <InfoItem label="尺寸" value={data.size} />
                                 <InfoItem label="数量" value={`${data.n}`} />
                                 <InfoItem label="质量" value={data.quality || "-"} />

@@ -30,7 +30,7 @@ const modeItems: Array<{
 export function WorkspaceModeSwitch({ value, onChange }: ModeSwitchProps) {
     return (
         <Tabs value={value} onValueChange={(next) => onChange(next as WorkspaceMode)} className="min-w-0">
-            <TabsList className="grid h-auto grid-cols-2 gap-1 rounded-lg border bg-muted/20 p-1" aria-label="图片工作区">
+            <TabsList className="ef-image-contact-strip grid h-auto grid-cols-2 gap-1 rounded-lg border bg-muted/20 p-1" aria-label="图片工作区">
                 {modeItems.map((item) => (
                     <TabsTrigger
                         key={item.value}

@@ -94,7 +94,7 @@ export function ResultGallery({
         <Card
             className={cn(
                 "gap-0 overflow-hidden rounded-lg py-0 shadow-sm",
-                isStage && "min-h-[28rem] md:min-h-[34rem]",
+                isStage && "ef-image-light-table min-h-[28rem] md:min-h-[34rem]",
                 !isStage && resolvedImages.length > 0 && "border-primary/10 bg-gradient-to-br from-background via-background to-primary/[0.03]",
             )}
         >
@@ -144,7 +144,7 @@ export function ResultGallery({
                                         : generation.status === ImageGenerationStatus.FAILED ? "destructive"
                                             : "secondary"
                                 }
-                                className="shrink-0"
+                                className={cn("shrink-0", generation.status !== ImageGenerationStatus.FAILED && "ef-image-mask-tape")}
                             >
                                 {getStatusLabel(generation.status)}
                             </Badge>
@@ -224,7 +224,7 @@ export function ResultGallery({
                                         variant="outline"
                                         disabled={!onUsePrompt}
                                         onClick={() => onUsePrompt?.(suggestion.prompt)}
-                                        className="h-auto justify-start gap-2 rounded-md bg-background p-2 text-left"
+                                        className="h-auto justify-start gap-2 rounded-md bg-background p-2 text-left shadow-xs hover:border-primary/30 hover:bg-primary/[0.03]"
                                     >
                                         <span
                                             aria-hidden="true"
@@ -260,7 +260,7 @@ export function ResultGallery({
                             {resolvedImages.map((image, index) => {
                                 const src = resolveImageSrc(image);
                                 return (
-                                    <div key={index} className="group overflow-hidden rounded-lg border bg-background shadow-sm transition hover:border-primary/25 hover:shadow-md">
+                                    <div key={index} className="ef-image-contact-frame group overflow-hidden rounded-lg border bg-background shadow-sm transition hover:border-primary/25 hover:shadow-md">
                                         {src ? (
                                             <>
                                                 <div className="relative aspect-square overflow-hidden">
@@ -294,9 +294,12 @@ export function ResultGallery({
                                                         </Button>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {resolvedImages.length > 1 ? `结果 ${index + 1}` : "生成结果"}
+                                                <div className="flex items-center justify-between gap-2 border-t px-3 py-2.5">
+                                                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                                                        {resolvedImages.length > 1 ? `Frame ${String(index + 1).padStart(2, "0")}` : "Frame 01"}
+                                                    </span>
+                                                    <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                                                        {[generation?.size, generation?.quality || "standard"].filter(Boolean).join(" · ")}
                                                     </span>
                                                 </div>
                                             </>

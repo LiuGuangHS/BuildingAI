@@ -12,6 +12,7 @@ const GENERATION_FORM_FILE = new URL("../src/web/components/generation-form.tsx"
 const RESULT_GALLERY_FILE = new URL("../src/web/components/result-gallery.tsx", import.meta.url);
 const ERROR_STATE_FILE = new URL("../src/web/components/error-state.tsx", import.meta.url);
 const WEB_INDEX_FILE = new URL("../src/web/pages/index.tsx", import.meta.url);
+const WEB_DETAIL_FILE = new URL("../src/web/pages/detail.tsx", import.meta.url);
 const WEB_MAIN_FILE = new URL("../src/web/main.tsx", import.meta.url);
 const WEB_SERVICES_BILLING_FILE = new URL("../src/web/services/web/billing.ts", import.meta.url);
 const WEB_SERVICES_GENERATION_FILE = new URL("../src/web/services/web/generation.ts", import.meta.url);
@@ -23,6 +24,8 @@ const GENERATION_MODULE_FILE = new URL("../src/api/modules/generation/generation
 const WORKSPACE_SHELL_FILE = new URL("../src/web/components/workspace/workspace-shell.tsx", import.meta.url);
 const MODE_SWITCH_FILE = new URL("../src/web/components/workspace/mode-switch.tsx", import.meta.url);
 const REFERENCE_UPLOAD_FILE = new URL("../src/web/components/reference-image-upload.tsx", import.meta.url);
+const FLOW_CANVAS_FILE = new URL("../src/web/components/canvas/generation-flow-canvas.tsx", import.meta.url);
+const STYLE_FILE = new URL("../src/web/styles/index.css", import.meta.url);
 const VITE_CONFIG_FILE = new URL("../vite.config.ts", import.meta.url);
 const BUILD_WEB_SCRIPT_FILE = new URL("../scripts/build-web.mjs", import.meta.url);
 const PACKAGE_FILE = new URL("../package.json", import.meta.url);
@@ -30,8 +33,16 @@ const PACKAGE_FILE = new URL("../package.json", import.meta.url);
 function extractMethod(source, name) {
     const start = source.indexOf(`private ${name}`);
     assert.notEqual(start, -1, `${name} should exist`);
-    const next = source.indexOf("\n    async ", start + 1);
-    return source.slice(start, next === -1 ? undefined : next);
+    let depth = 0;
+    for (let index = start; index < source.length; index++) {
+        const char = source[index];
+        if (char === "{") depth += 1;
+        if (char === "}") {
+            depth -= 1;
+            if (depth === 0) return source.slice(start, index + 1);
+        }
+    }
+    return source.slice(start);
 }
 
 function extractInterface(source, name) {
@@ -41,29 +52,37 @@ function extractInterface(source, name) {
     return source.slice(start, next === -1 ? undefined : next);
 }
 
-test("image web serializer strips provider debug fields", async () => {
+test("image web serializer uses an explicit public whitelist", async () => {
     const source = await readFile(SERVICE_FILE, "utf8");
     const method = extractMethod(source, "toPublicGeneration");
-    for (const field of ["rawRequest", "rawResponse", "baseURL", "provider", "deletedAt"]) {
-        assert.match(method, new RegExp(`${field}: _${field}`));
+
+    for (const field of ["id", "status", "prompt", "modelId", "resultImages", "billingAmount"]) {
+        assert.match(method, new RegExp(`${field}: record\\.${field}`));
     }
+    for (const field of ["rawRequest", "rawResponse", "rawEvents", "baseURL", "provider", "apiMode", "requestPolicy", "failureCode", "failureCategory", "storageFiles", "deletedAt"]) {
+        assert.doesNotMatch(method, new RegExp(`record\\.${field}\\b`));
+    }
+    assert.doesNotMatch(method, /\.\.\./);
 });
 
 test("image public model options and types do not expose provider details", async () => {
-    const [modelConfigSource, formSource, typesSource] = await Promise.all([
+    const [modelConfigSource, formSource, detailSource, typesSource] = await Promise.all([
         readFile(MODEL_CONFIG_SERVICE_FILE, "utf8"),
         readFile(GENERATION_FORM_FILE, "utf8"),
+        readFile(WEB_DETAIL_FILE, "utf8"),
         readFile(TYPES_FILE, "utf8"),
     ]);
     const methodStart = modelConfigSource.indexOf("toWebOption(config:");
-    const method = modelConfigSource.slice(
-        methodStart,
-        modelConfigSource.indexOf("\n    private async ensureDefaultModelConfigs", methodStart),
-    );
+    const methodEnd = modelConfigSource.indexOf("\n    private toRuntimeWebCapabilities", methodStart);
+    const method = modelConfigSource.slice(methodStart, methodEnd === -1 ? undefined : methodEnd);
 
     assert.doesNotMatch(method, /\bprovider:/);
     assert.doesNotMatch(method, /pluginConfigId|modelConfigId|promptEnhancerModelId/);
+    assert.match(method, /toRuntimeWebCapabilities/);
+    assert.match(method, /toPublicDefaultParams/);
+    assert.match(method, /toPublicAllowedParams/);
     assert.doesNotMatch(formSource, /\.provider\b/);
+    assert.doesNotMatch(detailSource, /\.provider\b|Provider|baseURL|rawRequest|rawResponse/);
     assert.doesNotMatch(extractInterface(typesSource, "ImageGeneration"), /^\s+provider\??:/m);
     assert.doesNotMatch(extractInterface(typesSource, "ImageModelOption"), /^\s+provider(Name)?\??:/m);
     assert.doesNotMatch(extractInterface(typesSource, "ImageModelOption"), /^\s+promptEnhancerModelId\??:/m);
@@ -124,6 +143,22 @@ test("image generation form uses system Button instead of native buttons", async
     assert.doesNotMatch(source, /<button\b/);
 });
 
+test("image generation form keeps template reuse lightweight and local-only", async () => {
+    const source = await readFile(GENERATION_FORM_FILE, "utf8");
+
+    assert.match(source, /@buildingai\/ui\/components\/ui\/popover/);
+    assert.match(source, /getLocalStorage,\s*safeJsonParse,\s*safeJsonStringify/);
+    assert.match(source, /FAVORITE_TEMPLATE_STORAGE_KEY/);
+    assert.match(source, /const QUICK_TEMPLATE_COUNT = 6/);
+    assert.match(source, /function readFavoritePrompts/);
+    assert.match(source, /function writeFavoritePrompts/);
+    assert.match(source, /const applyTemplate = \(template: TemplateItem, mode: "replace" \| "append"\)/);
+    assert.match(source, /mode === "append"/);
+    assert.match(source, /收藏模板|取消收藏/);
+    assert.doesNotMatch(source, /window\.localStorage/);
+    assert.doesNotMatch(source, /JSON\.parse\(/);
+});
+
 test("image console model fields use the shared Label component instead of raw label controls", async () => {
     const source = await readFile(CONSOLE_MODELS_FILE, "utf8");
     assert.match(source, /@buildingai\/ui\/components\/ui\/label/);
@@ -135,6 +170,53 @@ test("image batch download does not use artificial timer delays", async () => {
     const source = await readFile(RESULT_GALLERY_FILE, "utf8");
     assert.match(source, /function ResultGallery/);
     assert.doesNotMatch(source, /setTimeout\(/);
+});
+
+test("image result stage exposes prompt starters and image continuation without fake progress", async () => {
+    const source = await readFile(RESULT_GALLERY_FILE, "utf8");
+
+    assert.match(source, /emptyPromptSuggestions/);
+    assert.match(source, /ef-image-light-table/);
+    assert.match(source, /ef-image-contact-frame/);
+    assert.match(source, /onUsePrompt\?: \(prompt: string\) => void/);
+    assert.match(source, /onOpenCanvas\?: \(\) => void/);
+    assert.match(source, /onContinueFromImage\?: \(values: Partial<CreateGenerationParams>\) => void/);
+    assert.match(source, /function getRunningStage/);
+    assert.match(source, /const continueFromImage = \(image: GeneratedImageRecord\)/);
+    assert.match(source, /sourceImages: \[\{ url: src, mimeType: image\.mimeType \}\]/);
+    assert.match(source, /作为参考图继续生成/);
+    assert.doesNotMatch(source, /\b45%|\b50%|\b75%/);
+    assert.doesNotMatch(source, /setTimeout\(/);
+});
+
+test("image public web hides image continuation when runtime model options do not support it", async () => {
+    const [indexSource, modelConfigSource, flowSource, serviceSource] = await Promise.all([
+        readFile(WEB_INDEX_FILE, "utf8"),
+        readFile(MODEL_CONFIG_SERVICE_FILE, "utf8"),
+        readFile(new URL("../src/web/components/canvas/generation-flow-canvas.tsx", import.meta.url), "utf8"),
+        readFile(SERVICE_FILE, "utf8"),
+    ]);
+
+    assert.match(modelConfigSource, /toRuntimeWebCapabilities/);
+    assert.match(modelConfigSource, /imageToImage:\s*false/);
+    assert.match(modelConfigSource, /mask:\s*false/);
+    assert.match(modelConfigSource, /multiReference:\s*false/);
+    assert.match(modelConfigSource, /negativePrompt:\s*false/);
+    assert.match(indexSource, /const canContinueFromImage = useMemo/);
+    assert.match(indexSource, /onOpenCanvas=\{\(\) => setWorkspaceMode\("canvas"\)\}/);
+    assert.match(indexSource, /onContinueFromImage=\{canContinueFromImage \? handleContinueFromImage : undefined\}/);
+    assert.match(flowSource, /const canContinueFromImage = Boolean\(onContinueFromImage\)/);
+    assert.match(flowSource, /disabled=\{!image\.src \|\| !canContinueFromImage\}/);
+    assert.match(flowSource, /待模型支持/);
+    assert.match(serviceSource, /assertRuntimeGenerationSupported\(this\.getRequestedReservedCapabilities\(dto\)\)/);
+    assert.match(serviceSource, /getRequestedReservedCapabilities/);
+    assert.match(serviceSource, /暂不支持参考图生成/);
+    assert.match(serviceSource, /暂不支持局部重绘/);
+
+    const createStart = serviceSource.indexOf("async createAndGenerate");
+    const guardIndex = serviceSource.indexOf("assertRuntimeGenerationSupported(this.getRequestedReservedCapabilities(dto))", createStart);
+    const normalizeIndex = serviceSource.indexOf("normalizeGenerationRequest(dto", createStart);
+    assert.ok(guardIndex > createStart && guardIndex < normalizeIndex, "reserved reference/mask guard must run before request normalization");
 });
 
 test("image shared error state avoids static lucide imports on always-available UI paths", async () => {
@@ -154,6 +236,8 @@ test("image public workspace header is a workspace control bar", async () => {
     ]);
 
     assert.match(shellSource, /新图片任务/);
+    assert.match(shellSource, /ef-image-workbench/);
+    assert.match(shellSource, /ef-image-controlbar/);
     assert.doesNotMatch(shellSource, /EchoFlowAI 绘画/);
     assert.match(modeSource, /@buildingai\/ui\/components\/ui\/tabs/);
     assert.match(modeSource, /<Tabs/);
@@ -179,8 +263,13 @@ test("image route pages are lazy-loaded instead of bundled into the route module
     assert.doesNotMatch(source, /import\s+\w+Page\s+from\s+"\.\/pages\//);
     assert.doesNotMatch(source, /import\s+\w+Page\s+from\s+"\.\/pages\/console\//);
 
+    assert.match(source, /function createDevRoutes\(\): RouteObject\[\]/);
+    assert.match(source, /if \(!import\.meta\.env\.DEV\) return \[\];/);
+    assert.match(source, /const DesignSandboxPage = lazy\(\(\) => import\("\.\/pages\/dev\/design-sandbox"\)\)/);
+    assert.match(source, /\.\.\.createDevRoutes\(\)/);
+
     const routeCount = (source.match(/element:\s*<LazyPage>/g) ?? []).length;
-    assert.equal(routeCount, 9, "all image web and console routes should use LazyPage");
+    assert.equal(routeCount, 10, "all image web, console, and dev-only design routes should use LazyPage");
 });
 
 test("image entry reuses the extension RootLayout query client instead of nesting another provider", async () => {
@@ -220,6 +309,18 @@ test("image web rate limits use the extension SDK limiter instead of only busine
     assert.equal(packageJson.dependencies["@buildingai/cache"], "workspace:*");
     assert.doesNotMatch(controllerSource + moduleSource, /ImageRequestLimiterService/);
 });
+
+test("image generation failures keep provider details out of public copy", async () => {
+    const source = await readFile(SERVICE_FILE, "utf8");
+
+    assert.match(source, /private publicFailureMessage/);
+    assert.match(source, /saved\.errorMessage = this\.publicFailureMessage\(saved\.failureCategory\)/);
+    assert.match(source, /reason: record\.status === ImageGenerationStatus\.FAILED/);
+    assert.match(source, /this\.publicFailureMessage\(record\.failureCategory\)/);
+    assert.doesNotMatch(source, /reason: record\.errorMessage/);
+    assert.doesNotMatch(source, /saved\.errorMessage = this\.truncateText\(rawMessage/);
+});
+
 
 test("image refund failures are persisted as business metadata instead of only user copy", async () => {
     const source = await readFile(SERVICE_FILE, "utf8");
@@ -297,6 +398,57 @@ test("image web build config does not duplicate pnpm aliases in the build script
     assert.match(buildScriptSource, /mergeConfig/);
     assert.doesNotMatch(buildScriptSource, /\.pnpm\/node_modules/);
     assert.doesNotMatch(buildScriptSource, /alias:\s*\[/);
+});
+
+
+test("image generation form shows reserved capability ledger without enabling unsupported payloads", async () => {
+    const source = await readFile(GENERATION_FORM_FILE, "utf8");
+
+    assert.match(source, /const canUseNegativePrompt = selectedModel\?\.capabilities\?\.negativePrompt === true/);
+    assert.match(source, /canUseNegativePrompt && !negativePrompt\.trim\(\)/);
+    assert.match(source, /\{canUseNegativePrompt && \(/);
+    assert.match(source, /reservedCapabilityItems/);
+    assert.match(source, /参考图/);
+    assert.match(source, /待模型支持/);
+    assert.match(source, /局部重绘/);
+    assert.match(source, /未开放/);
+    assert.match(source, /sourceImages: usableSourceImages/);
+    assert.match(source, /canUseImageToImage\s*\?\s*sourceImages/);
+    assert.match(source, /effectiveHasReferenceImage \? ImageGenerationMode\.IMAGE_TO_IMAGE : ImageGenerationMode\.TEXT_TO_IMAGE/);
+    assert.doesNotMatch(source, /maskImageUrl:/);
+    assert.doesNotMatch(source, /seed:/);
+    assert.doesNotMatch(source, /background:/);
+    assert.doesNotMatch(source, /inputFidelity:/);
+    assert.doesNotMatch(source, /moderation:/);
+});
+
+
+test("image workbench CSS stays scoped to ef-image selectors", async () => {
+    const source = await readFile(STYLE_FILE, "utf8");
+    const selectors = source.split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.endsWith("{") && line.startsWith("."))
+        .map((line) => line.slice(0, -1).trim());
+
+    assert.match(source, /\.ef-image-workbench/);
+    assert.match(source, /\.ef-image-light-table/);
+    assert.match(source, /\.ef-image-contact-frame/);
+    assert.match(source, /\.ef-image-contact-strip/);
+    for (const selector of selectors) {
+        assert.match(selector, /\.ef-image-/, `custom selector should be ef-image scoped: ${selector}`);
+        assert.doesNotMatch(selector, /\bbody\b|\*|\bbutton\b|\bcard\b/i);
+    }
+});
+
+
+test("image canvas flow uses shared storage helpers instead of raw localStorage JSON", async () => {
+    const source = await readFile(FLOW_CANVAS_FILE, "utf8");
+
+    assert.match(source, /@buildingai\/stores/);
+    assert.match(source, /getLocalStorage,\s*safeJsonParse,\s*safeJsonStringify/);
+    assert.doesNotMatch(source, /window\.localStorage/);
+    assert.doesNotMatch(source, /JSON\.parse\(/);
+    assert.doesNotMatch(source, /JSON\.stringify\(/);
 });
 
 

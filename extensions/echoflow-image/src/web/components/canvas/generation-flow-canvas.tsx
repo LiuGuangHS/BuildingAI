@@ -1,6 +1,7 @@
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
+import { getLocalStorage, safeJsonParse, safeJsonStringify } from "@buildingai/stores";
 import { cn } from "@buildingai/ui/lib/utils";
 import { Copy, Download, ExternalLink, GitBranch, ImageIcon, RefreshCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -55,12 +56,11 @@ interface GenerationFlowCanvasProps {
 const emptyFlowState = (): FlowCanvasState => ({ version: 1, groups: [] });
 
 function loadFlowState(): FlowCanvasState {
-    if (typeof window === "undefined") return emptyFlowState();
     try {
-        const raw = window.localStorage.getItem(FLOW_STORAGE_KEY);
+        const raw = getLocalStorage().getItem(FLOW_STORAGE_KEY);
         if (!raw) return emptyFlowState();
-        const parsed = JSON.parse(raw) as Partial<FlowCanvasState>;
-        if (parsed.version !== 1 || !Array.isArray(parsed.groups)) return emptyFlowState();
+        const parsed = safeJsonParse<Partial<FlowCanvasState>>(raw);
+        if (parsed?.version !== 1 || !Array.isArray(parsed.groups)) return emptyFlowState();
         return { version: 1, groups: parsed.groups.slice(0, MAX_FLOW_GROUPS), pendingParentImageId: parsed.pendingParentImageId };
     } catch {
         return emptyFlowState();
@@ -68,11 +68,10 @@ function loadFlowState(): FlowCanvasState {
 }
 
 function saveFlowState(state: FlowCanvasState) {
-    if (typeof window === "undefined") return;
     try {
-        window.localStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(state));
+        getLocalStorage().setItem(FLOW_STORAGE_KEY, safeJsonStringify(state));
     } catch {
-        // ponytail: localStorage can fill up with image data; losing the local canvas is better than breaking generation.
+        // LocalStorage can fill up with image data; losing the local canvas is better than breaking generation.
     }
 }
 
@@ -153,6 +152,7 @@ export function GenerationFlowCanvas({ generation, onContinueFromImage }: Genera
 
     const childrenByParent = useMemo(() => groupChildrenByParent(state.groups), [state.groups]);
     const roots = useMemo(() => state.groups.filter((group) => !group.parentImageId), [state.groups]);
+    const canContinueFromImage = Boolean(onContinueFromImage);
 
     const clearFlow = () => {
         setState(emptyFlowState());
@@ -170,6 +170,10 @@ export function GenerationFlowCanvas({ generation, onContinueFromImage }: Genera
     };
 
     const continueFromImage = (group: FlowGenerationGroup, image: FlowImageNode) => {
+        if (!canContinueFromImage) {
+            toast.info("参考图生成能力将在后续版本开放");
+            return;
+        }
         if (!image.src) {
             toast.info("这张图片暂时不能作为参考图");
             return;
@@ -236,9 +240,9 @@ export function GenerationFlowCanvas({ generation, onContinueFromImage }: Genera
                                                     {childGroups.length > 0 && <Badge variant="outline">{childGroups.length} 分支</Badge>}
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-1.5">
-                                                    <Button size="sm" className="gap-1.5" disabled={!image.src} onClick={() => continueFromImage(group, image)}>
+                                                    <Button size="sm" className="gap-1.5" disabled={!image.src || !canContinueFromImage} onClick={() => continueFromImage(group, image)}>
                                                         <GitBranch className="size-3.5" />
-                                                        继续生成
+                                                        {canContinueFromImage ? "继续生成" : "待模型支持"}
                                                     </Button>
                                                     <Button size="sm" variant="outline" disabled={!image.src} aria-label="打开图片" onClick={() => image.src && window.open(image.src, "_blank", "noopener,noreferrer")}>
                                                         <ExternalLink className="size-3.5" />
@@ -275,8 +279,8 @@ export function GenerationFlowCanvas({ generation, onContinueFromImage }: Genera
             <CardHeader className="border-b bg-card/80">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <CardTitle className="text-xl">AI 创作流画布</CardTitle>
-                        <CardDescription>像即梦一样保留生成分支，从任意结果继续迭代。</CardDescription>
+                        <CardTitle className="text-xl">创作流画布</CardTitle>
+                        <CardDescription>保留生成结果、参数和分支线索；参考图继续生成待模型支持后开放。</CardDescription>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <Button variant="outline" size="sm" className="gap-2" onClick={() => generation && setState((prev) => upsertGeneration(prev, generation))} disabled={!generation}>
@@ -303,7 +307,7 @@ export function GenerationFlowCanvas({ generation, onContinueFromImage }: Genera
                             </div>
                             <h3 className="text-lg font-semibold">还没有创作分支</h3>
                             <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                                在生成模式提交一次图片，结果会自动进入这里；之后可从任意图片继续生成新分支。
+                                在生成模式提交一次图片，结果会自动进入这里；参考图分支生成将在后续版本开放。
                             </p>
                         </div>
                     )}

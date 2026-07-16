@@ -138,6 +138,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         }
 
         const effectiveConfig = await this.modelConfigService.findEnabledById(dto.modelId);
+        this.assertRuntimeGenerationSupported(this.getRequestedReservedCapabilities(dto));
         const normalizedRequest = await this.normalizeGenerationRequest(dto, effectiveConfig, userId);
         const normalizedDto = {
             ...dto,
@@ -389,11 +390,13 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             await this.notifyTerminalStatus(saved);
             return saved;
         } catch (generateError) {
-            const rawMessage =
-                generateError instanceof Error ? generateError.message : "Image generation failed";
             saved.status = ImageGenerationStatus.FAILED;
-            saved.errorMessage = this.truncateText(rawMessage, 2000);
             saved.failureCategory = this.classifyFailure(generateError);
+            saved.errorMessage = this.publicFailureMessage(saved.failureCategory);
+            saved.rawResponse = {
+                ...(saved.rawResponse ?? {}),
+                failure: this.compactRawPayload({ message: generateError instanceof Error ? generateError.message : String(generateError) }),
+            };
             saved.completedAt = new Date();
 
             if (billingRule.refundOnFailure !== false) {
@@ -444,7 +447,7 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             mask: false,
             multiReference: false,
             seed: false,
-            negativePrompt: true,
+            negativePrompt: false,
             outputFormat: false,
             background: false,
             moderation: false,
@@ -499,10 +502,13 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
             return;
         }
 
-        const rawMessage = error instanceof Error ? error.message : "Image generation failed";
         saved.status = ImageGenerationStatus.FAILED;
-        saved.errorMessage = this.truncateText(rawMessage, 2000);
         saved.failureCategory = this.classifyFailure(error);
+        saved.errorMessage = this.publicFailureMessage(saved.failureCategory);
+        saved.rawResponse = {
+            ...(saved.rawResponse ?? {}),
+            failure: this.compactRawPayload({ message: error instanceof Error ? error.message : String(error) }),
+        };
         saved.completedAt = new Date();
 
         const billingRule = await this.billingRuleService.resolveRule(saved.modelId);
@@ -569,7 +575,9 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
                 data: {
                     taskName: record.modelName || record.modelId || "图片任务",
                     modelName: record.modelName || record.modelId,
-                    reason: record.errorMessage || "请稍后重试或联系管理员",
+                    reason: record.status === ImageGenerationStatus.FAILED
+                        ? this.publicFailureMessage(record.failureCategory)
+                        : undefined,
                     billingStatus: record.billingStatus,
                     completedAt: record.completedAt?.toISOString(),
                 },
@@ -706,18 +714,33 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
     }
 
     private toPublicGeneration(record: ImageGeneration) {
-        const recordWithSoftDelete = record as ImageGeneration & { deletedAt?: Date | null };
-        const {
-            userId: _userId,
-            rawRequest: _rawRequest,
-            rawResponse: _rawResponse,
-            rawEvents: _rawEvents,
-            baseURL: _baseURL,
-            provider: _provider,
-            deletedAt: _deletedAt,
-            ...publicRecord
-        } = recordWithSoftDelete;
-        return publicRecord;
+        return {
+            id: record.id,
+            mode: record.mode,
+            status: record.status,
+            billingStatus: record.billingStatus,
+            requestKey: record.requestKey,
+            prompt: record.prompt,
+            negativePrompt: record.negativePrompt,
+            referenceImageUrl: record.referenceImageUrl,
+            referenceImageFileId: record.referenceImageFileId,
+            sourceImages: record.sourceImages,
+            maskImage: record.maskImage,
+            modelId: record.modelId,
+            modelName: record.modelName,
+            size: record.size,
+            n: record.n,
+            quality: record.quality,
+            style: record.style,
+            responseFormat: record.responseFormat,
+            resultImages: record.resultImages,
+            errorMessage: record.errorMessage,
+            billingAmount: record.billingAmount,
+            startedAt: record.startedAt,
+            completedAt: record.completedAt,
+            createdAt: record.createdAt,
+            updatedAt: record.updatedAt,
+        };
     }
 
     async listImageModels() {
@@ -1049,6 +1072,23 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         };
     }
 
+    private getRequestedReservedCapabilities(dto: CreateGenerationDto) {
+        const hasSourceImage = (dto.sourceImages ?? []).some((source) => Boolean(source?.url?.trim() || source?.fileId));
+        return {
+            hasReferenceImage: dto.mode === ImageGenerationMode.IMAGE_TO_IMAGE || Boolean(dto.referenceImageUrl?.trim() || dto.referenceImageFileId || hasSourceImage),
+            hasMaskImage: Boolean(dto.maskImageUrl?.trim() || dto.maskImageFileId),
+        };
+    }
+
+    private assertRuntimeGenerationSupported(request: { hasReferenceImage: boolean; hasMaskImage: boolean }) {
+        if (request.hasMaskImage) {
+            throw HttpErrorFactory.badRequest("当前图片生成链路暂不支持局部重绘，请先使用文生图；局部重绘将在后续版本开放");
+        }
+        if (request.hasReferenceImage) {
+            throw HttpErrorFactory.badRequest("当前图片生成链路暂不支持参考图生成，请先使用文生图；参考图能力将在后续版本开放");
+        }
+    }
+
     private validateAllowedParams(
         dto: CreateGenerationDto,
         modelConfig: Pick<ImageModelConfig, "allowedParams" | "capabilities" | "defaultParams">,
@@ -1117,6 +1157,13 @@ export class GenerationService extends BaseService<ImageGeneration> implements O
         if (message.includes("504") || message.includes("524") || message.includes("timeout") || message.includes("超时")) return "timeout";
         if (message.includes("policy") || message.includes("内容")) return "content_policy";
         return "upstream";
+    }
+
+    private publicFailureMessage(category?: string): string {
+        if (category === "rate_limit") return "图片服务当前繁忙，请稍后重试；如已扣费将按账务结果处理。";
+        if (category === "timeout") return "图片服务响应超时，请稍后重试；如已扣费将按账务结果处理。";
+        if (category === "content_policy") return "提示词或图片内容未通过服务商安全策略，请调整后重试。";
+        return "图片服务暂不可用，请稍后重试；如已扣费将按账务结果处理。";
     }
 
     private sanitizeBaseURL(raw?: string): string {

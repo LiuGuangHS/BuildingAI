@@ -68,6 +68,18 @@ const sizePresets = [
     } },
 ];
 
+const promptSegmentHints = ["主体", "场景", "风格", "镜头", "光线", "材质"];
+
+const reservedCapabilityItems = [
+    { key: "imageToImage", label: "参考图", readyText: "可用", reservedText: "待模型支持" },
+    { key: "multiReference", label: "多参考", readyText: "可用", reservedText: "待模型支持" },
+    { key: "mask", label: "局部重绘", readyText: "可用", reservedText: "未开放" },
+    { key: "seed", label: "Seed", readyText: "可用", reservedText: "未开放" },
+    { key: "background", label: "背景", readyText: "按模型开放", reservedText: "待模型支持" },
+    { key: "inputFidelity", label: "保真", readyText: "按模型开放", reservedText: "待模型支持" },
+    { key: "moderation", label: "审核", readyText: "按模型开放", reservedText: "待模型支持" },
+];
+
 function normalizeOptionalString(value?: string) {
     const trimmed = value?.trim();
     return trimmed ? trimmed : undefined;
@@ -99,7 +111,7 @@ function getModelAbilityLabels(model?: ImageModelOption) {
     const labels = ["文生图"];
     if (model.capabilities?.imageToImage) labels.push("参考图");
     if (model.capabilities?.multiReference) labels.push("多参考");
-    if (model.capabilities?.negativePrompt !== false) labels.push("反向词");
+    if (model.capabilities?.negativePrompt === true) labels.push("反向词");
     return labels;
 }
 
@@ -136,6 +148,7 @@ export function GenerationForm({
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [showAllTemplates, setShowAllTemplates] = useState(false);
     const [favoritePrompts, setFavoritePrompts] = useState<string[]>(() => readFavoritePrompts());
+    const [lastPromptBeforeEnhance, setLastPromptBeforeEnhance] = useState("");
 
     useEffect(() => {
         if (!initialValues) return;
@@ -150,6 +163,7 @@ export function GenerationForm({
         setQuality(initialValues.quality ?? "standard");
         setStyle(initialValues.style ?? "vivid");
         setResponseFormat(initialValues.responseFormat ?? ImageResponseFormat.B64_JSON);
+        setLastPromptBeforeEnhance("");
     }, [initialValues]);
 
     const selectedModel = useMemo(() => models.find((model) => model.id === modelId), [models, modelId]);
@@ -168,7 +182,14 @@ export function GenerationForm({
 
     const canUseImageToImage = selectedModel?.capabilities?.imageToImage === true;
     const canUseMultiReference = selectedModel?.capabilities?.multiReference === true;
-    const canUseNegativePrompt = selectedModel?.capabilities?.negativePrompt !== false;
+    const canUseNegativePrompt = selectedModel?.capabilities?.negativePrompt === true;
+    const visibleReservedCapabilities = useMemo(
+        () => reservedCapabilityItems.map((item) => ({
+            ...item,
+            enabled: selectedModel?.capabilities?.[item.key] === true,
+        })),
+        [selectedModel],
+    );
     const sizeOptions = selectedModel?.allowedParams?.sizes?.length
         ? selectedModel.allowedParams.sizes
         : ["1024x1024", "1024x1792", "1792x1024"];
@@ -246,8 +267,9 @@ export function GenerationForm({
             return;
         }
         if (enhanced?.prompt) {
+            setLastPromptBeforeEnhance(value);
             setPrompt(enhanced.prompt);
-            if (!negativePrompt.trim()) {
+            if (canUseNegativePrompt && !negativePrompt.trim()) {
                 setNegativePrompt("低清晰度，畸形，重复元素，水印，错误文字，过度噪点");
             }
         }
@@ -293,6 +315,7 @@ export function GenerationForm({
         setReferenceImageUrl(undefined);
         setReferenceImageFileId(undefined);
         setAdditionalReferenceImages([]);
+        setLastPromptBeforeEnhance("");
     };
 
     const hasContent = !!(prompt || negativePrompt || hasReferenceImage);
@@ -382,7 +405,14 @@ export function GenerationForm({
                                 disabled={loading}
                                 required
                             />
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                {promptSegmentHints.map((hint) => (
+                                    <span key={hint} className="rounded border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                                        {hint}
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
                                 <Button
                                     type="button"
                                     disabled={loading || !prompt.trim() || !modelId}
@@ -394,8 +424,20 @@ export function GenerationForm({
                                     <span aria-hidden="true" className="text-xs leading-none">✦</span>
                                     优化提示词
                                 </Button>
-                                <span className="text-xs text-muted-foreground">支持中文、英文，也支持中英混写。</span>
+                                <span className="text-xs text-muted-foreground">按主体、场景、光线和材质补全画面描述。</span>
                             </div>
+                            {lastPromptBeforeEnhance && lastPromptBeforeEnhance !== prompt && (
+                                <div className="mt-3 grid gap-2 rounded-md border bg-background/80 p-2 text-xs sm:grid-cols-2">
+                                    <div className="min-w-0">
+                                        <p className="mb-1 font-medium text-muted-foreground">优化前</p>
+                                        <p className="line-clamp-3 leading-relaxed text-muted-foreground">{lastPromptBeforeEnhance}</p>
+                                    </div>
+                                    <div className="min-w-0 border-t pt-2 sm:border-l sm:border-t-0 sm:pl-2 sm:pt-0">
+                                        <p className="mb-1 font-medium text-primary">优化后</p>
+                                        <p className="line-clamp-3 leading-relaxed">{prompt}</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="rounded-lg border bg-muted/10 p-3">
@@ -541,7 +583,7 @@ export function GenerationForm({
                                     <div className="rounded-md border bg-background px-3 py-2">
                                         <div className="flex min-w-0 items-center justify-between gap-2">
                                             <p className="min-w-0 truncate text-xs text-muted-foreground">{getModelDescription(selectedModel)}</p>
-                                            <span className="shrink-0 text-[11px] text-muted-foreground">{selectedModel.model}</span>
+                                            <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{selectedModel.model}</span>
                                         </div>
                                         <div className="mt-2 flex flex-wrap gap-1.5">
                                             {abilityLabels.map((label) => (
@@ -553,9 +595,34 @@ export function GenerationForm({
                                                 </span>
                                             ))}
                                         </div>
+                                        <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                                            {visibleReservedCapabilities.map((item) => (
+                                                <span
+                                                    key={item.key}
+                                                    className={cn(
+                                                        "flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-[11px]",
+                                                        item.enabled
+                                                            ? "border-primary/20 bg-primary/5 text-primary"
+                                                            : "border-dashed bg-muted/30 text-muted-foreground",
+                                                    )}
+                                                >
+                                                    <span>{item.label}</span>
+                                                    <span className="font-mono tabular-nums">{item.enabled ? item.readyText : item.reservedText}</span>
+                                                </span>
+                                            ))}
+                                        </div>
                                     </div>
                                 ) : null}
                             </div>
+
+                            {!canUseImageToImage && (
+                                <div className="mt-3 rounded-md border border-dashed bg-background/70 p-3 text-xs text-muted-foreground">
+                                    <div className="flex items-start gap-2">
+                                        <span aria-hidden="true" className="mt-0.5 rounded-sm border px-1 font-mono text-[10px]">reserved</span>
+                                        <p className="leading-relaxed">参考图、多参考和局部重绘已在界面预留，但当前运行链路只开放文生图；能力会随模型 capability 开放。</p>
+                                    </div>
+                                </div>
+                            )}
 
                             {canUseImageToImage && (
                                 <div className="mt-3 grid gap-3">
@@ -734,7 +801,7 @@ export function GenerationForm({
                                         </div>
 
                                         <div className="space-y-2 sm:col-span-2">
-                                            <Label className="text-xs font-medium">返回格式</Label>
+                                            <Label className="text-xs font-medium">结果格式</Label>
                                             <Select
                                                 value={responseFormat}
                                                 onValueChange={(value) => setResponseFormat(value as ImageResponseFormat)}
@@ -743,24 +810,26 @@ export function GenerationForm({
                                                 <SelectTrigger className="h-9 w-full text-sm"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value={ImageResponseFormat.B64_JSON}>b64_json (兼容性更好)</SelectItem>
-                                                    <SelectItem value={ImageResponseFormat.URL}>url (服务商链接)</SelectItem>
+                                                    <SelectItem value={ImageResponseFormat.URL}>url (临时结果链接)</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
 
-                                        <div className="space-y-2 sm:col-span-2">
-                                            <Label className="text-xs font-medium">
-                                                反向提示词
-                                                <span className="ml-1 font-normal text-muted-foreground">可选</span>
-                                            </Label>
-                                            <Textarea
-                                                value={negativePrompt}
-                                                onChange={(event) => setNegativePrompt(event.target.value)}
-                                                placeholder="不希望出现在画面里的内容，例如：水印、错误文字、低清晰度。"
-                                                className="min-h-16 resize-none text-sm"
-                                                disabled={loading}
-                                            />
-                                        </div>
+                                        {canUseNegativePrompt && (
+                                            <div className="space-y-2 sm:col-span-2">
+                                                <Label className="text-xs font-medium">
+                                                    反向提示词
+                                                    <span className="ml-1 font-normal text-muted-foreground">可选</span>
+                                                </Label>
+                                                <Textarea
+                                                    value={negativePrompt}
+                                                    onChange={(event) => setNegativePrompt(event.target.value)}
+                                                    placeholder="不希望出现在画面里的内容，例如：水印、错误文字、低清晰度。"
+                                                    className="min-h-16 resize-none text-sm"
+                                                    disabled={loading}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}

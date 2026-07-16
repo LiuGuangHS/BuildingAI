@@ -1,6 +1,6 @@
 import { Transform } from "class-transformer";
 import { Type } from "class-transformer";
-import { IsArray, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min, ValidateNested } from "class-validator";
+import { ArrayMaxSize, IsArray, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min, ValidateNested } from "class-validator";
 
 import { ImageGenerationMode, ImageResponseFormat } from "../../../db/entities/image-generation.entity";
 import { emptyStringToUndefined } from "../../common/dto-transforms";
@@ -38,6 +38,7 @@ export class CreateGenerationDto {
     referenceImageFileId?: string;
 
     @IsArray()
+    @ArrayMaxSize(10)
     @ValidateNested({ each: true })
     @Type(() => GenerationSourceImageDto)
     @IsOptional()

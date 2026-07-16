@@ -98,7 +98,7 @@ export function HistoryList({
     if (variant === "filmstrip") {
         return (
             <>
-                <section className="rounded-lg border bg-card/95 p-3 shadow-sm">
+                <section className="ef-image-contact-strip rounded-lg border bg-card/95 p-3 shadow-sm">
                     <div className="mb-2.5 flex items-center justify-between gap-3">
                         <div className="min-w-0">
                             <h2 className="truncate text-sm font-semibold">{title}</h2>
@@ -126,7 +126,7 @@ export function HistoryList({
                                         key={item.id}
                                         role="button"
                                         tabIndex={0}
-                                        className="flex min-w-0 items-center gap-2 rounded-lg border bg-background p-1.5 text-left transition hover:border-primary/30 hover:bg-muted/20 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                                        className="ef-image-contact-frame flex min-w-0 items-center gap-2 rounded-lg border bg-background p-1.5 text-left transition hover:border-primary/30 hover:bg-muted/20 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                                         onClick={openDetail}
                                         onKeyDown={(event) => {
                                             if (event.key === "Enter" || event.key === " ") {

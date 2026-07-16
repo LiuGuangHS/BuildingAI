@@ -2,13 +2,181 @@
 @import "@buildingai/ui/styles/base.css";
 @import "@buildingai/ui/styles/utils.css";
 
+.ef-image-workbench {
+    --ef-image-studio-ink: #17202a;
+    --ef-image-cyanotype: #0e6a73;
+    --ef-image-wet-silver: #d6dee6;
+    --ef-image-masking-tape: #d89b2b;
+    --ef-image-paper-wash: #eef3ef;
+    --ef-image-contact-line: color-mix(in oklab, var(--ef-image-wet-silver) 72%, var(--border));
+}
+
+.ef-image-controlbar {
+    background-image:
+        linear-gradient(90deg, color-mix(in oklab, var(--ef-image-wet-silver) 34%, transparent) 1px, transparent 1px),
+        linear-gradient(180deg, color-mix(in oklab, var(--ef-image-paper-wash) 34%, transparent), transparent);
+    background-size: 2.25rem 100%, 100% 100%;
+}
+
 .ef-image-stage-grid {
     position: absolute;
     inset: 0.75rem;
-    opacity: 0.7;
+    opacity: 0.78;
     background-image:
         linear-gradient(color-mix(in oklab, var(--border) 52%, transparent) 1px, transparent 1px),
-        linear-gradient(90deg, color-mix(in oklab, var(--border) 52%, transparent) 1px, transparent 1px);
-    background-size: 2rem 2rem;
+        linear-gradient(90deg, color-mix(in oklab, var(--border) 52%, transparent) 1px, transparent 1px),
+        linear-gradient(45deg, color-mix(in oklab, var(--ef-image-masking-tape) 12%, transparent) 0 1px, transparent 1px 1rem);
+    background-size: 2rem 2rem, 2rem 2rem, 1rem 1rem;
     mask-image: radial-gradient(circle at 50% 48%, black, transparent 78%);
+}
+
+.ef-image-light-table {
+    background:
+        radial-gradient(circle at 16% 12%, color-mix(in oklab, var(--ef-image-paper-wash) 55%, transparent), transparent 28rem),
+        linear-gradient(180deg, color-mix(in oklab, var(--card) 96%, var(--ef-image-paper-wash)), var(--card));
+}
+
+.ef-image-contact-frame {
+    position: relative;
+}
+
+.ef-image-contact-frame::before,
+.ef-image-contact-frame::after {
+    content: "";
+    position: absolute;
+    z-index: 1;
+    width: 1.2rem;
+    height: 1.2rem;
+    pointer-events: none;
+    border-color: color-mix(in oklab, var(--ef-image-contact-line, #d6dee6) 78%, transparent);
+    border-style: solid;
+    border-width: 0;
+}
+
+.ef-image-contact-frame::before {
+    top: 0.5rem;
+    left: 0.5rem;
+    border-top-width: 1px;
+    border-left-width: 1px;
+}
+
+.ef-image-contact-frame::after {
+    right: 0.5rem;
+    bottom: 0.5rem;
+    border-right-width: 1px;
+    border-bottom-width: 1px;
+}
+
+.ef-image-contact-strip {
+    background-image:
+        linear-gradient(90deg, color-mix(in oklab, var(--ef-image-contact-line, #d6dee6) 58%, transparent) 1px, transparent 1px),
+        linear-gradient(180deg, color-mix(in oklab, var(--ef-image-paper-wash, #eef3ef) 40%, transparent), transparent);
+    background-size: 1.25rem 100%, 100% 100%;
+}
+
+.ef-image-mask-tape {
+    background: color-mix(in oklab, var(--ef-image-masking-tape, #d89b2b) 18%, var(--background));
+    border-color: color-mix(in oklab, var(--ef-image-masking-tape, #d89b2b) 40%, var(--border));
+}
+
+.ef-image-design-gallery {
+    container-type: inline-size;
+}
+
+.ef-image-design-masthead {
+    background:
+        linear-gradient(112deg, color-mix(in oklab, var(--ef-image-paper-wash) 72%, var(--background)), transparent 52%),
+        repeating-linear-gradient(90deg, color-mix(in oklab, var(--ef-image-contact-line) 36%, transparent) 0 1px, transparent 1px 4.5rem),
+        var(--card);
+}
+
+.ef-image-prototype {
+    --ef-image-prototype-accent: var(--ef-image-cyanotype);
+}
+
+.ef-image-prototype-prompt-rail {
+    --ef-image-prototype-accent: #0e6a73;
+}
+
+.ef-image-prototype-light-table {
+    --ef-image-prototype-accent: #d28b2f;
+}
+
+.ef-image-prototype-storyboard {
+    --ef-image-prototype-accent: #a14c3c;
+}
+
+.ef-image-prototype-header {
+    box-shadow: inset 0 3px 0 color-mix(in oklab, var(--ef-image-prototype-accent) 72%, transparent);
+    background:
+        linear-gradient(90deg, color-mix(in oklab, var(--ef-image-prototype-accent) 8%, transparent), transparent 38%),
+        var(--card);
+}
+
+.ef-image-step-index {
+    display: inline-flex;
+    min-width: 2rem;
+    height: 2rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in oklab, var(--ef-image-prototype-accent) 36%, var(--border));
+    border-radius: 0.35rem;
+    color: var(--ef-image-prototype-accent);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+}
+
+.ef-image-submit-dock {
+    background:
+        linear-gradient(90deg, color-mix(in oklab, var(--ef-image-prototype-accent) 8%, transparent), transparent),
+        color-mix(in oklab, var(--card) 96%, var(--background));
+}
+
+.ef-image-prototype-stage {
+    background: color-mix(in oklab, var(--card) 96%, var(--ef-image-paper-wash));
+}
+
+.ef-image-prototype-lamp {
+    box-shadow:
+        0 1.2rem 3.5rem color-mix(in oklab, var(--ef-image-studio-ink) 12%, transparent),
+        inset 0 0 4rem color-mix(in oklab, var(--ef-image-masking-tape) 7%, transparent);
+}
+
+.ef-image-artwork-mat {
+    background:
+        linear-gradient(45deg, color-mix(in oklab, var(--border) 28%, transparent) 25%, transparent 25%) 0 0 / 1rem 1rem,
+        linear-gradient(-45deg, color-mix(in oklab, var(--border) 28%, transparent) 25%, transparent 25%) 0 0 / 1rem 1rem,
+        linear-gradient(45deg, transparent 75%, color-mix(in oklab, var(--border) 28%, transparent) 75%) 0 0 / 1rem 1rem,
+        linear-gradient(-45deg, transparent 75%, color-mix(in oklab, var(--border) 28%, transparent) 75%) 0 0 / 1rem 1rem,
+        color-mix(in oklab, var(--background) 92%, var(--ef-image-paper-wash));
+}
+
+.ef-image-artwork-thumb {
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.ef-image-artwork-thumb:hover {
+    transform: translateY(-2px);
+}
+
+.ef-image-storyboard-rail {
+    background:
+        repeating-linear-gradient(90deg, transparent 0 4.2rem, color-mix(in oklab, var(--ef-image-contact-line) 38%, transparent) 4.2rem calc(4.2rem + 1px)),
+        linear-gradient(180deg, color-mix(in oklab, var(--ef-image-prototype-accent) 7%, transparent), transparent),
+        var(--card);
+}
+
+.ef-image-story-form {
+    box-shadow: inset 3px 0 0 color-mix(in oklab, var(--ef-image-prototype-accent) 52%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ef-image-artwork-thumb {
+        transition: none;
+    }
+
+    .ef-image-artwork-thumb:hover {
+        transform: none;
+    }
 }

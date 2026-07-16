@@ -224,9 +224,45 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             modelType: "image",
             description: resolved.description ?? "",
             mediaTypes: ["image"],
-            capabilities: resolved.capabilities ?? {},
-            defaultParams: resolved.defaultParams ?? {},
-            allowedParams: resolved.allowedParams ?? {},
+            capabilities: this.toRuntimeWebCapabilities(resolved.capabilities),
+            defaultParams: this.toPublicDefaultParams(resolved.defaultParams),
+            allowedParams: this.toPublicAllowedParams(resolved.allowedParams),
+        };
+    }
+
+    private toRuntimeWebCapabilities(capabilities?: ImageModelCapabilities): ImageModelCapabilities {
+        return {
+            textToImage: capabilities?.textToImage !== false,
+            imageToImage: false,
+            mask: false,
+            multiReference: false,
+            seed: false,
+            negativePrompt: false,
+            outputFormat: capabilities?.outputFormat === true,
+            background: false,
+            moderation: false,
+            inputFidelity: false,
+        };
+    }
+
+    private toPublicDefaultParams(params?: ImageModelDefaultParams): ImageModelDefaultParams {
+        return {
+            size: params?.size,
+            quality: params?.quality,
+            style: params?.style,
+            n: params?.n,
+            responseFormat: params?.responseFormat,
+            outputFormat: params?.outputFormat,
+        };
+    }
+
+    private toPublicAllowedParams(params?: ImageModelAllowedParams): ImageModelAllowedParams {
+        return {
+            sizes: Array.isArray(params?.sizes) ? params.sizes : undefined,
+            qualities: Array.isArray(params?.qualities) ? params.qualities : undefined,
+            styles: Array.isArray(params?.styles) ? params.styles : undefined,
+            outputFormats: Array.isArray(params?.outputFormats) ? params.outputFormats : undefined,
+            maxImages: typeof params?.maxImages === "number" ? params.maxImages : undefined,
         };
     }
 
@@ -271,22 +307,55 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             descriptionOverride: dto.descriptionOverride ?? dto.description ?? existing?.descriptionOverride ?? null,
             enabled: dto.enabled ?? existing?.enabled ?? true,
             visibleToUser: dto.visibleToUser ?? existing?.visibleToUser ?? true,
-            capabilities: {
-                ...DEFAULT_CAPABILITIES,
-                ...(existing?.capabilities ?? {}),
+            capabilities: this.normalizeCapabilities({
+                ...(existing?.capabilities ?? DEFAULT_CAPABILITIES),
                 ...(dto.capabilities ?? {}),
-            },
-            defaultParams: {
-                ...DEFAULT_PARAMS,
-                ...(existing?.defaultParams ?? {}),
+            }),
+            defaultParams: this.normalizeDefaultParams({
+                ...(existing?.defaultParams ?? DEFAULT_PARAMS),
                 ...(dto.defaultParams ?? {}),
-            },
-            allowedParams: {
-                ...DEFAULT_ALLOWED_PARAMS,
-                ...(existing?.allowedParams ?? {}),
+            }),
+            allowedParams: this.normalizeAllowedParams({
+                ...(existing?.allowedParams ?? DEFAULT_ALLOWED_PARAMS),
                 ...(dto.allowedParams ?? {}),
-            },
+            }),
             sortOrder: dto.sortOrder ?? existing?.sortOrder ?? 0,
+        };
+    }
+
+    private normalizeCapabilities(capabilities?: ImageModelCapabilities): ImageModelCapabilities {
+        return {
+            textToImage: capabilities?.textToImage !== false,
+            imageToImage: capabilities?.imageToImage === true,
+            mask: capabilities?.mask === true,
+            multiReference: capabilities?.multiReference === true,
+            seed: capabilities?.seed === true,
+            negativePrompt: capabilities?.negativePrompt === true,
+            outputFormat: capabilities?.outputFormat !== false,
+            background: capabilities?.background === true,
+            moderation: capabilities?.moderation === true,
+            inputFidelity: capabilities?.inputFidelity === true,
+        };
+    }
+
+    private normalizeDefaultParams(params?: ImageModelDefaultParams): ImageModelDefaultParams {
+        return {
+            size: params?.size ?? DEFAULT_PARAMS.size,
+            quality: params?.quality ?? DEFAULT_PARAMS.quality,
+            style: params?.style,
+            n: params?.n ?? DEFAULT_PARAMS.n,
+            responseFormat: params?.responseFormat ?? DEFAULT_PARAMS.responseFormat,
+            outputFormat: params?.outputFormat ?? DEFAULT_PARAMS.outputFormat,
+        };
+    }
+
+    private normalizeAllowedParams(params?: ImageModelAllowedParams): ImageModelAllowedParams {
+        return {
+            sizes: Array.isArray(params?.sizes) ? params.sizes : DEFAULT_ALLOWED_PARAMS.sizes,
+            qualities: Array.isArray(params?.qualities) ? params.qualities : DEFAULT_ALLOWED_PARAMS.qualities,
+            styles: Array.isArray(params?.styles) ? params.styles : DEFAULT_ALLOWED_PARAMS.styles,
+            outputFormats: Array.isArray(params?.outputFormats) ? params.outputFormats : DEFAULT_ALLOWED_PARAMS.outputFormats,
+            maxImages: typeof params?.maxImages === "number" ? params.maxImages : DEFAULT_ALLOWED_PARAMS.maxImages,
         };
     }
 
@@ -316,9 +385,9 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
             description: config.descriptionOverride ?? model.description,
             enabled: config.enabled,
             visibleToUser: config.visibleToUser,
-            capabilities: { ...DEFAULT_CAPABILITIES, ...(config.capabilities ?? {}) },
-            defaultParams: { ...DEFAULT_PARAMS, ...(config.defaultParams ?? {}) },
-            allowedParams: { ...DEFAULT_ALLOWED_PARAMS, ...(config.allowedParams ?? {}) },
+            capabilities: this.normalizeCapabilities(config.capabilities),
+            defaultParams: this.normalizeDefaultParams(config.defaultParams),
+            allowedParams: this.normalizeAllowedParams(config.allowedParams),
             sortOrder: config.sortOrder ?? model.sortOrder ?? 0,
         };
     }
@@ -337,9 +406,9 @@ export class ModelConfigService extends BaseService<ImageModelConfig> {
                 description: model.description,
                 enabled: false,
                 visibleToUser: true,
-                capabilities: DEFAULT_CAPABILITIES,
-                defaultParams: DEFAULT_PARAMS,
-                allowedParams: DEFAULT_ALLOWED_PARAMS,
+                capabilities: this.normalizeCapabilities(DEFAULT_CAPABILITIES),
+                defaultParams: this.normalizeDefaultParams(DEFAULT_PARAMS),
+                allowedParams: this.normalizeAllowedParams(DEFAULT_ALLOWED_PARAMS),
                 sortOrder: model.sortOrder ?? 0,
             };
         return {
