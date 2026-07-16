@@ -11,7 +11,7 @@ x-resource-config: &resource-config
 
 services:
     redis:
-        image: ccr.ccs.tencentyun.com/buildingai/redis:8.2.2
+        image: ${REDIS_IMAGE:-ccr.ccs.tencentyun.com/buildingai/redis:8.2.2}
         container_name: buildingai-redis${DOCKER_CONTAINER_SUFFIX:-}
         restart: always
         environment:
@@ -34,7 +34,7 @@ services:
             retries: 5
 
     postgres:
-        image: ccr.ccs.tencentyun.com/buildingai/postgres:17.6
+        image: ${POSTGRES_IMAGE:-ccr.ccs.tencentyun.com/buildingai/postgres:17.6}
         container_name: buildingai-postgres${DOCKER_CONTAINER_SUFFIX:-}
         restart: always
         environment:
@@ -56,7 +56,7 @@ services:
             retries: 5
 
     nodejs:
-        image: node:24
+        image: node:22.20.0
         container_name: buildingai-nodejs${DOCKER_CONTAINER_SUFFIX:-}
         restart: on-failure:3
         working_dir: /buildingai
@@ -131,6 +131,7 @@ services:
 
             if [ -n "$NPM_REGISTRY_URL" ]; then
             echo "🔧 Using custom registry: $NPM_REGISTRY_URL"
+            export npm_config_registry="$NPM_REGISTRY_URL"
             if command -v npm >/dev/null 2>&1; then
                 npm config set registry "$NPM_REGISTRY_URL"
             fi
@@ -143,12 +144,15 @@ services:
 
             if ! command -v pnpm >/dev/null 2>&1; then
             echo "📦 Installing pnpm..."
-            npm install -g pnpm@11.9.0
-            npm install -g pm2
+            npm install -g pnpm@10.20.0
 
             if [ -n "$NPM_REGISTRY_URL" ]; then
                 pnpm config set registry "$NPM_REGISTRY_URL"
             fi
+            fi
+            if ! command -v pm2 >/dev/null 2>&1; then
+            echo "📦 Installing PM2..."
+            npm install -g pm2@6.0.14
             fi
 
             # localhost inside a container is the container itself, not host Postgres/Redis
@@ -161,8 +165,22 @@ services:
             echo "🔀 REDIS_HOST localhost -> redis (Docker network)"
             fi
 
+            echo "🔐 Preparing workspace for the non-root node user..."
+            for dir in \
+                /buildingai/node_modules \
+                /buildingai/packages/*/node_modules \
+                /buildingai/packages/@buildingai/*/node_modules \
+                /buildingai/packages/@buildingai/web/*/node_modules \
+                /buildingai/packages/web/@buildingai/*/node_modules \
+                /buildingai/extensions/*/node_modules; do
+                if [ -d "$$dir" ]; then
+                    chown -hR node:node "$$dir"
+                fi
+            done
+
+            export HOME=/home/node
             echo "🎯 Starting EchoFlowAI..."
-            exec pnpm start --no-daemon
+            exec runuser -u node --preserve-environment -- pnpm start --no-daemon
             '
         networks:
             - buildingai-network

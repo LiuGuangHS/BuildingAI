@@ -36,7 +36,8 @@
         "mcp framework"
     ],
     "scripts": {
-        "build": "cross-env NODE_OPTIONS=--max-old-space-size=3072 turbo run build",
+        "build": "cross-env NODE_OPTIONS=--max-old-space-size=3072 turbo run build && node scripts/build-extensions.mjs",
+        "build:extensions": "node scripts/build-extensions.mjs",
         "dev": "turbo run dev",
         "start": "pnpm i && cd packages/cli && pnpm run start",
         "predeploy": "pnpm i && cd packages/cli && pnpm run predeploy",
@@ -185,12 +186,8 @@
         "vue-eslint-parser": "catalog:dev",
         "vue-tsc": "catalog:dev"
     },
-    "overrides": {
-        "mime-types": "3.0.1",
-        "body-parser": "2.2.0"
-    },
-    "packageManager": "pnpm@11.9.0",
+    "packageManager": "pnpm@10.20.0",
     "engines": {
-        "node": ">=24.x"
+        "node": ">=22.20.x <23"
     }
 }

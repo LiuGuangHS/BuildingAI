@@ -61,7 +61,7 @@ catalogs:
     tsup: ^8.5.1
     typescript: ^5.9.3
     typescript-eslint: ^8.57.0
-    vite: ^7.1.6
+    vite: 8.0.0
     vite-plugin-eslint2: ^5.0.5
     vue-eslint-parser: ^10.4.0
     vue-tsc: ^2.2.12
@@ -104,7 +104,7 @@ catalogs:
     tailwindcss: ^4.2.1
     tailwindcss-animate: ^1.0.7
     tiptap-markdown: ^0.8.10
-    vite: ^7.1.6
+    vite: 8.0.0
     vite-tsconfig-paths: ^5.1.4
     vue: ^3.5.30
     vue-dompurify-html: ^5.3.0
@@ -118,9 +118,10 @@ overrides:
   '@nestjs/common': catalog:api
   '@nestjs/core': catalog:api
   '@nestjs/platform-express': catalog:api
+  body-parser: 2.2.0
   cron: catalog:api
-  # Vite 8 强制版本：覆盖 catalog:web/dev 的 ^7.1.6，主系统前端构建链路依赖 Vite 8 的 Rolldown 构建与 @rolldown/plugin-babel；
-  # 若 Vite 8 出现兼容性问题需回退，同步更新 catalogs.dev.vite 与 catalogs.web.vite 版本并验证主系统 + 全部插件构建。
+  mime-types: 3.0.1
+  # Keep Vite pinned while the main frontend build depends on the Vite 8/Rolldown toolchain.
   vite: 8.0.0
   buildingai: link:packages/cli
   glob: ^11.0.3
@@ -142,15 +143,3 @@ onlyBuiltDependencies:
   - msw
   - unrs-resolver
   - vue-demi
-
-# pnpm 11 approve-builds allowlist: keep in sync with onlyBuiltDependencies so
-# install/check scripts can run non-interactively in Docker and CI. Revisit when
-# pnpm changes build-script approval semantics or these native deps are removed.
-allowBuilds:
-  '@nestjs/core': true
-  '@swc/core': true
-  esbuild: true
-  msgpackr-extract: true
-  msw: true
-  unrs-resolver: true
-  vue-demi: true
