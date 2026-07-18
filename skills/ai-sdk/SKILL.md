@@ -18,10 +18,11 @@ main-system Chat, Agent, Dataset, Provider, Secret, SSE, Abort, or billing behav
 `packages/api/ai-rules.md` and the affected source path. Dependency governance lives in
 `pnpm-workspace.yaml`; do not upgrade `ai`, provider packages, or catalog entries by default.
 
-If a task needs a newer AI SDK API, use Context7 or current official docs to confirm the API, then
-explain the version impact and get explicit authorization before changing dependencies, catalogs,
-overrides, or lockfiles. Ordinary EchoFlow plugins should prefer platform public model services and
-`@buildingai/extension-sdk` helpers instead of low-level provider integration.
+If a task needs a newer AI SDK API, use the Codex runtime Context7 when available or current official
+docs to confirm the API, then explain the version impact and get explicit authorization before
+changing dependencies, catalogs, overrides, or lockfiles. Ordinary EchoFlow plugins should prefer
+platform public model services and `@buildingai/extension-sdk` helpers instead of low-level provider
+integration.
 
 ## AI SDK Documentation
 

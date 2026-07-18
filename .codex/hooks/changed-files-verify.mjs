@@ -31,7 +31,8 @@ function normalizePath(filePath) {
 
 function statePath(sessionId) {
     const safeId = String(sessionId || "unknown").replace(/[^a-zA-Z0-9_.-]/g, "_");
-    return path.join(tmpdir(), `buildingai-claude-verify-${safeId}.txt`);
+    const stateDir = process.platform === "win32" ? tmpdir() : "/tmp";
+    return path.join(stateDir, `buildingai-claude-verify-${safeId}.txt`);
 }
 
 function candidateFiles(input) {
@@ -84,8 +85,24 @@ function addCommand(commands, command, reason) {
 }
 
 function packageNameForSharedPackage(file) {
-    const match = file.match(/^packages\/@buildingai\/([^/]+)\//);
-    return match ? `@buildingai/${match[1]}` : null;
+    if (!file.startsWith("packages/") || file.startsWith("packages/api/") || file.startsWith("packages/client/")) {
+        return null;
+    }
+
+    let currentDir = path.dirname(path.resolve(rootDir, file));
+    const packagesDir = path.resolve(rootDir, "packages");
+    while (currentDir.startsWith(`${packagesDir}${path.sep}`)) {
+        const packageJsonPath = path.join(currentDir, "package.json");
+        if (existsSync(packageJsonPath)) {
+            try {
+                return JSON.parse(readFileSync(packageJsonPath, "utf8")).name || null;
+            } catch {
+                return null;
+            }
+        }
+        currentDir = path.dirname(currentDir);
+    }
+    return null;
 }
 
 function extensionName(file) {

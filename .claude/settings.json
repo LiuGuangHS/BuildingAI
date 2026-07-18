@@ -5,14 +5,11 @@
     "allow": [
       "Bash(pnpm --filter echoflow-image check-types)",
       "Bash(node --experimental-strip-types --test extensions/echoflow-image/tests/*.test.mjs)",
-      "mcp__context7__resolve-library-id",
       "Bash(git diff *)"
     ]
   },
   "enableAllProjectMcpServers": false,
-  "enabledMcpjsonServers": [
-    "context7"
-  ],
+  "enabledMcpjsonServers": [],
   "skillOverrides": {
     "skill-creator": "user-invocable-only",
     "skill-writer": "user-invocable-only",

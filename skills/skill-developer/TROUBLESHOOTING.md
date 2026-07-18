@@ -2,7 +2,7 @@
 
 Use this guide when a BuildingAI skill is missing, stale, or not visible in an editor.
 
-## Skill not visible in Claude Code
+## Skill not visible in an editor
 
 1. Confirm the source skill exists:
 
@@ -10,19 +10,21 @@ Use this guide when a BuildingAI skill is missing, stale, or not visible in an e
    ls skills/<skill-name>/SKILL.md
    ```
 
-2. Sync it to Claude Code:
+2. Sync it to the target runtime, for example Codex or Claude Code:
 
    ```bash
+   node scripts/sync-skills.mjs sync <skill-name> agents
    node scripts/sync-skills.mjs sync <skill-name> claude
    ```
 
 3. Confirm the generated copy exists:
 
    ```bash
+   ls .agents/skills/<skill-name>/SKILL.md
    ls .claude/skills/<skill-name>/SKILL.md
    ```
 
-4. If the current Claude session does not show the new skill, restart/reload Claude Code or use the UI that refreshes project config.
+4. Run `node scripts/sync-skills.mjs check <skill-name> <editor>`. If it passes but the current session still does not show the skill, reload that runtime's project configuration.
 
 ## Generated copy differs from source
 
@@ -32,7 +34,7 @@ Treat root `skills/` as the source of truth and resync:
 node scripts/sync-skills.mjs sync <skill-name> claude
 ```
 
-For active BuildingAI skills, the generated `.claude/skills/<name>/SKILL.md` should match the root `skills/<name>/SKILL.md`.
+For active BuildingAI skills, generated runtime copies should match the root `skills/<name>/SKILL.md` byte-for-byte.
 
 ## Unknown editor name
 
@@ -66,11 +68,12 @@ Check for:
 
 Use `/repo-verify` after skill/doc updates to choose the minimal verification.
 
-## Hook confusion
+## Reviewer or hook drift
 
-Current BuildingAI Claude hooks are project safety/verification hooks:
+Run:
 
-- `.claude/hooks/pretool-guard.mjs`
-- `.claude/hooks/changed-files-verify.mjs`
+```bash
+node scripts/check-agent-governance.mjs
+```
 
-They do not auto-activate all skills. If a workflow needs a skill, route to it explicitly in `CLAUDE.md`, `AGENTS.md`, the relevant skill, or the subagent prompt.
+It checks Claude/Codex reviewer parity, shared hook parity, JSON validity, and machine-specific Codex hook paths. Reviewers and hooks do not auto-activate skills; route workflows explicitly in `AGENTS.md`, `CLAUDE.md`, the relevant skill, or the reviewer prompt.

@@ -41,6 +41,17 @@ find . -xdev -path './docker/data' -prune -o ! -user "$(id -un)" -print | head
 
 需要修复时排除 `docker/data`；数据库和缓存卷可能有意使用容器内的数字用户。只有获得用户明确授权后才能执行所有权修改命令。
 
+若发现 home 内只有生成物或缓存被 UID 0/65534 写入，可先停止 Node 容器，再只修复异常 UID，并排除 `docker/data`：
+
+```bash
+cd "$HOME/WorkSpace/BuildingAI"
+docker compose stop nodejs
+sudo find "$HOME" -xdev -path "$HOME/WorkSpace/BuildingAI/docker/data" -prune -o \( -uid 0 -o -uid 65534 \) -exec chown --no-dereference "$(id -u):$(id -g)" {} +
+find "$HOME" -xdev -path "$HOME/WorkSpace/BuildingAI/docker/data" -prune -o ! -uid "$(id -u)" -printf '%u:%g %m %p\n'
+```
+
+不要使用 `sudo pnpm`，也不要使用没有 `--user node` 的 `docker compose exec nodejs pnpm ...`。容器内手工执行统一使用 `docker compose exec --user node -e HOME=/home/node nodejs pnpm <command>`。数据库和 Redis 数据卷不参与上述修复。
+
 Node 容器启动阶段需要 root 安装系统工具，应用进程随后会降权为 `node`。进入已运行容器执行构建、lint 或测试时必须显式使用同一非 root 用户，避免把绑定挂载的源码、`.turbo`、`public/web` 或插件构建目录重新写成 root 所有：
 
 ```bash
@@ -55,4 +66,5 @@ docker compose exec -u node -e HOME=/home/node nodejs pnpm lint
 - Runtime 版本来自 `.nvmrc`、根 `package.json`、各包 engines 和 `docker-compose.yml`，这些配置必须保持一致。
 - 生产 API 服务的是 `public/web`。只完成 Client Vite build 不会刷新生产静态文件，必须使用文档规定的 `build:web` 或部署 release-copy 流程。
 - 插件缺少 `build/index.js` 的告警只能说明该插件没有加载，不能单独解释主系统 Chat、Agent、Dataset、认证或 Console 故障。
+- 插件列表信息与 manifest 不一致时，继续核对 `extensions/extensions.json` 和数据库 `extension` 记录；已安装插件不会因同版本 upgrade 源码变化自动刷新持久化元数据。
 - 源码修复后先执行最小包级检查。只有用户要求部署运行态，或验证明确需要时，才重新构建或重启 Docker/PM2。

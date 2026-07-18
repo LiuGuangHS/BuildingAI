@@ -45,9 +45,9 @@ Pnpm dependency governance lives in `pnpm-workspace.yaml`: `catalog`, `catalogs`
 
 ## Shared packages
 
-Active shared packages live under `packages/@buildingai/*` and `packages/@buildingai/web/*`. Examples include:
+Shared package names commonly use the `@buildingai/*` scope, but their filesystem paths are not uniform. Read the nearest `package.json` instead of deriving a path from the package name. Most live under `packages/@buildingai/*` or `packages/@buildingai/web/*`; the platform core package is at `packages/core/`.
 
-- `@buildingai/core`: platform modules and extension decorators.
+- `@buildingai/core` (`packages/core/`): platform modules and extension decorators.
 - `@buildingai/db`: TypeORM entities, migrations, seeds, database helpers.
 - `@buildingai/extension-sdk`: extension-facing AI, billing, notification, rate limit, provider, URL, download, and build helpers.
 - `@buildingai/base`, `@buildingai/decorators`, `@buildingai/dto`, `@buildingai/errors`, `@buildingai/pipe`, `@buildingai/utils`.

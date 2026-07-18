@@ -2,9 +2,9 @@
 
 本仓库把项目 skills 存放在根目录 `skills/`，并通过 `scripts/sync-skills.mjs` 同步到各 AI 编辑器的配置目录。
 
-根目录 `skills/` 是事实源；`.claude/skills/<name>/` 这类目录是编辑器运行时副本，不应成为第二套事实源。
+根目录 `skills/` 是事实源；`.agents/skills/<name>/`、`.claude/skills/<name>/` 这类目录是编辑器运行时副本，不应成为第二套事实源。
 
-当通用上游 skill 与本仓库规则冲突时，以 `skills/skill-developer/SKILL.md`、本 README、`AGENTS.md` 和 `scripts/sync-skills.mjs` 为准。BuildingAI 项目 skill 不要直接编辑生成的 `.claude/skills/<name>/` 副本。
+当通用上游 skill 与本仓库规则冲突时，以 `skills/skill-developer/SKILL.md`、本 README、`AGENTS.md` 和 `scripts/sync-skills.mjs` 为准。BuildingAI 项目 skill 不要直接编辑生成的运行时副本。
 
 ## 支持的编辑器
 
@@ -39,6 +39,10 @@ node scripts/sync-skills.mjs sync <editor>
 # 同步所有 skills 到所有编辑器
 node scripts/sync-skills.mjs sync all
 
+# 只读检查单个或全部 skill 是否同步
+node scripts/sync-skills.mjs check <skill-name> <editor>
+node scripts/sync-skills.mjs check all <editor>
+
 # 从单个编辑器移除单个 skill
 node scripts/sync-skills.mjs remove <skill-name> <editor>
 
@@ -51,6 +55,7 @@ node scripts/sync-skills.mjs remove all <editor>
 ```bash
 pnpm skills sync claude
 pnpm skills sync repo-verify claude
+pnpm skills check all claude
 pnpm skills remove repo-verify claude
 ```
 
@@ -96,6 +101,26 @@ pnpm skills remove repo-verify claude
 
 用户显式调用的插件发布/交付检查清单。插件打包、发布或交付前使用。
 
+### `echoflow-ui-workflow`
+
+EchoFlow 插件 UI 设计与前后端契约工作流。用于插件页面设计、Design Gallery、方案选择、生产迁移和落选代码清理。
+
+### `contract-generation-development`
+
+合同插件后续开发和跨对话交接流程。事实以合同插件 README 为准，流程覆盖真实联调、队列恢复、审查规则、编辑冲突、Open File Viewer 和交付收口。
+
+### `echoflow-ai-town-roadmap`
+
+`echoflow-ai-town` 游戏插件的分阶段接力工作流。用于根据实际代码和验证证据找到路线图中首个未完成阶段，约束条件性引擎、AI、社交能力，并在交付时同步插件 README 和 ROADMAP。
+
+### `echoflow-video-roadmap`
+
+`echoflow-video` 单视频内核和 AI 短剧路线图的分阶段接力工作流。先完成首个未验证的生产门禁，再进入媒体、领域、工作流、Studio 或发布阶段，并在跨对话交付时同步 README 和 ROADMAP。
+
+### `echoflow-astrology-roadmap`
+
+`echoflow-astrology-fortune` 星盘插件的分阶段接力工作流。用于从 README 中首个未完成阶段恢复开发，确保确定性计算和版本化事实先于 Report V2、UI 与产品 Agent，并路由领域、安全、UI 和发布审查。
+
 ## 其他可用 skills
 
 这些 skill 可按需同步，但它们不是仓库事实的最高权威：
@@ -115,4 +140,15 @@ pnpm skills remove repo-verify claude
 - 插件事实：`extensions/<identifier>/README.md`。
 - 验证流程：`skills/repo-verify/SKILL.md`。
 - 插件发布：`skills/extension-release-check/SKILL.md`。
+- 插件 UI 工作流：`skills/echoflow-ui-workflow/SKILL.md` 与 `.claude/design-workflow.md`。
+- 合同插件开发交接：`skills/contract-generation-development/SKILL.md` 和 `extensions/echoflow-contract-generation/README.md`。
+- 乐园小镇阶段接力：`skills/echoflow-ai-town-roadmap/SKILL.md` 与 `extensions/echoflow-ai-town/ROADMAP.md`。
+- 视频与 AI 短剧阶段接力：`skills/echoflow-video-roadmap/SKILL.md` 与 `extensions/echoflow-video/ROADMAP.md`。
+- 星盘插件阶段接力：`skills/echoflow-astrology-roadmap/SKILL.md` 与 `extensions/echoflow-astrology-fortune/README.md`。
 - 同步实现：`scripts/sync-skills.mjs`。
+
+## Reviewer 与 Hook 治理
+
+- Claude reviewer 位于 `.claude/agents/`，Codex 对应定义位于 `.codex/agents/`；名称、描述和指令保持一致，同时保留各 Runtime 的文件格式。
+- `.claude/hooks/` 与 `.codex/hooks/` 的共享脚本必须一致；Hook 命令使用工作区相对路径，不写开发者本机 checkout 绝对路径。
+- reviewer、Hook 或相关路由变化后运行 `node scripts/check-agent-governance.mjs`。

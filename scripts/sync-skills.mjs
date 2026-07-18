@@ -1,4 +1,11 @@
-import { existsSync, readdirSync, statSync, copyFileSync, rmSync, mkdirSync } from "node:fs";
+import {
+    copyFileSync,
+    existsSync,
+    mkdirSync,
+    readFileSync,
+    readdirSync,
+    rmSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
@@ -89,6 +96,67 @@ function getAllSkills() {
         .map((entry) => entry.name);
 }
 
+function getSkillDirectories(dir) {
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
+}
+
+function validateSkillSource(skillName, sourcePath) {
+    const skillFile = join(sourcePath, "SKILL.md");
+    if (!existsSync(skillFile)) return ["missing SKILL.md"];
+
+    const content = readFileSync(skillFile, "utf8");
+    const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!frontmatter) return ["missing YAML frontmatter"];
+
+    const name = frontmatter[1].match(/^name:\s*(.+)$/m)?.[1]?.trim();
+    const description = frontmatter[1].match(/^description:\s*(.*)$/m);
+    const failures = [];
+    if (name !== skillName) failures.push(`frontmatter name must be ${skillName}`);
+    if (!description) failures.push("missing frontmatter description");
+    return failures;
+}
+
+function listFiles(dir, prefix = "") {
+    if (!existsSync(dir)) return [];
+
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const relativePath = join(prefix, entry.name);
+        if (entry.isDirectory()) {
+            return listFiles(join(dir, entry.name), relativePath);
+        }
+        return [relativePath];
+    });
+}
+
+function compareDirectories(sourcePath, targetPath) {
+    if (!existsSync(targetPath)) return ["missing target directory"];
+
+    const sourceFiles = listFiles(sourcePath).sort();
+    const targetFiles = listFiles(targetPath).sort();
+    const sourceSet = new Set(sourceFiles);
+    const targetSet = new Set(targetFiles);
+    const differences = [];
+
+    for (const file of sourceFiles) {
+        if (!targetSet.has(file)) {
+            differences.push(`missing ${file}`);
+            continue;
+        }
+        if (!readFileSync(join(sourcePath, file)).equals(readFileSync(join(targetPath, file)))) {
+            differences.push(`changed ${file}`);
+        }
+    }
+
+    for (const file of targetFiles) {
+        if (!sourceSet.has(file)) differences.push(`extra ${file}`);
+    }
+
+    return differences;
+}
+
 /**
  * Get target directories based on editor name
  * @param {string|null} editorName - Editor name (null for all)
@@ -174,6 +242,8 @@ function syncSkill(skillName, editorName = null) {
         );
     }
     console.log(chalk.blue(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`));
+
+    return failCount;
 }
 
 /**
@@ -194,12 +264,74 @@ function syncAllSkills(editorName = null) {
     console.log(chalk.blue(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`));
     console.log("");
 
+    let failures = 0;
     for (const skillName of skills) {
-        syncSkill(skillName, editorName);
+        failures += syncSkill(skillName, editorName);
         console.log("");
     }
 
-    console.log(chalk.green(`✓ All skills synced successfully`));
+    if (failures > 0) {
+        console.log(chalk.red(`Skill sync failed for ${failures} target(s)`));
+        process.exitCode = 1;
+    } else {
+        console.log(chalk.green(`✓ All skills synced successfully`));
+    }
+
+    return failures;
+}
+
+function checkSkill(skillName, editorName = null) {
+    const sourcePath = join(SOURCE_DIR, skillName);
+    if (!existsSync(sourcePath)) {
+        console.log(chalk.red(`Skill "${skillName}" not found in ${SOURCE_DIR}`));
+        return 1;
+    }
+
+    const sourceFailures = validateSkillSource(skillName, sourcePath);
+    if (sourceFailures.length > 0) {
+        console.log(chalk.red(`  INVALID skills/${skillName}`));
+        for (const failure of sourceFailures) console.log(chalk.yellow(`    - ${failure}`));
+        return 1;
+    }
+
+    let failures = 0;
+    for (const targetDir of getTargetDirs(editorName)) {
+        const differences = compareDirectories(sourcePath, join(rootDir, targetDir, skillName));
+        if (differences.length === 0) {
+            console.log(chalk.green(`  OK ${targetDir}/${skillName}`));
+            continue;
+        }
+
+        failures++;
+        console.log(chalk.red(`  DRIFT ${targetDir}/${skillName}`));
+        for (const difference of differences) console.log(chalk.yellow(`    - ${difference}`));
+    }
+
+    return failures;
+}
+
+function checkAllSkills(editorName = null) {
+    const skills = getAllSkills();
+    let failures = skills.reduce(
+        (count, skillName) => count + checkSkill(skillName, editorName),
+        0,
+    );
+
+    const sourceSkillSet = new Set(skills);
+    for (const targetDir of getTargetDirs(editorName)) {
+        for (const skillName of getSkillDirectories(join(rootDir, targetDir))) {
+            if (sourceSkillSet.has(skillName)) continue;
+            failures++;
+            console.log(chalk.red(`  EXTRA ${targetDir}/${skillName}`));
+        }
+    }
+
+    if (failures > 0) {
+        console.log(chalk.red(`Skill sync check failed for ${failures} target(s)`));
+        process.exitCode = 1;
+    } else {
+        console.log(chalk.green(`All ${skills.length} skill(s) are in sync`));
+    }
 }
 
 /**
@@ -311,6 +443,16 @@ function main() {
         );
         console.log(
             chalk.white(
+                "  pnpm skills check <skill-name> <editor> - Check a skill without writing files",
+            ),
+        );
+        console.log(
+            chalk.white(
+                "  pnpm skills check all <editor>          - Check all skills without writing files",
+            ),
+        );
+        console.log(
+            chalk.white(
                 "  pnpm skills remove <skill-name>         - Remove a specific skill from all editors",
             ),
         );
@@ -343,7 +485,7 @@ function main() {
     let actualTarget = target;
     let actualEditor = editor;
 
-    if (command === "sync" && !editor && target !== "all") {
+    if (["sync", "check"].includes(command) && !editor && target !== "all") {
         // Check if target is an editor name
         if (EDITOR_MAP[target.toLowerCase()]) {
             actualTarget = "all";
@@ -354,8 +496,14 @@ function main() {
     if (command === "sync") {
         if (actualTarget === "all") {
             syncAllSkills(actualEditor);
-        } else {
-            syncSkill(actualTarget, actualEditor);
+        } else if (syncSkill(actualTarget, actualEditor) > 0) {
+            process.exitCode = 1;
+        }
+    } else if (command === "check") {
+        if (actualTarget === "all") {
+            checkAllSkills(actualEditor);
+        } else if (checkSkill(actualTarget, actualEditor) > 0) {
+            process.exitCode = 1;
         }
     } else if (command === "remove") {
         if (actualTarget === "all") {
@@ -365,7 +513,7 @@ function main() {
         }
     } else {
         console.log(chalk.red(`❌ Unknown command: ${command}`));
-        console.log(chalk.yellow("Available commands: sync, remove"));
+        console.log(chalk.yellow("Available commands: sync, check, remove"));
         process.exit(1);
     }
 }

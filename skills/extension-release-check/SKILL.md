@@ -53,6 +53,7 @@ Verify:
 - `manifest.json.engine.buildingai` and `package.json.engine.buildingai` match.
 - User-facing `name`, `icon`, `author.name`, and `author.avatar` match between manifest and registration.
 - `installedAt` in `extensions/extensions.json` is a real ISO timestamp, not a placeholder.
+- When an installed runtime is part of the release check, compare its API response or persisted `extension` record with the files. Existing records are not refreshed by editing a same-version upgrade; use an explicit local sync before launch or a new versioned upgrade after release.
 
 ### 2. Dependency and script boundaries
 

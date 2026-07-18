@@ -1,16 +1,18 @@
-# BuildingAI Claude Hook Notes
+# BuildingAI Agent Hook Notes
 
-This repository uses two shared Claude Code hook scripts. They are project safety and verification helpers, not a custom skill activation engine.
+This repository uses two shared hook scripts for Claude Code and Codex. They are project safety and verification helpers, not a custom skill activation engine.
 
 ## Current hooks
 
-Registered in `.claude/settings.json`:
+Registered in `.claude/settings.json` and `.codex/hooks.json`:
 
 | Event | Matcher | Script | Purpose |
 |---|---|---|---|
-| `PreToolUse` | `Write|Edit|MultiEdit|NotebookEdit|Bash` | `.claude/hooks/pretool-guard.mjs` | Blocks or asks before high-risk file edits and commands. |
-| `PostToolUse` | `Write|Edit|MultiEdit|NotebookEdit` | `.claude/hooks/changed-files-verify.mjs` | Records files touched by Claude in the session. |
-| `Stop` | n/a | `.claude/hooks/changed-files-verify.mjs` | Emits path-aware verification hints for touched files. |
+| `PreToolUse` | `Write|Edit|MultiEdit|NotebookEdit|Bash` | `hooks/pretool-guard.mjs` | Blocks or asks before high-risk file edits and commands. |
+| `PostToolUse` | `Write|Edit|MultiEdit|NotebookEdit` | `hooks/changed-files-verify.mjs` | Records files touched by the active agent in the session. |
+| `Stop` | n/a | `hooks/changed-files-verify.mjs` | Emits path-aware verification hints for touched files. |
+
+The `.claude/hooks/` and `.codex/hooks/` copies must remain identical. Runtime registration commands use workspace-relative paths.
 
 ## What these hooks do not do
 
@@ -40,8 +42,10 @@ When editing hook scripts or settings, prefer small static checks:
 
 ```bash
 node -e "JSON.parse(require('node:fs').readFileSync('.claude/settings.json','utf8'))"
+node -e "JSON.parse(require('node:fs').readFileSync('.codex/hooks.json','utf8'))"
 node .claude/hooks/pretool-guard.mjs < simulated-hook-input.json
 node .claude/hooks/changed-files-verify.mjs < simulated-hook-input.json
+node scripts/check-agent-governance.mjs
 ```
 
 Do not add mutating auto-fix hooks unless the user explicitly asks and the behavior is documented.

@@ -2,9 +2,9 @@
 
 This repository keeps project skills in the root `skills/` directory and syncs them into AI editor-specific folders with `scripts/sync-skills.mjs`.
 
-The root `skills/` folder is the source of truth. Generated copies such as `.claude/skills/<name>/` are editor runtime copies and should not become a second source of truth.
+The root `skills/` folder is the source of truth. Generated copies such as `.agents/skills/<name>/` and `.claude/skills/<name>/` are editor runtime copies and should not become a second source of truth.
 
-When generic upstream skills conflict with this repository, follow `skills/skill-developer/SKILL.md`, this README, `AGENTS.md`, and `scripts/sync-skills.mjs`. Do not edit generated `.claude/skills/<name>/` copies directly for BuildingAI project skills.
+When generic upstream skills conflict with this repository, follow `skills/skill-developer/SKILL.md`, this README, `AGENTS.md`, and `scripts/sync-skills.mjs`. Do not edit generated runtime copies directly for BuildingAI project skills.
 
 ## Supported editors
 
@@ -39,6 +39,10 @@ node scripts/sync-skills.mjs sync <editor>
 # Sync all skills to all editors
 node scripts/sync-skills.mjs sync all
 
+# Check one skill or all skills without writing files
+node scripts/sync-skills.mjs check <skill-name> <editor>
+node scripts/sync-skills.mjs check all <editor>
+
 # Remove one skill from one editor
 node scripts/sync-skills.mjs remove <skill-name> <editor>
 
@@ -51,6 +55,7 @@ The pnpm wrapper is also available:
 ```bash
 pnpm skills sync claude
 pnpm skills sync repo-verify claude
+pnpm skills check all claude
 pnpm skills remove repo-verify claude
 ```
 
@@ -100,6 +105,22 @@ User-invoked extension release and delivery checklist. Use before packaging, pub
 
 EchoFlow 插件 UI 设计与前后端契约工作流。用于插件页面从零设计、已有页面迭代、Design Gallery、2-3 个设计稿并行探索、浏览器选择、选中方案迁移和落选代码清理。
 
+### `contract-generation-development`
+
+合同插件后续开发和跨对话交接流程。事实以合同插件 README 为准，流程覆盖真实联调、队列恢复、审查规则、编辑冲突、Open File Viewer 和交付收口。
+
+### `echoflow-ai-town-roadmap`
+
+Continuation workflow for the `echoflow-ai-town` game plugin. Use it to resume the first unfinished roadmap phase from actual code and verification evidence, keep conditional engine/AI/social work gated, and update the plugin README and ROADMAP during handoff.
+
+### `echoflow-video-roadmap`
+
+Continuation workflow for the `echoflow-video` single-video kernel and AI short-drama roadmap. Use it to finish the first unverified production gate before media, domain, workflow, Studio or release stages, and keep README/ROADMAP evidence current across conversations.
+
+### `echoflow-astrology-roadmap`
+
+Staged continuation workflow for `echoflow-astrology-fortune`. It resumes the first unfinished README phase, keeps deterministic chart and versioned fact foundations ahead of Report V2, UI, and Product Agent work, and routes domain/security/UI/release reviews.
+
 ## Other available skills
 
 These skills may be useful when synced, but they are not the primary authority for repository facts:
@@ -120,4 +141,14 @@ These skills may be useful when synced, but they are not the primary authority f
 - Verification: `skills/repo-verify/SKILL.md`.
 - Extension release: `skills/extension-release-check/SKILL.md`.
 - Plugin UI workflow: `skills/echoflow-ui-workflow/SKILL.md` and `.claude/design-workflow.md`.
+- Contract plugin handoff: `skills/contract-generation-development/SKILL.md` and `extensions/echoflow-contract-generation/README.md`.
+- AI Town staged continuation: `skills/echoflow-ai-town-roadmap/SKILL.md` and `extensions/echoflow-ai-town/ROADMAP.md`.
+- Video and AI short-drama staged continuation: `skills/echoflow-video-roadmap/SKILL.md` and `extensions/echoflow-video/ROADMAP.md`.
+- Astrology staged continuation: `skills/echoflow-astrology-roadmap/SKILL.md` and `extensions/echoflow-astrology-fortune/README.md`.
 - Skill sync implementation: `scripts/sync-skills.mjs`.
+
+## Reviewer and hook governance
+
+- Claude reviewer definitions live in `.claude/agents/`; Codex counterparts live in `.codex/agents/`. Keep names, descriptions, and instructions aligned while preserving each runtime's file format.
+- Shared hook scripts under `.claude/hooks/` and `.codex/hooks/` must remain identical. Hook commands use workspace-relative paths, never a developer-specific checkout path.
+- Run `node scripts/check-agent-governance.mjs` after reviewer, hook, or related routing changes.

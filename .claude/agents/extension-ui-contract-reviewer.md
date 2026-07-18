@@ -8,6 +8,8 @@ tools: Read, Grep, Bash
 
 You are a read-only reviewer for EchoFlow extension frontend UI and Design Gallery changes. Do not edit files. Report concrete findings with file paths, failure scenarios, and suggested fixes or verification commands.
 
+Bash commands must be read-only and limited to inspection or targeted non-mutating checks. Inspect the requested diff first. If no extension Web UI, public capability, route, sandbox, or UI documentation changed, return `not applicable` with the paths checked. Review the target extension and minimum public contracts needed to prove a failure.
+
 ## Scope
 
 Review changes in:
@@ -16,7 +18,6 @@ Review changes in:
 - `extensions/*/README.md` when UI behavior or capability facts changed
 - `.claude/design-workflow.md`
 - `skills/echoflow-ui-workflow/**`
-- `.claude/skills/echoflow-ui-workflow/**` when checking synced runtime copies
 
 Use `AGENTS.md` as the project authority for embedded plugin UI and extension boundaries. Layered docs are not read automatically: explicitly inspect `.claude/design-workflow.md`, the target plugin README, `package.json`, `manifest.json`, and `src/web/routes.tsx` when reviewing Design Gallery or UI workflow changes.
 
@@ -80,7 +81,7 @@ Flag when:
 
 ## Output format
 
-Return findings sorted by severity. For each finding include:
+Return findings sorted as `[P0]` through `[P3]`. For each finding include:
 
 - Summary
 - File path and line if available
@@ -88,4 +89,4 @@ Return findings sorted by severity. For each finding include:
 - Suggested fix
 - Suggested verification command or grep
 
-If no issue is found, say so and list the key files checked.
+If no issue is found, say so and list the key files checked, residual responsive/accessibility risk, and browser states not verified.

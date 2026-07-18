@@ -19,15 +19,21 @@
 | 跨仓库规范、架构或边界 | `AGENTS.md`、`CLAUDE.md` |
 | API / auth / Secret / upload / queue / billing / DB | `packages/api/ai-rules.md`、相关源码、`security-boundary-reviewer` |
 | Client | `packages/client/README.md`、`packages/client/package.json`、相关 route/page |
-| Shared package | 对应 `packages/@buildingai/<pkg>/package.json`、README、`src/index.ts` 或 exports |
+| Shared package | 读取目标目录最近的 `package.json`、README、`src/index.ts` 或 exports；不要从包名反推目录，`@buildingai/core` 实际位于 `packages/core` |
 | Extension 普通源码 bugfix | 对应插件 README 的相关章节、`package.json`、错误栈直达源码；不默认调用 reviewer |
 | Extension 局部 Web build failure | README 的构建/风险章节、`package.json`、Vite config、build wrapper；默认不读 manifest/registry，不调用 UI workflow、reviewer 或 release skill |
 | Extension metadata / 依赖 / SDK export / 发布边界 | 插件 README、`package.json`、`manifest.json`、必要时 `extensions/extensions.json`、`extension-boundary-reviewer` |
 | 插件 UI 设计 / Design Gallery / 前后端 UI 契约 | `.claude/design-workflow.md`、目标插件 README、`echoflow-ui-workflow` |
+| `echoflow-ai-town` 分阶段续作 / 长期路线 | 插件 `README.md`、`ROADMAP.md`、`skills/echoflow-ai-town-roadmap/SKILL.md`、当前源码与验证证据 |
+| `echoflow-video` 分阶段续作 / AI 短剧路线 | 插件 `README.md`、`ROADMAP.md`、`skills/echoflow-video-roadmap/SKILL.md`、当前源码与验证证据 |
+| `echoflow-astrology-fortune` 分阶段续作 / 领域计算 | 插件 `README.md`、`skills/echoflow-astrology-roadmap/SKILL.md`、领域变更按需调用 `astrology-domain-reviewer` |
 | Extension 发布/交付 | `/extension-release-check` |
 | 跨 package、根配置或验证范围不明确 | `/repo-verify`；单 package 局部改动按目标 `package.json` 选择最小验证 |
-| Skills | `skills/README.md`、`scripts/sync-skills.mjs` |
-| 外部库新 API | context7 MCP 实时文档 |
+| Skills / reviewer / hooks | `skills/README.md`、`skill-developer`、`scripts/sync-skills.mjs`、`scripts/check-agent-governance.mjs` |
+| 合同插件后续开发/交接 | `extensions/echoflow-contract-generation/README.md`、`skills/contract-generation-development/SKILL.md`、`repo-verify`；再按任务读取实际源码和测试 |
+| 外部库新 API | 优先使用 Codex 运行时提供的 Context7；当前会话未暴露时使用该库官方文档，不恢复项目级 `.claude/mcp` 启动器 |
+
+Reviewer 只审查本轮明确 diff：metadata/依赖/SDK/发布归 `extension-boundary-reviewer`，API/Secret/上传/事务/队列/计费归 `security-boundary-reviewer`，Web UI/public capability/Design Gallery 归 `extension-ui-contract-reviewer`。独立审查可并行，主 agent 负责去重、修改和最终验证。
 
 ## 3. 核心边界
 
@@ -92,6 +98,8 @@
 | 展示信息 | `manifest.json` 与 `extensions/extensions.json` 的 name、icon、author 信息一致。 |
 | installedAt | 本地 registry 中必须是真实 ISO 时间戳，不写占位值。 |
 
+已安装环境的展示信息可能来自数据库 `extension` 记录；修改 manifest、registry 或同版本 upgrade 不会自动改写已有记录。未上线插件可在调整 `0.0.1` upgrade 后显式同步本地数据，已上线插件应通过新版本 upgrade 迁移，并在运行态核对 API 或只读数据库结果。
+
 脚本约束：
 
 - `build:publish` 必须直接串联工具命令，禁止嵌套 `pnpm run ...`。
@@ -123,6 +131,8 @@
 | Provider config | 使用 `normalizeProviderConfig`、`resolveProviderEndpointCredential()`、`resolveProviderSecretValue()`。 | 保存 API Key 明文/密文副本或在插件里重复拼接 Secret 字段。 |
 | Provider HTTP | 使用 `requestProviderText`、`requestProviderJson`、`testProviderJsonEndpoint`、`normalizeProviderBaseUrl`、`safeJsonParse`。 | 重复手写 fetch、timeout、retry、JSON parse 和 Base URL 校验。 |
 | AI 流式响应 | 上游错误、主动中止和流转换失败必须作为失败终态透传；即使 assistant 消息尚未创建，前端也要显示可见错误。 | 只写服务端日志、吞掉 SSE 错误，或让界面停留在无回复状态。 |
+| 长文档 AI | 长文档按稳定边界完整分块并合并结果；设置明确的块数/成本上限，超限时失败关闭并提示。 | 静默截取前 N 字后仍宣称完成全量审查。 |
+| AI 修改应用 | AI Finding/补丁由后端按稳定对象 ID、当前 revision 和 source hash 校验后应用；内容变化后旧建议失效。 | 前端按标题模糊匹配目标，或提交重建后的整份文档来采纳单条建议。 |
 | 外部 URL / 下载 | 保存或下载前用 `assertPublicHttpUrl()`、`resolvePublicHttpUrl()`、`downloadPublicHttpUrl()` 做协议、凭据、本机/内网、DNS、跳转、超时和大小限制。 | 只用 `new URL()` 或裸 axios/fetch 判断安全。 |
 | 上传文件 | 用户上传走平台上传和 `fileId`，后端校验上传者、插件归属、大小、MIME/扩展名。 | 只信任 URL/path，或插件重复注册平台 File/Storage 仓储。 |
 | 配置输出 | public/admin response 用白名单 serializer 逐字段组装。 | `...config`、`...endpoint`、`...raw` 导致 Secret、Base URL、上游任务和排障字段泄漏。 |
@@ -171,7 +181,7 @@ pnpm --filter <identifier> build:publish
 
 实际命令以目标 `package.json` 为准。单 package 局部改动直接选择最小命令；跨 package、根配置或范围不明确时调用 `/repo-verify`；插件发布/交付前调用 `/extension-release-check`。
 
-根 `pnpm build` 在 Turbo 主构建完成后调用 `scripts/build-extensions.mjs`，按 `extensions/extensions.json` 顺序构建所有本地插件。脚本逐个执行缓存化的 `build:publish`，避免多个大型 Vite 构建并发争抢内存，并强校验每个插件的 `build/index.js` 与 `.output/public/index.html`；任一插件缺少脚本、构建失败或产物不完整时，predeploy 必须失败，不能带着“插件已启用但运行时跳过”的状态启动。
+根 `pnpm build` 在 Turbo 主构建完成后调用 `scripts/build-extensions.mjs`，按 `extensions/extensions.json` 顺序构建所有本地插件。脚本使用单次 Turbo 调用串行执行缓存化的 `build:publish`，不重复构建已完成的共享依赖，避免多个大型 Vite 构建并发争抢内存；随后强校验每个插件的 `build/index.js`、`.output/public/index.html` 和 `AppModule` 实际导入。任一插件缺少脚本、构建失败、产物不完整或模块无法加载时，predeploy 必须失败，不能带着“插件已启用但运行时跳过”的状态启动。
 
 局部 Extension Web build 修复默认预算：首轮最多读取 8 个直接相关文件、最多 2 批搜索、默认不启动 subagent，最多进行 2 轮“修改 → 目标 build”。目标 build 通过且 diff 仅限预期文件后停止；同一错误连续两轮不变，或需要 install/lockfile、Docker、浏览器、凭据、公共 API 改动时停止并报告 blocker。纯 Vite、Rollup、tsconfig、依赖解析和构建脚本故障不属于 UI 设计任务。
 

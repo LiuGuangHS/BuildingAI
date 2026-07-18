@@ -15,7 +15,8 @@ Current sources of truth:
 
 - Source skills live in `skills/<name>/`.
 - Editor-specific copies are generated under folders such as `.agents/skills/<name>/` and `.claude/skills/<name>/` by `scripts/sync-skills.mjs`; do not edit generated copies as the source.
-- Shared Claude Code hooks live in `.claude/hooks/pretool-guard.mjs` and `.claude/hooks/changed-files-verify.mjs`.
+- Shared hook sources are mirrored under `.claude/hooks/` and `.codex/hooks/`; their runtime registrations live in `.claude/settings.json` and `.codex/hooks.json`.
+- Read-only reviewer definitions live in `.claude/agents/` and `.codex/agents/` and must remain semantically aligned.
 - Shared Claude Code settings live in `.claude/settings.json`.
 - Project-wide rules live in `AGENTS.md`; editor-specific entrypoints such as `CLAUDE.md` stay short and route back to it.
 
@@ -65,9 +66,13 @@ Use the repository script; do not manually maintain generated copies as a second
 ```bash
 node scripts/sync-skills.mjs sync <skill-name> <editor>
 node scripts/sync-skills.mjs sync <editor>
+node scripts/sync-skills.mjs check <skill-name> <editor>
+node scripts/sync-skills.mjs check all <editor>
 ```
 
 The pnpm wrapper exists, but if it unexpectedly triggers install behavior in a non-interactive environment, use the node script directly and report why.
+
+Sync and check failures must exit non-zero. After reviewer or hook changes, run `node scripts/check-agent-governance.mjs`.
 
 Supported editor names are defined in `scripts/sync-skills.mjs` (`EDITOR_MAP`). Keep `skills/README.md` and `skills/README.zh-CN.md` aligned with that script.
 
@@ -88,6 +93,8 @@ Before finishing a skill change, verify:
 - Commands match this repository's package manager and scripts.
 - The skill explains whether it is model-invocable or user-invoked only.
 - Generated copies are synced to the editor runtimes that need the skill.
+- `node scripts/sync-skills.mjs check ...` passes for those runtime targets.
+- `node scripts/check-agent-governance.mjs` passes when reviewer or hook definitions changed.
 
 ## Supporting references
 

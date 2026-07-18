@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node '/home/zhijun/WorkSpace/BuildingAI/.codex/hooks/pretool-guard.mjs'",
+            "command": "node .codex/hooks/pretool-guard.mjs",
             "timeout": 10
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node '/home/zhijun/WorkSpace/BuildingAI/.codex/hooks/changed-files-verify.mjs'",
+            "command": "node .codex/hooks/changed-files-verify.mjs",
             "timeout": 10
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node '/home/zhijun/WorkSpace/BuildingAI/.codex/hooks/changed-files-verify.mjs'",
+            "command": "node .codex/hooks/changed-files-verify.mjs",
             "timeout": 10
           }
         ]

@@ -24,7 +24,7 @@ Before recommending commands, route by touched paths:
 | `AGENTS.md`, `CLAUDE.md` | Ensure routing remains short and points to the right facts; do not create a second authority source. |
 | `packages/api/**` | `packages/api/ai-rules.md`, target module files, API `package.json`. |
 | `packages/client/**` | `packages/client/README.md`, `packages/client/package.json`, relevant router/page files. |
-| `packages/@buildingai/<pkg>/**` | Package `package.json`, README, `src/index.ts` or export map. |
+| `packages/core/**`, `packages/@buildingai/<pkg>/**` | Nearest package `package.json`, README, `src/index.ts` or export map. Do not derive filesystem paths from package names. |
 | `packages/@buildingai/extension-sdk/**` | `packages/@buildingai/extension-sdk/README.md`, `src/index.ts`, `src/tsup.ts`, relevant tests. |
 | `extensions/<identifier>/**` | Plugin README, `package.json`, `manifest.json`, and `extensions/extensions.json` if metadata changed. |
 | `skills/**` | `skills/README.md`, target `SKILL.md`, and `scripts/sync-skills.mjs`; sync generated copies only when needed. |
@@ -46,7 +46,7 @@ Layered docs are not automatically read by every agent. If a verification recomm
 |---|---|
 | `packages/api/**` | `pnpm --filter @buildingai/api check-types`; `pnpm --filter @buildingai/api lint`; targeted `pnpm --filter @buildingai/api test` when tests or behavior changed |
 | `packages/client/**` | `pnpm -C packages/client lint`; `pnpm -C packages/client build:web` when Vite, routing, UI runtime, assets, or build config changed |
-| `packages/@buildingai/<pkg>/**` | `pnpm --filter @buildingai/<pkg> check-types`; targeted `test` when available; `build` when exports/build config changed |
+| `packages/core/**`, `packages/@buildingai/<pkg>/**` | Read the nearest `package.json` name/scripts, then run its narrow `check-types`, targeted `test`, and `build` when exports/build config changed |
 | `extensions/<identifier>/src/api/**` | `pnpm --filter <identifier> check-types`; `pnpm --filter <identifier> test`; `pnpm --filter <identifier> build:api` when API build/export changed |
 | `extensions/<identifier>/src/web/**` | `pnpm --filter <identifier> check-types`; `pnpm --filter <identifier> test`; `pnpm --filter <identifier> build:web` when UI/build changed |
 | `extensions/<identifier>/manifest.json`, `package.json`, `vite.config.*`, `tsup.config.*` | `check-types`, `test`, relevant `build:web`/`build:api`, and consider `/extension-release-check` |
