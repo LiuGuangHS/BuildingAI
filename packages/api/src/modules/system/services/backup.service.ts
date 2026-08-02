@@ -149,7 +149,10 @@ export class BackupService {
             const dbPort = process.env.DB_PORT || "5432";
             const dbUser = process.env.DB_USERNAME || "postgres";
             const dbName = process.env.DB_DATABASE || "buildingai";
-            const dbPassword = process.env.DB_PASSWORD || "postgres";
+            const dbPassword = process.env.DB_PASSWORD?.trim();
+            if (!dbPassword) {
+                throw new InternalServerErrorException("DB_PASSWORD is required for database backups");
+            }
 
             this.logger.log(`Starting database backup to ${filename}...`);
 

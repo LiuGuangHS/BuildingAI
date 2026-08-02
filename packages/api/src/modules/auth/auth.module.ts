@@ -26,6 +26,14 @@ import type { StringValue } from "ms";
 
 import { AuthWebController } from "./controller/web/auth.controller";
 
+function requireJwtSecret() {
+    const secret = process.env.JWT_SECRET?.trim();
+    if (!secret || secret.length < 32) {
+        throw new Error("JWT_SECRET must be at least 32 characters");
+    }
+    return secret;
+}
+
 /**
  * 认证模块
  *
@@ -51,7 +59,7 @@ import { AuthWebController } from "./controller/web/auth.controller";
             imports: [ConfigModule],
             inject: [ConfigService],
             useFactory: () => ({
-                secret: process.env.JWT_SECRET || "EchoFlowAI",
+                secret: requireJwtSecret(),
                 signOptions: {
                     expiresIn: (process.env.JWT_EXPIRES_IN as StringValue) || "24h",
                 },

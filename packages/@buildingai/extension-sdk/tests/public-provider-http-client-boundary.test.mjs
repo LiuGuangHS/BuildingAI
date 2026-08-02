@@ -47,7 +47,8 @@ test("provider HTTP client centralizes timeout, retry and safe JSON parsing", as
     assert.match(srcClient, /class ProviderHttpError/);
     assert.match(srcClient, /safeJsonParse/);
     assert.match(srcClient, /返回了无效 JSON/);
-    assert.match(srcClient, /normalizePublicHttpUrl/);
+    assert.match(srcClient, /assertPublicHttpUrl/);
+    assert.match(srcClient, /redirect: "error"/);
     assert.match(distClientDts, /requestProviderJson/);
     assert.match(distClientDts, /requestProviderText/);
     assert.match(distClientJs, /ProviderHttpError/);

@@ -188,9 +188,6 @@ function buildHints(files) {
             if (/src\/api|tsup\.config|package\.json/.test(file)) {
                 addCommand(commands, `pnpm --filter ${ext} build:api`, `${ext} API/build config changed`);
             }
-            if (ext === "echoflow-video" && /tests\/e2e\//.test(file)) {
-                notes.add("`echoflow-video` E2E 需要 `BASE_URL`、`ADMIN_AUTH_TOKEN`、`WEB_USER_AUTH_TOKEN` 后再运行 `pnpm --filter echoflow-video test:e2e`。");
-            }
             continue;
         }
 

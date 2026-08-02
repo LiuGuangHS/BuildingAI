@@ -4,9 +4,8 @@ import { Datasets, SquarePublishStatus } from "@buildingai/db/entities/datasets.
 import { Extension } from "@buildingai/db/entities/extension.entity";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Public } from "@buildingai/decorators/public.decorator";
-import { Controller, Get, Header, Req } from "@nestjs/common";
+import { Controller, Get, Header } from "@nestjs/common";
 import { Repository } from "@buildingai/db/typeorm";
-import type { Request } from "express";
 
 const CACHE_KEY = "sitemap_xml";
 const CACHE_TTL = 3600; // 1 hour in seconds
@@ -26,8 +25,8 @@ export class SitemapController {
   @Get("sitemap.xml")
   @Public()
   @Header("Content-Type", "application/xml")
-  async generateSitemap(@Req() request: Request): Promise<string> {
-    const baseUrl = this.resolveBaseUrl(request);
+  async generateSitemap(): Promise<string> {
+    const baseUrl = this.resolveBaseUrl();
     const cacheKey = `${CACHE_KEY}:${baseUrl}`;
     const cached = await this.cacheService.get<string>(cacheKey);
     if (cached) return cached;
@@ -75,10 +74,12 @@ ${urls.join("\n")}
     return xml;
   }
 
-  private resolveBaseUrl(request: Request): string {
+  private resolveBaseUrl(): string {
     const configured = process.env.APP_DOMAIN?.trim();
-    const candidate = configured || `${request.protocol}://${request.get("host")}`;
-    const url = new URL(candidate);
+    if (!configured) {
+      throw new Error("APP_DOMAIN is required to generate sitemap.xml");
+    }
+    const url = new URL(configured);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       throw new Error("APP_DOMAIN must use http or https");
     }
@@ -90,8 +91,14 @@ ${urls.join("\n")}
       ? `\n    <lastmod>${lastmod.toISOString().split("T")[0]}</lastmod>`
       : "";
     return `  <url>
-    <loc>${baseUrl}${loc}</loc>
+    <loc>${this.escapeXml(`${baseUrl}${loc}`)}</loc>
     <priority>${priority}</priority>${lastmodStr}
   </url>`;
+  }
+
+  private escapeXml(value: string): string {
+    return value.replace(/[<>&"']/g, (character) => {
+      return { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" }[character]!;
+    });
   }
 }

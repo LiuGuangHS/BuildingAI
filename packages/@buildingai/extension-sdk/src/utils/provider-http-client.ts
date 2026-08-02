@@ -1,7 +1,7 @@
 import { HttpErrorFactory } from "@buildingai/errors";
 
 import { safeJsonParse } from "./json";
-import { normalizePublicHttpUrl } from "./public-http-url";
+import { assertPublicHttpUrl, normalizePublicHttpUrl } from "./public-http-url";
 
 export { safeJsonParse } from "./json";
 
@@ -38,12 +38,13 @@ export class ProviderHttpError extends Error {
 }
 
 export async function requestProviderText(url: string, options: ProviderHttpRequestOptions): Promise<string> {
+    const safeUrl = await assertPublicHttpUrl(url, { label: options.serviceLabel ?? "Provider URL" });
     let lastError: Error | undefined;
     const maxRetries = options.maxRetries ?? 2;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            return await executeProviderTextRequest(url, options, attempt);
+            return await executeProviderTextRequest(safeUrl, options, attempt);
         } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
             if (!isRetryableProviderError(lastError, options) || attempt >= maxRetries) {
@@ -78,11 +79,12 @@ export async function testProviderJsonEndpoint(
     url: string,
     options: Omit<ProviderHttpRequestOptions, "body" | "maxRetries" | "retryDelayMs">,
 ): Promise<void> {
+    const safeUrl = await assertPublicHttpUrl(url, { label: options.serviceLabel ?? "Provider URL" });
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs ?? 15_000);
 
     try {
-        const response = await fetch(url, {
+        const response = await fetch(safeUrl, {
             method: options.method,
             headers: {
                 Accept: "application/json",
@@ -90,6 +92,7 @@ export async function testProviderJsonEndpoint(
                 ...options.headers,
             },
             signal: controller.signal,
+            redirect: "error",
         });
 
         if (response.status === 404) return;
@@ -133,6 +136,7 @@ async function executeProviderTextRequest(
             },
             body: options.body,
             signal: controller.signal,
+            redirect: "error",
         });
         const responseText = await response.text();
         if (!response.ok) {

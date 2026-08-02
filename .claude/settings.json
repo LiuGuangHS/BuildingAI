@@ -3,8 +3,6 @@
   "skillListingBudgetFraction": 0.005,
   "permissions": {
     "allow": [
-      "Bash(pnpm --filter echoflow-image check-types)",
-      "Bash(node --experimental-strip-types --test extensions/echoflow-image/tests/*.test.mjs)",
       "Bash(git diff *)"
     ]
   },

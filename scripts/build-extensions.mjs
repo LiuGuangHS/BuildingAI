@@ -13,7 +13,7 @@ function readJson(filePath) {
     return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-function getLocalExtensionIdentifiers(registry) {
+export function getLocalExtensionIdentifiers(registry) {
     const entries = [
         ...Object.values(registry.applications ?? {}),
         ...Object.values(registry.functionals ?? {}),
@@ -22,7 +22,7 @@ function getLocalExtensionIdentifiers(registry) {
     return Array.from(
         new Set(
             entries
-                .filter((entry) => entry?.isLocal !== false)
+                .filter((entry) => entry?.isLocal !== false && entry?.enabled !== false)
                 .map((entry) => entry?.manifest?.identifier)
                 .filter((identifier) => typeof identifier === "string" && identifier.length > 0),
         ),
@@ -126,8 +126,10 @@ async function main() {
     console.log(`\nBuilt and validated ${identifiers.length} local extension(s).`);
 }
 
-main().catch((error) => {
-    const message = error instanceof Error ? error.stack || error.message : String(error);
-    console.error(message);
-    process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    main().catch((error) => {
+        const message = error instanceof Error ? error.stack || error.message : String(error);
+        console.error(message);
+        process.exitCode = 1;
+    });
+}

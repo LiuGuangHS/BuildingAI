@@ -2,7 +2,7 @@ import { PushSubscription } from "@buildingai/db/entities";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Repository } from "@buildingai/db/typeorm";
 import { DictService } from "@buildingai/dict";
-import { Injectable, Logger } from "@nestjs/common";
+import { ConflictException, Injectable, Logger } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import webPush from "web-push";
 import type { PushSubscription as WebPushSubscription } from "web-push";
@@ -147,6 +147,9 @@ export class WebPushService {
         };
 
         if (existing) {
+            if (existing.userId !== userId) {
+                throw new ConflictException("Push subscription belongs to another user");
+            }
             await this.pushSubscriptionRepository.update(existing.id, payload);
             return { enabled: true };
         }

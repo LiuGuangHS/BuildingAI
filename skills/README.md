@@ -8,7 +8,7 @@ When generic upstream skills conflict with this repository, follow `skills/skill
 
 ## Supported editors
 
-The supported editor names come from `EDITOR_MAP` in `scripts/sync-skills.mjs`:
+The supported runtime target is defined by `EDITOR_MAP` in `scripts/sync-skills.mjs`:
 
 | Editor name | Target directory |
 |---|---|

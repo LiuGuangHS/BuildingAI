@@ -120,6 +120,28 @@ describe("assertSafePushEndpoint", () => {
     });
 });
 
+describe("WebPushService subscriptions", () => {
+    it("does not allow another user to take over an existing endpoint", async () => {
+        mockLookupAddresses([{ address: "142.250.72.202", family: 4 }]);
+        const update = jest.fn();
+        const service = new WebPushService(
+            {
+                findOne: jest.fn().mockResolvedValue({ id: "subscription-1", userId: "user-a" }),
+                update,
+            } as unknown as ConstructorParameters<typeof WebPushService>[0],
+            {} as ConstructorParameters<typeof WebPushService>[1],
+        );
+
+        await expect(
+            service.subscribe("user-b", {
+                endpoint: "https://fcm.googleapis.com/fcm/send/test-token",
+                keys: { p256dh: "key", auth: "auth" },
+            }),
+        ).rejects.toThrow("Push subscription belongs to another user");
+        expect(update).not.toHaveBeenCalled();
+    });
+});
+
 describe("WebPushService VAPID subject", () => {
     it("returns only the public VAPID key", async () => {
         const service = new WebPushService(

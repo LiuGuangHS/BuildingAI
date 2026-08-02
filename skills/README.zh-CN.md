@@ -8,7 +8,7 @@
 
 ## 支持的编辑器
 
-支持的编辑器名称以 `scripts/sync-skills.mjs` 中的 `EDITOR_MAP` 为准：
+受支持的运行时目标以 `scripts/sync-skills.mjs` 中的 `EDITOR_MAP` 为准：
 
 | 编辑器名称 | 同步目录 |
 |---|---|
