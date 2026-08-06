@@ -1,21 +1,55 @@
 # @buildingai/ai-sdk
 
-`packages/@buildingai/ai-sdk/` is the current AI SDK package in this repository. Do not reference a separate replacement AI SDK package; it does not exist in the current workspace.
+AI SDK packages for chat completions, embeddings, and provider integrations.
 
-## Source files
+## Location
 
-- Package root: `packages/@buildingai/ai-sdk/`
-- Public exports: check `packages/@buildingai/ai-sdk/src/index.ts` and package `exports`.
-- Extension-facing AI helpers are exposed through `packages/@buildingai/extension-sdk/src/index.ts` when plugins should not use low-level provider APIs directly.
+- `packages/@buildingai/ai-sdk/` - Legacy AI SDK
+- `packages/@buildingai/ai-sdk/` - Vercel AI SDK 6.x based
 
-## Usage boundary
+## Exports (ai-sdk-new)
 
-- Main-system AI modules may use `@buildingai/ai-sdk` for provider integration, chat, embeddings, speech, image, moderation, rerank, and related low-level AI operations.
-- Ordinary EchoFlow plugins should prefer main-system public model services and `@buildingai/extension-sdk` helpers unless they are implementing a protocol/integration layer.
-- Provider credentials and Base URL handling should go through the platform Secret/provider flow; do not duplicate secret flattening or URL validation in plugins.
+- `getProvider()` - Get AI provider
+- `generateText()`, `streamText()` - Text generation
+- `generateObject()` - Structured output
+- `embed()` - Embeddings
+- `generateSpeech()`, `generateTranscription()` - Speech
+- `generateImage()` - Image generation
+- `moderate()` - Content moderation
+- `rerank()` - Document reranking
 
-## Related docs
+## Usage
 
-- Cross-repo AI/Secret/billing/upload rules: `AGENTS.md`.
-- Extension SDK package API: `packages/@buildingai/extension-sdk/README.md`.
-- Path-aware verification: `skills/repo-verify/SKILL.md`.
+```typescript
+import { getProvider, generateText, streamText } from "@buildingai/ai-sdk";
+
+// Text generation
+const provider = getProvider("openai", { apiKey: "xxx" });
+const result = await generateText({
+    ...provider("gpt-4o"),
+    prompt: "Hello!",
+});
+
+// Streaming
+const stream = await streamText({
+    ...provider("gpt-4o"),
+    messages: [{ role: "user", content: "Tell a story" }],
+});
+
+for await (const chunk of stream.textStream) {
+    process.stdout.write(chunk);
+}
+
+// Structured output
+import { z } from "zod";
+const result = await generateObject({
+    ...provider("gpt-4o"),
+    schema: z.object({ name: z.string(), age: z.number() }),
+    prompt: "Generate user profile",
+});
+```
+
+## Supported Providers
+
+OpenAI, Anthropic, Google, DeepSeek, Moonshot, Tongyi, Wenxin, ZhipuAI, Hunyuan, VolcEngine,
+SiliconFlow, X, Ollama, etc.

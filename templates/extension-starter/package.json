@@ -1,8 +1,8 @@
 {
     "name": "extension-starter",
     "version": "0.0.1",
-    "description": "EchoFlowAI extension starter template.",
-    "author": "EchoFlow Team",
+    "description": "A simple blog extension",
+    "author": "BuildingAI Teams",
     "private": true,
     "main": "./manifest.json",
     "module": "./manifest.json",
@@ -28,7 +28,7 @@
         "dev": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
         "build:api": "cross-env NODE_ENV=production tsup",
         "build:web": "vite build",
-        "build:publish": "rimraf build .nuxt .output .temp && vite build && cross-env NODE_ENV=production tsup",
+        "build:publish": "pnpm build:clean && pnpm run build:web && pnpm run build:api",
         "format": "prettier --write src",
         "lint": "eslint src --quiet",
         "lint:fix": "eslint src --fix",
@@ -65,16 +65,7 @@
         "@buildingai/web-types": "workspace:*",
         "@types/react": "catalog:web",
         "@types/react-dom": "catalog:web",
-        "concurrently": "catalog:dev",
-        "cross-env": "catalog:dev",
-        "eslint": "catalog:dev",
-        "eslint-plugin-react-refresh": "^0.4.26",
-        "globals": "^16.5.0",
-        "prettier": "catalog:dev",
-        "rimraf": "catalog:dev",
-        "tsup": "catalog:dev",
-        "vite": "catalog:web",
-        "vue-tsc": "catalog:dev"
+        "eslint-plugin-react-refresh": "^0.4.26"
     },
     "engine": {
         "buildingai": ">=25.1.0"

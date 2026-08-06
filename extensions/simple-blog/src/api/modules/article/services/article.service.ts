@@ -8,12 +8,8 @@ import { buildWhere } from "@buildingai/utils";
 import { Injectable } from "@nestjs/common";
 
 import { Article, ArticleStatus } from "../../../db/entities/article.entity";
-import { Category } from "../../../db/entities/category.entity";
 import { CategoryService } from "../../category/services/category.service";
 import { CreateArticleDto, QueryArticleDto, UpdateArticleDto } from "../dto";
-
-const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
-
 @Injectable()
 export class ArticleService extends BaseService<Article> {
     /**
@@ -96,22 +92,14 @@ export class ArticleService extends BaseService<Article> {
             articleData.publishedAt = new Date();
         }
 
-        const article = await this.withTransaction(async (entityManager) => {
-            await entityManager.query(LOCK_TIMEOUT);
-            const saved = await entityManager.getRepository(Article).save(articleData);
-            if (createArticleDto.categoryId) {
-                await entityManager.getRepository(Category).increment(
-                    { id: createArticleDto.categoryId },
-                    "articleCount",
-                    1,
-                );
-            }
-            return entityManager.getRepository(Article).findOne({
-                where: { id: saved.id },
-                relations: ["author"],
-                select: { author: { id: true, avatar: true, nickname: true } },
-            });
+        const article = await super.create(articleData, {
+            includeFields: ["author.id", "author.avatar", "author.nickname"] as const,
         });
+
+        // Increment category article count
+        if (createArticleDto.categoryId) {
+            await this.categoryService.incrementArticleCount(createArticleDto.categoryId);
+        }
 
         return article;
     }
@@ -216,32 +204,20 @@ export class ArticleService extends BaseService<Article> {
             }
         }
 
-        // Update article and category counts in transaction
-        const updatedArticle = await this.withTransaction(async (entityManager) => {
-            await entityManager.query(LOCK_TIMEOUT);
-            const saved = await entityManager.getRepository(Article).save({
-                ...article,
-                ...updateArticleDto,
-            });
+        // Update article
+        const updatedArticle = await super.updateById(id, updateArticleDto);
 
-            if (newCategoryId !== undefined && newCategoryId !== oldCategoryId) {
-                if (oldCategoryId) {
-                    await entityManager.getRepository(Category).createQueryBuilder()
-                        .update(Category)
-                        .set({ articleCount: () => "GREATEST(articleCount - 1, 0)" })
-                        .where("id = :id", { id: oldCategoryId })
-                        .execute();
-                }
-                if (newCategoryId) {
-                    await entityManager.getRepository(Category).increment(
-                        { id: newCategoryId },
-                        "articleCount",
-                        1,
-                    );
-                }
+        // Update category article count if category changed
+        if (newCategoryId !== undefined && newCategoryId !== oldCategoryId) {
+            // Decrement old category count
+            if (oldCategoryId) {
+                await this.categoryService.decrementArticleCount(oldCategoryId);
             }
-            return saved;
-        });
+            // Increment new category count
+            if (newCategoryId) {
+                await this.categoryService.incrementArticleCount(newCategoryId);
+            }
+        }
 
         return updatedArticle;
     }
@@ -260,19 +236,12 @@ export class ArticleService extends BaseService<Article> {
             throw HttpErrorFactory.notFound(`Article ${id} does not exist`);
         }
 
-        const categoryId = article.categoryId;
+        // Decrement category article count
+        if (article.categoryId) {
+            await this.categoryService.decrementArticleCount(article.categoryId);
+        }
 
-        await this.withTransaction(async (entityManager) => {
-            await entityManager.query(LOCK_TIMEOUT);
-            if (categoryId) {
-                await entityManager.getRepository(Category).createQueryBuilder()
-                    .update(Category)
-                    .set({ articleCount: () => "GREATEST(articleCount - 1, 0)" })
-                    .where("id = :id", { id: categoryId })
-                    .execute();
-            }
-            await entityManager.getRepository(Article).delete({ id });
-        });
+        await super.delete(id);
     }
 
     /**
@@ -286,7 +255,7 @@ export class ArticleService extends BaseService<Article> {
             where: { id: In(ids) },
         });
 
-        // Aggregate category counts to decrement
+        // Update category article counts
         const categoryCountMap = new Map<string, number>();
         for (const article of articles) {
             if (article.categoryId) {
@@ -295,20 +264,13 @@ export class ArticleService extends BaseService<Article> {
             }
         }
 
-        await this.withTransaction(async (entityManager) => {
-            await entityManager.query(LOCK_TIMEOUT);
-            if (categoryCountMap.size > 0) {
-                const cases = Array.from(categoryCountMap.entries())
-                    .map(([id, count]) => `WHEN id = '${id}' THEN ${count}`)
-                    .join(" ");
-                await entityManager.getRepository(Category).createQueryBuilder()
-                    .update(Category)
-                    .set({ articleCount: () => `GREATEST(articleCount - CASE ${cases} ELSE 0 END, 0)` })
-                    .where("id IN (:...ids)", { ids: Array.from(categoryCountMap.keys()) })
-                    .execute();
-            }
-            await entityManager.getRepository(Article).delete({ id: In(ids) });
-        });
+        // Decrement category counts
+        for (const [categoryId, count] of categoryCountMap.entries()) {
+            await this.categoryService.decrementArticleCount(categoryId, count);
+        }
+
+        // Delete in batch
+        await this.deleteMany(ids);
     }
 
     /**
@@ -359,10 +321,16 @@ export class ArticleService extends BaseService<Article> {
      * @param id Article id
      */
     async incrementViewCount(id: string): Promise<void> {
-        const result = await this.articleRepository.increment({ id }, "viewCount", 1);
-        if (!result.affected) {
+        const article = await this.articleRepository.findOne({
+            where: { id },
+        });
+
+        if (!article) {
             throw HttpErrorFactory.notFound(`Article ${id} does not exist`);
         }
+
+        article.incrementViewCount();
+        await this.articleRepository.save(article);
     }
 
     /**
@@ -384,7 +352,6 @@ export class ArticleService extends BaseService<Article> {
             where,
             relations: ["category", "author"],
             order: { publishedAt: "DESC", sort: "DESC" },
-            take: 50,
             select: {
                 author: {
                     id: true,

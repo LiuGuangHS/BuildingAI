@@ -11,26 +11,6 @@ description:
 This Skill helps you create well-structured Agent Skills for Claude Code that follow best practices
 and validation requirements.
 
-## BuildingAI project override
-
-For this repository, `skills/skill-developer/SKILL.md` is the main maintenance guide. Root
-`skills/<name>/` is the source of truth, and editor-specific folders such as `.agents/skills/` and
-`.claude/skills/` are generated runtime copies from `scripts/sync-skills.mjs`. Do not edit generated
-copies directly for BuildingAI project skills. The Claude-specific guidance below is generic
-reference material; BuildingAI location, frontmatter, sync, and safety rules come from
-`skill-developer`.
-
-When creating or updating BuildingAI project skills:
-
-1. Edit `skills/<skill-name>/SKILL.md`.
-2. Keep long-lived repository facts in `AGENTS.md` or the relevant package/plugin README.
-3. Sync only to the editor runtime that needs the skill; supported names come from `EDITOR_MAP`:
-   ```bash
-   node scripts/sync-skills.mjs sync <skill-name> <editor>
-   ```
-4. Do not default to dependency installs/upgrades, `pnpm format`, `pnpm lint:fix`, Docker/PM2
-   lifecycle, database writes, generated artifact writes, or real external model/secret/billing calls.
-
 ## When to use this Skill
 
 Use this Skill when:
@@ -67,12 +47,11 @@ Determine where to create the Skill:
 - Experimental Skills
 - Personal productivity tools
 
-**Project Skills**:
+**Project Skills** (`.claude/skills/`):
 
-- Generic Claude Code projects often load skills from `.claude/skills/`.
-- BuildingAI project skill sources live in `skills/<name>/`.
-- BuildingAI `.claude/skills/<name>/` copies are generated runtime copies and should not be edited as
-  the source.
+- Team workflows and conventions
+- Project-specific expertise
+- Shared utilities (committed to git)
 
 ### Step 3: Create Skill structure
 
@@ -82,8 +61,8 @@ Create the directory and files:
 # Personal
 mkdir -p ~/.claude/skills/skill-name
 
-# BuildingAI project source
-mkdir -p skills/skill-name
+# Project
+mkdir -p .claude/skills/skill-name
 ```
 
 For multi-file Skills:
@@ -127,8 +106,6 @@ description: Brief description of what this does and when to use it
 
 **Optional frontmatter fields**:
 
-- **disable-model-invocation**: Set `true` for user-invoked workflows that may recommend heavy
-  validation, release packaging, deployment, external calls, or other side effects.
 - **allowed-tools**: Restrict tool access (comma-separated list)
     ```yaml
     allowed-tools: Read, Grep, Glob
@@ -137,11 +114,6 @@ description: Brief description of what this does and when to use it
     - Read-only Skills
     - Security-sensitive workflows
     - Limited-scope operations
-- **license**: Vendor/upstream license pointer.
-- **metadata**: Vendor/upstream metadata that does not control BuildingAI behavior.
-
-Do not add arbitrary project-specific fields until `skills/README.md` and
-`skills/skill-developer/SKILL.md` are updated.
 
 ### Step 5: Write effective descriptions
 
@@ -303,12 +275,8 @@ If Claude doesn't use the Skill:
 
     ```bash
     ls ~/.claude/skills/skill-name/SKILL.md
-    ls skills/skill-name/SKILL.md
     ls .claude/skills/skill-name/SKILL.md
     ```
-
-    In BuildingAI, if the root `skills/` source exists but a required editor runtime copy is stale
-    or missing, resync it with `node scripts/sync-skills.mjs sync <skill-name> <editor>`.
 
 3. **Validate YAML**:
 

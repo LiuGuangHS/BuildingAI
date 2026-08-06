@@ -11,6 +11,7 @@ CLI tooling for BuildingAI operations.
 - Extension management: `extension:create`, `extension:release`
 - PM2 process management: `pm2:start`, `pm2:stop`, `pm2:restart`, `pm2:status`, `pm2:logs`
 - System updates: `update`, `update-git`
+- Environment sync: `sync-env`
 
 ## Usage
 
