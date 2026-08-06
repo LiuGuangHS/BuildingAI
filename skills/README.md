@@ -74,6 +74,7 @@ If the pnpm wrapper unexpectedly triggers install behavior, use the node script 
 
 5. If the skill is user-invoked and may recommend heavy validation, release packaging, deployment, or external calls, set `disable-model-invocation: true`.
 6. Do not default to dependency installs/upgrades, `pnpm format`, `pnpm lint:fix`, Docker/PM2 lifecycle, database writes, generated artifact writes, or real external model/secret/billing calls. If such a step is required, state why and get explicit authorization.
+7. When ECC is available, use its default development lifecycle for every implementation, bugfix, refactor, build/config, and release-preparation task: `/ecc:plan`, `/ecc:tdd-workflow` for behavior changes, `/ecc:code-review`, and `/ecc:verification-loop`; use `/ecc:build-fix` only after a real build/type failure and `/ecc:update-docs` when source-of-truth docs need synchronization. Skip only inapplicable stages and record why.
 
 ## Frontmatter policy
 

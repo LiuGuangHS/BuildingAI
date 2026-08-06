@@ -92,4 +92,5 @@ Return findings sorted as `[P0]` through `[P3]`. For each finding include:
 - Suggested fix
 - Suggested verification command/test
 
-If no issue is found, say so and list the key files checked, residual risk, and missing integration or external verification."""
+If no issue is found, say so and list the key files checked, residual risk, and missing integration or external verification.
+"""

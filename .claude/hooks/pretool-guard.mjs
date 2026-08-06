@@ -181,11 +181,43 @@ function commandHasHighRiskTarget(command) {
     ].some((needle) => command.includes(needle));
 }
 
-function shellRmSegments(command) {
+function shellCommandSegments(command) {
     return command
         .split(/(?:&&|\|\||;|\n)/)
-        .map((segment) => segment.trim().replace(/^(?:sudo\s+)+/, ""))
-        .filter((segment) => /^rm\s/.test(segment));
+        .map((segment) => segment.trim().replace(/^(?:sudo\s+)+/, ""));
+}
+
+function shellRmSegments(command) {
+    return shellCommandSegments(command).filter((segment) => /^rm\s/.test(segment));
+}
+
+function isGitRestoreCommand(segment) {
+    const tokens = segment.split(/\s+/);
+    let index = 0;
+
+    while (tokens[index] === "env" || tokens[index] === "command") {
+        index++;
+        while (tokens[index]?.startsWith("-") || tokens[index]?.includes("=")) index++;
+    }
+
+    if (tokens[index] !== "git") return false;
+    index++;
+
+    while (tokens[index]) {
+        const token = tokens[index];
+        if (token === "restore") return true;
+        if (["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env"].includes(token)) {
+            index += 2;
+            continue;
+        }
+        if (token.startsWith("-")) {
+            index++;
+            continue;
+        }
+        return false;
+    }
+
+    return false;
 }
 
 function inspectBashCommand(command) {
@@ -199,6 +231,11 @@ function inspectBashCommand(command) {
 
     if (/\bgit\s+checkout\s+--\b/.test(trimmed)) {
         deny("blocked `git checkout --`. Do not revert files without a one-off user request.");
+        return true;
+    }
+
+    if (shellCommandSegments(trimmed).some(isGitRestoreCommand)) {
+        deny("blocked `git restore`. Do not discard repository state without a one-off user request.");
         return true;
     }
 

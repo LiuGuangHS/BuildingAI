@@ -500,6 +500,13 @@ function main() {
             process.exitCode = 1;
         }
     } else if (command === "check") {
+        if (!actualEditor) {
+            console.log(chalk.red("❌ Skill checks require an explicit editor target"));
+            console.log(chalk.yellow("Usage: pnpm skills check <skill-name|all> <editor>"));
+            process.exitCode = 1;
+            return;
+        }
+
         if (actualTarget === "all") {
             checkAllSkills(actualEditor);
         } else if (checkSkill(actualTarget, actualEditor) > 0) {

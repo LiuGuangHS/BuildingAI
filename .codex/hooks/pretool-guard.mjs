@@ -181,6 +181,45 @@ function commandHasHighRiskTarget(command) {
     ].some((needle) => command.includes(needle));
 }
 
+function shellCommandSegments(command) {
+    return command
+        .split(/(?:&&|\|\||;|\n)/)
+        .map((segment) => segment.trim().replace(/^(?:sudo\s+)+/, ""));
+}
+
+function shellRmSegments(command) {
+    return shellCommandSegments(command).filter((segment) => /^rm\s/.test(segment));
+}
+
+function isGitRestoreCommand(segment) {
+    const tokens = segment.split(/\s+/);
+    let index = 0;
+
+    while (tokens[index] === "env" || tokens[index] === "command") {
+        index++;
+        while (tokens[index]?.startsWith("-") || tokens[index]?.includes("=")) index++;
+    }
+
+    if (tokens[index] !== "git") return false;
+    index++;
+
+    while (tokens[index]) {
+        const token = tokens[index];
+        if (token === "restore") return true;
+        if (["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env"].includes(token)) {
+            index += 2;
+            continue;
+        }
+        if (token.startsWith("-")) {
+            index++;
+            continue;
+        }
+        return false;
+    }
+
+    return false;
+}
+
 function inspectBashCommand(command) {
     if (!command || typeof command !== "string") return false;
     const trimmed = command.trim();
@@ -195,7 +234,13 @@ function inspectBashCommand(command) {
         return true;
     }
 
-    if (/^rm\s/.test(trimmed) && (/(^|\s)-[A-Za-z]*r[A-Za-z]*f?\b/.test(trimmed) || commandHasHighRiskTarget(trimmed))) {
+    if (shellCommandSegments(trimmed).some(isGitRestoreCommand)) {
+        deny("blocked `git restore`. Do not discard repository state without a one-off user request.");
+        return true;
+    }
+
+    const rmSegments = shellRmSegments(trimmed);
+    if (rmSegments.some((segment) => /(^|\s)-[A-Za-z]*r[A-Za-z]*f?\b/.test(segment) || commandHasHighRiskTarget(segment))) {
         deny("blocked destructive `rm` touching recursive or high-risk targets. Explain exactly what will be removed and ask the user first.");
         return true;
     }
@@ -220,7 +265,7 @@ function inspectBashCommand(command) {
         return true;
     }
 
-    if (/^rm\s/.test(trimmed)) {
+    if (rmSegments.length > 0) {
         ask("file removal requires confirmation. Explain why deleting this path is safe and whether it was created in this task.");
         return true;
     }

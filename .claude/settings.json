@@ -8,6 +8,9 @@
   },
   "enableAllProjectMcpServers": false,
   "enabledMcpjsonServers": [],
+  "env": {
+    "ECC_HOOK_PROFILE": "strict"
+  },
   "skillOverrides": {
     "skill-creator": "user-invocable-only",
     "skill-writer": "user-invocable-only",

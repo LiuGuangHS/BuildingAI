@@ -74,6 +74,7 @@ pnpm skills remove repo-verify claude
 
 5. 如果 skill 是用户显式调用，并且可能建议重验证、发布打包、部署或外部调用，使用 `disable-model-invocation: true`。
 6. 不默认执行依赖安装/升级、`pnpm format`、`pnpm lint:fix`、Docker/PM2 生命周期、数据库写入、生成 artifact 写入或真实外部模型/Secret/计费调用。若确实需要，先说明原因并取得明确授权。
+7. ECC 可用时，所有开发、修复、重构、构建/配置和发布准备任务默认使用完整生命周期：`/ecc:plan`、行为变更时使用 `/ecc:tdd-workflow`、`/ecc:code-review`、`/ecc:verification-loop`；仅在实际构建/类型失败后使用 `/ecc:build-fix`，源事实文档需要同步时使用 `/ecc:update-docs`。只有不适用的阶段才能跳过，并记录原因。
 
 ## Frontmatter 策略
 

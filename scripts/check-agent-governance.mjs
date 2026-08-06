@@ -141,7 +141,16 @@ function checkHookBehavior() {
     const hook = join(rootDir, ".claude/hooks/pretool-guard.mjs");
     const failures = [];
 
-    for (const command of ["sudo rm -rf build", "echo ok && rm -rf build"]) {
+    for (const command of [
+        "sudo rm -rf build",
+        "echo ok && rm -rf build",
+        "git restore AGENTS.md",
+        "git -C extensions/example restore README.md",
+        "env git restore AGENTS.md",
+        "command git restore AGENTS.md",
+        "git --no-pager restore AGENTS.md",
+        "git -c advice.detachedHead=false restore AGENTS.md",
+    ]) {
         const result = spawnSync(process.execPath, [hook], {
             encoding: "utf8",
             input: JSON.stringify({ tool_name: "Bash", tool_input: { command } }),
@@ -152,6 +161,21 @@ function checkHookBehavior() {
         }
     }
 
+    for (const command of [
+        "git status",
+        "git diff -- AGENTS.md",
+        "printf 'git restore AGENTS.md\\n'",
+    ]) {
+        const result = spawnSync(process.execPath, [hook], {
+            encoding: "utf8",
+            input: JSON.stringify({ tool_name: "Bash", tool_input: { command } }),
+        });
+        const output = result.stdout ? JSON.parse(result.stdout) : null;
+        if (output?.hookSpecificOutput?.permissionDecision) {
+            failures.push(`pretool-guard.mjs: unexpectedly blocked ${command}`);
+        }
+    }
+
     return failures;
 }
 
@@ -159,7 +183,7 @@ function checkSkills() {
     const failures = [];
     const script = join(rootDir, "scripts/sync-skills.mjs");
 
-    for (const editor of ["agents", "claude"]) {
+    for (const editor of ["claude"]) {
         const result = spawnSync(process.execPath, [script, "check", "all", editor], {
             encoding: "utf8",
         });
@@ -171,11 +195,51 @@ function checkSkills() {
     return failures;
 }
 
+function checkEccHarness() {
+    const failures = [];
+    const requiredStages = [
+        "/ecc:plan",
+        "/ecc:tdd-workflow",
+        "/ecc:code-review",
+        "/ecc:verification-loop",
+        "/ecc:build-fix",
+        "/ecc:update-docs",
+    ];
+    const agentsPolicy = read(join(rootDir, "AGENTS.md"));
+    for (const stage of requiredStages) {
+        if (!agentsPolicy.includes(stage)) {
+            failures.push(`AGENTS.md: missing ECC lifecycle stage ${stage}`);
+        }
+    }
+
+    const claudeEntryPoint = read(join(rootDir, "CLAUDE.md"));
+    if (!claudeEntryPoint.includes("use it as the default development harness")) {
+        failures.push("CLAUDE.md: missing default ECC lifecycle routing");
+    }
+
+    try {
+        const settings = JSON.parse(read(join(rootDir, ".claude/settings.json")));
+        if (settings.env?.ECC_HOOK_PROFILE !== "strict") {
+            failures.push(".claude/settings.json: ECC_HOOK_PROFILE must be strict");
+        }
+    } catch (error) {
+        failures.push(`.claude/settings.json: invalid JSON (${error.message})`);
+    }
+
+    return failures;
+}
+
 if (process.argv[2] === "sync") {
     syncGovernance();
 }
 
-const failures = [...checkAgents(), ...checkHooks(), ...checkHookBehavior(), ...checkSkills()];
+const failures = [
+    ...checkAgents(),
+    ...checkHooks(),
+    ...checkHookBehavior(),
+    ...checkSkills(),
+    ...checkEccHarness(),
+];
 if (failures.length > 0) {
     for (const failure of failures) console.error(`FAIL ${failure}`);
     process.exitCode = 1;

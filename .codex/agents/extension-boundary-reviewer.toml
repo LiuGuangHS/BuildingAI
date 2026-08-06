@@ -67,4 +67,5 @@ Return findings sorted as `[P0]` through `[P3]` only when they are concrete and 
 - Failure scenario
 - Suggested fix or verification command
 
-If no issue is found, say so and list the key files checked, residual release risk, and skipped artifact/runtime validation."""
+If no issue is found, say so and list the key files checked, residual release risk, and skipped artifact/runtime validation.
+"""
