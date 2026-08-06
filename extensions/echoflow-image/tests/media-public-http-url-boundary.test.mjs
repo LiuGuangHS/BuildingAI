@@ -52,7 +52,6 @@ test("media provider HTTP requests reuse the extension SDK provider client", () 
     );
 
     assert.match(imageHttpClient, /requestProviderText/);
-    assert.match(imageHttpClient, /safeJsonParse/);
     assert.match(imageGenerationService, /safeJsonParse/);
     assert.match(imageGenerationService, /aiModelService\.generateImage\(modelConfig\.mainModelId/);
     assert.doesNotMatch(imageGenerationService, /JSON\.parse\(text\)/);

@@ -3,7 +3,6 @@ import {
     downloadPublicHttpUrl,
     normalizeProviderBaseUrl,
     requestProviderText,
-    safeJsonParse,
     type ProviderHttpErrorContext,
 } from "@buildingai/extension-sdk";
 
@@ -97,11 +96,9 @@ export function normalizeImageMimeType(raw: string | null | undefined, url: stri
 
 function classifyImageHttpError(context: ProviderHttpErrorContext): Error {
     const prefix = context.attempt > 0 ? `(重试 ${context.attempt} 次后) ` : "";
-    const detail = extractErrorMessage(context.body);
-    const suffix = detail ? `：${detail}` : "";
     switch (context.status) {
         case 400:
-            return HttpErrorFactory.badRequest(`${prefix}请求参数有误，请检查模型、尺寸、质量和提示词${suffix}`);
+            return HttpErrorFactory.badRequest(`${prefix}请求参数有误，请检查模型、尺寸、质量和提示词`);
         case 401:
             return HttpErrorFactory.badRequest(`${prefix}主站密钥中的 apiKey 无效或已过期，请检查模型接入点`);
         case 403:
@@ -114,7 +111,7 @@ function classifyImageHttpError(context: ProviderHttpErrorContext): Error {
         case 504:
             return HttpErrorFactory.badRequest(`${prefix}图片服务暂时不可用 (${context.status})，请稍后重试`);
         default:
-            return HttpErrorFactory.badRequest(`${prefix}图像生成请求失败，服务返回状态码 ${context.status}${suffix}`);
+            return HttpErrorFactory.badRequest(`${prefix}图像生成请求失败，服务返回状态码 ${context.status}`);
     }
 }
 
@@ -137,11 +134,4 @@ function summarizeUrl(raw: string) {
     } catch {
         return "";
     }
-}
-
-function extractErrorMessage(responseText?: string) {
-    if (!responseText) return "";
-    const parsed = safeJsonParse<{ error?: { message?: string }; message?: string }>(responseText);
-    const message = parsed?.error?.message || parsed?.message;
-    return message ? message.slice(0, 300) : "";
 }

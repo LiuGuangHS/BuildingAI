@@ -27,6 +27,8 @@ export interface ProviderHttpErrorContext {
     badRequestLabel: string;
 }
 
+const MAX_PROVIDER_RESPONSE_BYTES = 1024 * 1024;
+
 export class ProviderHttpError extends Error {
     readonly retryable: boolean;
 
@@ -99,7 +101,7 @@ export async function testProviderJsonEndpoint(
         if (!response.ok) {
             throw classifyProviderHttpError({
                 status: response.status,
-                body: await response.text(),
+                body: await readProviderResponse(response),
                 attempt: 0,
                 serviceLabel: options.serviceLabel ?? "Provider",
                 badRequestLabel: options.badRequestLabel ?? "Provider 请求参数有误",
@@ -138,7 +140,7 @@ async function executeProviderTextRequest(
             signal: controller.signal,
             redirect: "error",
         });
-        const responseText = await response.text();
+        const responseText = await readProviderResponse(response);
         if (!response.ok) {
             const context = {
                 status: response.status,
@@ -160,13 +162,41 @@ async function executeProviderTextRequest(
     }
 }
 
+async function readProviderResponse(response: Response): Promise<string> {
+    const contentLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > MAX_PROVIDER_RESPONSE_BYTES) {
+        throw new ProviderHttpError("Provider 响应过大", false);
+    }
+
+    if (!response.body) return "";
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            totalBytes += value.byteLength;
+            if (totalBytes > MAX_PROVIDER_RESPONSE_BYTES) {
+                throw new ProviderHttpError("Provider 响应过大", false);
+            }
+            chunks.push(value);
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
 function classifyProviderHttpError(context: ProviderHttpErrorContext): Error {
     const prefix = context.attempt > 0 ? `(重试 ${context.attempt} 次后) ` : "";
-    const truncated = context.body.length > 500 ? context.body.slice(0, 500) + "..." : context.body;
 
     switch (context.status) {
         case 400:
-            return HttpErrorFactory.badRequest(`${prefix}${context.badRequestLabel}: ${truncated}`);
+            return HttpErrorFactory.badRequest(`${prefix}${context.badRequestLabel}`);
         case 401:
             return HttpErrorFactory.badRequest(`${prefix}主站密钥中的 apiKey 无效或已过期`);
         case 403:
@@ -179,7 +209,7 @@ function classifyProviderHttpError(context: ProviderHttpErrorContext): Error {
         case 504:
             return new ProviderHttpError(`${prefix}${context.serviceLabel}暂时不可用 (${context.status})，请稍后重试`, true);
         default:
-            return HttpErrorFactory.badRequest(`${prefix}${context.serviceLabel}请求失败: ${context.status} ${truncated}`);
+            return HttpErrorFactory.badRequest(`${prefix}${context.serviceLabel}请求失败: ${context.status}`);
     }
 }
 

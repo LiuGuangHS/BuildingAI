@@ -53,11 +53,10 @@ export async function testVideoJsonEndpoint(
 
 function classifyVideoHttpError(context: ProviderHttpErrorContext): Error {
     const prefix = context.attempt > 0 ? `(重试 ${context.attempt} 次后) ` : "";
-    const truncated = context.body.length > 500 ? context.body.slice(0, 500) + "..." : context.body;
 
     switch (context.status) {
         case 400:
-            return HttpErrorFactory.badRequest(`${prefix}${context.badRequestLabel}: ${truncated}`);
+            return HttpErrorFactory.badRequest(`${prefix}${context.badRequestLabel}`);
         case 401:
             return HttpErrorFactory.badRequest(`${prefix}主站密钥中的 apiKey 无效或已过期`);
         case 403:
@@ -70,6 +69,6 @@ function classifyVideoHttpError(context: ProviderHttpErrorContext): Error {
         case 504:
             return HttpErrorFactory.badRequest(`${prefix}${context.serviceLabel}暂时不可用 (${context.status})，请稍后重试`);
         default:
-            return HttpErrorFactory.badRequest(`${prefix}${context.serviceLabel}请求失败: ${context.status} ${truncated}`);
+            return HttpErrorFactory.badRequest(`${prefix}${context.serviceLabel}请求失败: ${context.status}`);
     }
 }
