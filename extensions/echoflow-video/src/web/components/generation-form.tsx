@@ -89,6 +89,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
     const [promptStyle, setPromptStyle] = useState<PromptOptimizationStyle>("cinematic");
     const [uploadingSlotId, setUploadingSlotId] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string>();
+    const [unavailableInitialModelId, setUnavailableInitialModelId] = useState<string>();
     const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
     const estimateMutation = useWebEstimateVideoBillingMutation();
     const { data: optimizerOptions } = useWebPromptOptimizerOptionsQuery();
@@ -113,7 +114,8 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
         && uploadingSlotId === null
         && Boolean(prompt.trim())
         && Boolean(selectedModel)
-        && !mediaIssue;
+        && !mediaIssue
+        && !unavailableInitialModelId;
     const controlsDisabled = Boolean(disabledReason) || Boolean(loading) || !selectedModel;
     const modeControlsDisabled = Boolean(disabledReason) || Boolean(loading);
     const modeHasNoCompatibleModels = models.length > 0 && compatibleModels.length === 0;
@@ -157,14 +159,16 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
 
     useEffect(() => {
         if (!initialValues) return;
-        const initialModel = models.find((item) => item.id === initialValues.model);
+        const initialModel = models.find((item) => item.modelConfigId === initialValues.modelConfigId);
         const initialMode = inferModeFromMedia(initialValues.media, initialModel);
+        setUnavailableInitialModelId(initialValues.modelConfigId && !initialModel ? initialValues.modelConfigId : undefined);
+        setUnavailableInitialModelId(initialValues.modelConfigId && !initialModel ? initialValues.modelConfigId : undefined);
         setMode(getDefaultMode(models, initialMode));
         if (initialValues.prompt) setPrompt(initialValues.prompt);
         if (initialValues.originalPrompt) setOriginalPrompt(initialValues.originalPrompt);
         if (initialValues.promptOptimizationSource) setPromptOptimizationSource(initialValues.promptOptimizationSource);
         if (initialValues.promptOptimizerModelId) setPromptOptimizerModelId(initialValues.promptOptimizerModelId);
-        if (initialValues.model && (!initialModel || modelSupportsMode(initialModel, initialMode))) setModelId(initialValues.model);
+        if (initialValues.modelConfigId && (!initialModel || modelSupportsMode(initialModel, initialMode))) setModelId(initialValues.modelConfigId);
         if (initialValues.media) setMedia(sanitizeMediaForMode(initialMode, initialValues.media));
         if (initialValues.resolution) setResolution(initialValues.resolution);
         if (initialValues.duration) setDuration(String(initialValues.duration));
@@ -289,7 +293,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
             promptOptimizationSource,
             promptOptimizationStyle: promptOptimizationSource ? promptStyle : undefined,
             promptOptimizerModelId: promptOptimizationSource ? promptOptimizerModelId : undefined,
-            model: selectedModel.id,
+            modelConfigId: selectedModel.modelConfigId ?? selectedModel.id,
             resolution,
             duration: Number(duration) || 5,
             ratio: supportsRatio ? ratio : undefined,
@@ -333,7 +337,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
         }
         await optimizePromptMutation.mutateAsync({
             prompt: prompt.trim(),
-            model: selectedModel?.model ?? selectedModel?.id,
+            model: selectedModel?.model,
             style: promptStyle,
             modelId: promptOptimizerModelId,
             ratio: supportsRatio ? ratio : undefined,
@@ -373,6 +377,12 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
                         <div className="flex items-start gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
                             <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
                             <p>{disabledReason} 可到 Console 开启可用模型后再试。</p>
+                        </div>
+                    )}
+                    {unavailableInitialModelId && (
+                        <div className="flex items-start gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                            <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                            <p>原任务模型已不可用，请主动选择一个新模型后再提交。</p>
                         </div>
                     )}
 
@@ -416,6 +426,7 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
                             value={selectedModel?.id ?? ""}
                             onValueChange={(value) => {
                                 setModelId(value);
+                                setUnavailableInitialModelId(undefined);
                                 const nextModel = models.find((model) => model.id === value);
                                 if (nextModel) applyModelDefaults(nextModel);
                                 setMedia((current) => sanitizeMediaForMode(mode, current));

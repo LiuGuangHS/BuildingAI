@@ -1,6 +1,6 @@
 {
     "name": "echoflow-video",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "description": "多模型视频生成插件，复用主站视频模型，支持计费、风控、提示词优化与运营后台。",
     "author": "EchoFlowAI Team",
     "private": true,
@@ -33,7 +33,7 @@
         "lint": "eslint src --quiet --no-error-on-unmatched-pattern",
         "lint:fix": "eslint src --fix --no-error-on-unmatched-pattern",
         "check-types": "tsc -p tsconfig.api.json --noEmit",
-        "test": "node --experimental-strip-types --test tests/*.test.mjs",
+        "test": "node --experimental-strip-types --test",
         "test:unit": "jest --runInBand --passWithNoTests",
         "test:e2e": "playwright test tests/e2e",
         "i18n:translate": "node ../../scripts/translate-i18n.mjs"

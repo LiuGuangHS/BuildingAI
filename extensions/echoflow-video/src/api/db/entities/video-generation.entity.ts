@@ -25,14 +25,6 @@ export enum VideoGenerationBillingStatus {
     FAILED = "failed",
 }
 
-/** Built-in HappyHorse models kept as constants for the EchoFlow video catalog. */
-export enum HappyHorseModel {
-    I2V = "happyhorse-1.0-i2v",
-    R2V = "happyhorse-1.0-r2v",
-    T2V = "happyhorse-1.0-t2v",
-    VIDEO_EDIT = "happyhorse-1.0-video-edit",
-}
-
 export interface VideoMediaItem {
     type: "first_frame" | "reference_image" | "video";
     url: string;

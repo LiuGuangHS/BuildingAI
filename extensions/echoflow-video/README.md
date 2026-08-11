@@ -12,20 +12,23 @@
 | 模型来源 | 复用主站已启用的视频模型，插件只维护可见性、能力覆盖和默认参数。 |
 | 密钥来源 | 主站 AI Provider 管理密钥；插件不保存视频服务 API Key。 |
 | 计费 | 模型级计费规则随固定模型配置维护；独立计费页不作为默认维护入口。 |
-| 长流程 | 提交后通过主站视频模型 SDK 同步得到结果并转存；超时任务由定时扫描回收。 |
+| 长流程 | HTTP 创建 `PENDING` 任务后仅入队；BullMQ Worker 扣费、调用主站视频模型、转存结果并写入终态。 |
 
 ## 当前能力
 
 | 能力 | 状态 | 说明 |
 |---|---|---|
-| 文生视频/图生视频 | ready | 根据固定模型能力收敛用户端参数和素材要求。 |
-| 模型目录 | ready | Console 从主站 active video models 读取候选模型，插件保存运营配置。 |
+| 文生视频 | code-ready | 仅对已验证 API 契约的模型开放。 |
+| 单首帧图生视频 | code-ready | 仅接受 1 张平台上传的首帧图片。 |
+| 多参考图、视频编辑、动作迁移、原生音频 | blocked | 当前主站 SDK/Provider 契约未验证，Web 与 Worker 均 fail closed。 |
+| 模型目录 | code-ready | Console 从主站 active video models 读取候选模型，插件保存运营配置。 |
 | 模型配置 | ready | 每个主站视频模型可配置用户可见性、能力覆盖、默认参数和排序。 |
 | 模型级计费 | ready | 按模型基础费用、时长、分辨率倍率和失败退款配置预估与扣费。 |
 | 提示词优化 | ready | 复用主站 LLM，优化扣费读取主站模型 `billingRule`。 |
-| 终态保护 | ready | 超时扫描和取消写回前重新加锁；已终态记录不被旧对象覆盖。 |
-| 主站通知 | ready | 视频终态通知提交到主站通知中心，由平台多渠道投递。 |
-| 任务恢复 | ready | 实现 `onModuleInit` 启动恢复 + `@Cron("*/5 * * * *")` 定时 stale 扫描双路径，事务内悲观锁+CAS二次校验防止多实例重复入队。 |
+| 队列状态机 | code-ready | `PENDING → PROCESSING → SUCCEEDED/FAILED`；job data 仅携带 generation ID，且 `attempts: 1`。 |
+| 账务与终态 | code-ready | Worker 内按 generation ID 幂等扣费；成功须有有效视频；失败退款与通知在终态事务后执行。 |
+| 任务恢复 | code-ready | 启动与五分钟扫描双路径；旧 PENDING 在锁定 claim 后重新入队，旧 PROCESSING 超时失败但不会自动重放已开始的 Provider 工作。 |
+| 主站通知 | code-ready | 视频终态通知提交到主站通知中心，通知失败不回滚任务。 |
 | 短视频制作 | reserved | Web/Console 均保留页面入口，但当前不是默认上线能力。 |
 | 真实供应商 smoke | pending | 仍需使用真实主站视频模型覆盖提交、失败退款和结果转存。 |
 
@@ -68,7 +71,7 @@
 
 | 服务 | 说明 |
 |---|---|
-| `GenerationService` | 任务创建、余额预检、预扣、主站视频生成、结果转存、退款和 public serializer。 |
+| `GenerationService` | 创建/入队、Worker 执行、账务、结果转存、失败恢复和 public serializer。 |
 | `ModelConfigService` | 主站视频模型列表、用户可见性和 capability 收敛。 |
 | `ProviderConfigService` | 提示词优化模型和配置审计。 |
 | `PromptOptimizationService` | 主站 LLM 提示词优化。 |
@@ -79,7 +82,7 @@
 |---|---|
 | 页面形态 | 用户端首页保持嵌入式业务工作台，不做营销 Hero、独立侧边栏、头像账号、全局余额或通知设置。 |
 | 生成上下文 | 主系统已经提供外壳，插件只展示视频生成需要的上下文：生成方式、素材要求、提示词、扣费与失败退款说明、任务状态、结果操作和最近作品。 |
-| capability | 文生视频、首帧图生、多参考图、视频编辑/动作迁移按模型能力收敛素材要求。 |
+| capability | 仅展示已验证的文生视频与单首帧图生视频；其他能力不显示且后端拒绝。 |
 | 只读降级 | 无可用视频模型时，工作台保留说明和历史入口，但生成表单整体只读，避免用户误以为可以提交。 |
 | 数据边界 | 用户端只消费 Web public 字段；历史参数复用不携带 Console 排障字段、provider 原始响应、内部失败分类或主系统模型 ID。 |
 
@@ -88,7 +91,7 @@
 | 能力 | 当前实现 |
 |---|---|
 | 模型来源 | Console 从主站 active video models 读取候选模型，插件只保存用户可见性、能力覆盖、默认参数、排序和模型级计费。 |
-| 素材 capability | 文生视频、首帧图生、多参考图、视频编辑/动作迁移按模型能力收敛素材要求。 |
+| 素材 capability | 仅支持无素材文生视频和单首帧图生视频。 |
 | 提示词优化 | 复用主站 LLM，优化扣费读取主站模型 `billingRule`。 |
 | 上传素材 | 素材必须通过平台上传并提交 `fileId`；后端校验上传者、插件归属、软删除、大小、MIME 和平台文件 URL。 |
 | 任务与退款 | 任务保存状态时间线、失败分类和脱敏 raw 摘要；失败按账务事实退款。 |
@@ -109,7 +112,7 @@
 ## 配置流程
 
 1. 在主站 AI Provider 中配置并启用视频模型。
-2. 在 Console `/models` 为主站视频模型配置用户可见性、默认参数、能力覆盖、模型级计费和排序。
+2. 在 Console `/models` 配置主站视频模型、默认参数、计费和排序；只有已实际验证 API 契约的文生/单首帧图生模型才可勾选“已验证 API 契约”并面向用户开放。
 3. 在 `/config` 选择提示词优化 LLM。
 4. 在 `/policies` 配置 prompt、素材、并发、用户/IP/provider/model 等风控策略。
 5. 使用 `/history` 和任务详情复核提交、失败退款、通知和状态时间线。
@@ -129,10 +132,10 @@ pnpm --filter echoflow-video build:publish
 
 | 范围 | 证据状态 | 命令/场景 | 环境基线 | 结论 | 后续条件 |
 |---|---|---|---|---|---|
-| 类型、构建与边界测试 | historical | README 记录的 package scripts | 既有本地验证记录 | 曾按上述命令验证；测试桩需随主系统 SDK 导出同步。 | 交付前用当前 Node 22.20 / pnpm 10.20.0 重新执行最小验证矩阵。 |
-| Web public 边界 | current | `tests/video-public-api-boundary.test.mjs` | 静态测试约束 | 约束 Web/Console 字段分离、RootLayout、SDK 限流、provider HTTP、public serializer 和常驻路径依赖。 | Web/API serializer、RootLayout 或 SDK 边界变更后重新执行。 |
+| 类型、构建与边界测试 | current | `check-types`、`lint`、`test:unit`、`test`、`build:api`、`build:web` | 当前本地 workspace | TypeScript 与 lint 通过；Jest 12/12、Node 边界测试 67/67、API/Web 构建通过。 | Redis/PostgreSQL/真实模型环境可用后补集成验证。 |
+| Web/队列/升级边界 | current | Node test runner | 静态测试约束 | 覆盖 public serializer、`modelConfigId`、Worker job、恢复、退款、结果清理、Upgrade 与 Web/Console 契约。 | Provider、Worker 或升级逻辑变更后重新执行。 |
 | 发布包边界 | current | `tests/video-manifest-boundary.test.mjs` | 静态测试约束 | 约束 manifest/package/registry、发布 allowlist、静态资产和运行时目录排除。 | metadata、release allowlist 或发布脚本变更后重新执行。 |
-| 真实端到端 | pending | 真实主站视频模型、余额和存储 | 需要真实环境 | 未覆盖提交、失败退款、转存和通知闭环。 | 准备真实主站视频模型、余额、存储和测试素材后执行。 |
+| 真实端到端 | blocked | `VIDEO_E2E_GENERATION_ENABLED=true` 的真实主站视频模型、余额、存储、Redis 与认证环境 | 当前环境未提供 | 未覆盖提交、失败退款、转存和通知闭环。 | 准备 `VIDEO_TEST_DATABASE_URL`、`BASE_URL`、认证 token、Redis、测试模型/Secret/余额/素材后执行。 |
 | 主系统安装 | pending | release zip 安装 smoke | 需要主系统安装/迁移/重启 | release zip 内容检查不等于安装完成。 | 只有在主系统成功安装、迁移、重启并打开 Web/Console 后才能声明通过。 |
 
 ## 已知风险
@@ -149,8 +152,8 @@ pnpm --filter echoflow-video build:publish
 
 | 任务 | 范围 | 验收 |
 |---|---|---|
-| P1 真实端到端 smoke | 主站视频模型、测试用户、余额、存储、Web 工作台 | 覆盖文生视频、图生/多参考图、可控失败退款、结果转存和成功/失败通知；记录脱敏任务 ID、账务事实和通知记录。 |
+| P1 真实端到端 smoke | 主站视频模型、测试用户、余额、存储、Redis、Web 工作台 | 覆盖文生视频、单首帧图生、可控失败退款、结果转存和成功/失败通知；记录脱敏任务 ID、账务事实和通知记录。 |
 | P1 发布包安装 smoke | `build:publish`、`extension:release`、主系统安装路径 | release zip 内容符合白名单；真实安装后 migration/upgrade 执行、服务重启、Web/Console 页面可打开。 |
-| P2 真实上传与 provider URL smoke | 平台上传、素材校验、provider 结果 URL | 覆盖上传记录创建、归属、存储读取、历史素材重传、删除后提交、公网/跳转/凭据 URL 边界。 |
+| P2 真实上传与 provider URL smoke | 平台上传、素材校验、provider 结果 URL | 覆盖上传记录创建、归属、存储读取、单首帧素材重传、删除后提交、公网/跳转/凭据 URL 边界。 |
 | P2 体验与体积复核 | Web build 输出、桌面和 390px 移动端 | 主入口体积和 CSS 继续收敛；无横向溢出、文本遮挡、console error/warn。 |
 | P3 短视频制作转正式前置 | Web/Console `studio`、数据/队列/计费设计 | 明确素材编排、分镜、批量生成、剪辑导出或模板化发布边界后再转正式能力。 |

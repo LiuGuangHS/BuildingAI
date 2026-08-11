@@ -5,16 +5,12 @@ import { Body, Delete, Get, Param, Post, Query } from "@nestjs/common";
 
 import {
     BatchVideoIdsDto,
+    BatchVideoStatusDto,
     MarkVideoStatusDto,
     QueryVideoGenerationDto,
     UpdateVideoAdminRemarkDto,
 } from "../../dto";
 import { GenerationService } from "../../services/generation.service";
-
-interface BatchStatusBody {
-    status?: "pending" | "processing";
-    limit?: number;
-}
 
 /**
  * Video generation management controller for console (admin-facing).
@@ -48,7 +44,7 @@ export class GenerationController extends BaseController {
     }
 
     @Post("batch/status")
-    async batchRefreshStatus(@Body() body: BatchStatusBody) {
+    async batchRefreshStatus(@Body() body: BatchVideoStatusDto) {
         return this.generationService.batchPollAndUpdate(body.status, body.limit);
     }
 

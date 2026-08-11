@@ -32,7 +32,6 @@ export default {
     duration: "时长（秒）",
     ratio: "比例",
     watermark: "添加水印",
-    audioSetting: "音频设置",
     submitting: "正在提交任务...",
     submitSuccess: "任务已提交，正在生成中...",
     submitFailed: "任务提交失败",

@@ -58,13 +58,12 @@ export function HistoryList({
             originalPrompt: item.originalPrompt,
             promptOptimizationSource: item.promptOptimizationSource,
             promptOptimizationStyle: item.promptOptimizationStyle,
-            model: item.model,
+            modelConfigId: item.modelConfigId,
             media: item.media,
             resolution: item.parameters.resolution,
             duration: item.parameters.duration,
             ratio: item.parameters.ratio,
             watermark: item.parameters.watermark,
-            audioSetting: item.parameters.audio_setting,
         });
         toast.success("已复制参数");
         navigate("/");

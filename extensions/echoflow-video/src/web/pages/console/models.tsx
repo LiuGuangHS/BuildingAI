@@ -9,7 +9,7 @@ import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
 import { CheckCircle2, Save, SlidersHorizontal } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ConsolePage } from "../../components/console-page";
@@ -175,6 +175,7 @@ function ModelOperationsEditor({
     const [description, setDescription] = useState("");
     const [enabled, setEnabled] = useState(true);
     const [visibleToUser, setVisibleToUser] = useState(true);
+    const [apiContractVerified, setApiContractVerified] = useState(false);
     const [sortOrder, setSortOrder] = useState("0");
     const [duration, setDuration] = useState("5");
     const [resolution, setResolution] = useState("");
@@ -192,6 +193,7 @@ function ModelOperationsEditor({
         setDescription(value?.description ?? "");
         setEnabled(value?.enabled ?? true);
         setVisibleToUser(value?.visibleToUser ?? true);
+        setApiContractVerified(value?.capabilities?.apiContractVerified === true);
         setSortOrder(String(value?.sortOrder ?? 0));
         setDuration(String(value?.defaultParams?.duration ?? 5));
         setResolution(value?.defaultParams?.resolution ?? "");
@@ -229,6 +231,7 @@ function ModelOperationsEditor({
         enabled,
         visibleToUser,
         sortOrder: Number(sortOrder || 0),
+        capabilities: { ...value.capabilities, apiContractVerified },
         defaultParams: {
             duration: Number(duration || value.defaultParams?.duration || 5),
             resolution,
@@ -289,6 +292,7 @@ function ModelOperationsEditor({
                 </div>
 
                 <SwitchField label="默认带水印" checked={watermark} onCheckedChange={setWatermark} />
+                <SwitchField label="已验证 API 契约" checked={apiContractVerified} onCheckedChange={setApiContractVerified} />
 
                 <div className="space-y-2">
                     <Label>固定能力</Label>
@@ -376,10 +380,11 @@ function SwitchField({
     checked: boolean;
     onCheckedChange: (checked: boolean) => void;
 }) {
+    const id = useId();
     return (
         <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-            <Label>{label}</Label>
-            <Switch checked={checked} onCheckedChange={onCheckedChange} />
+            <Label htmlFor={id}>{label}</Label>
+            <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
         </div>
     );
 }

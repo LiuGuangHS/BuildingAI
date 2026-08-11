@@ -10,11 +10,14 @@ import {
     safeJsonParse,
 } from "@buildingai/extension-sdk";
 import { FileStorageService, FileUploadService } from "@buildingai/core/modules";
+import { User } from "@buildingai/db/entities";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import type { EntityManager, FindOptionsWhere } from "@buildingai/db/typeorm";
 import { Between, In, LessThanOrEqual, Like, MoreThanOrEqual, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
+import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import type { Queue } from "bullmq";
 import { Cron } from "@buildingai/core/@nestjs/schedule";
 
 import {
@@ -37,8 +40,18 @@ import { PolicyService } from "./policy.service";
 import { PromptOptimizationService } from "./prompt-optimization.service";
 import { ProviderConfigService } from "./provider-config.service";
 import { TemplateService } from "./template.service";
+import { VIDEO_GENERATION_JOB, VIDEO_GENERATION_QUEUE } from "./generation-queue.constants";
+import {
+    canCompleteVideoGeneration,
+    canFailVideoGeneration,
+    canRetryVideoGeneration,
+    getResumedVideoProgress,
+    shouldResumeVideoGeneration,
+    shouldTimeoutVideoGeneration,
+} from "./video-generation-recovery-rules";
 
 const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
+const MAX_GENERATED_VIDEO_BYTES = 200 * 1024 * 1024;
 
 const EXTENSION_ID = "echoflow-video";
 
@@ -57,18 +70,13 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         private readonly billingRuleService: BillingRuleService,
         private readonly policyService: PolicyService,
         private readonly notificationService: ExtensionNotificationService,
+        @InjectQueue(VIDEO_GENERATION_QUEUE)
+        private readonly generationQueue: Queue,
     ) {
         super(generationRepository);
     }
 
     private scanningStale = false;
-
-    private async ensureGenerationSchema() {
-        await this.generationRepository.manager.query(`
-            ALTER TABLE "echoflow_video"."video_generation"
-            ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMP
-        `);
-    }
 
     async onModuleInit() {
         await this.notificationService.registerScenes(EXTENSION_ID, [
@@ -93,7 +101,6 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
                 linkUrlTemplate: `/extension/${EXTENSION_ID}/`,
             },
         ]);
-        await this.ensureGenerationSchema();
         await this.scanStaleProcessing();
     }
 
@@ -111,17 +118,24 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         return this.toPublicGeneration(await this.createAndSubmit(dto, userId));
     }
 
-    /**
-     * Generate a video through the main-site AI model provider.
-     * The plugin keeps validation, billing, history, notification, and storage.
-     */
+    /** Create a pending video generation and enqueue its worker job. */
     async createAndSubmit(dto: CreateVideoGenerationDto, userId: string) {
-        const modelConfig = await this.modelConfigService.findEnabledByModel(dto.model);
-        const model = modelConfig.model;
+        if (dto.requestKey) {
+            const existing = await this.generationRepository.findOne({
+                where: { userId, requestKey: dto.requestKey } as FindOptionsWhere<VideoGeneration>,
+            });
+            if (existing) return existing;
+        }
+
+        const modelConfig = await this.modelConfigService.findEnabledById(dto.modelConfigId);
         const prompt = this.sanitizeText(dto.prompt, 4000);
-        const media = await this.normalizeAndValidateMedia(dto.media ?? [], userId);
+        const requestedMedia = dto.media ?? [];
+        if (requestedMedia.length > 5) {
+            throw HttpErrorFactory.badRequest("单次最多提交 5 个媒体素材");
+        }
+        const policy = await this.policyService.validateGeneration(userId, modelConfig.id, dto);
+        const media = await this.normalizeAndValidateMedia(requestedMedia, userId);
         const normalizedDto = { ...dto, media };
-        await this.policyService.validateGeneration(userId, modelConfig.id, normalizedDto);
         this.validateMediaForModelConfig(modelConfig, media);
         this.validateParamsForModelConfig(modelConfig, normalizedDto);
         const generationParams = {
@@ -129,7 +143,6 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             duration: dto.duration ?? modelConfig.defaultParams.duration,
             ratio: dto.ratio ?? modelConfig.defaultParams.ratio,
             watermark: dto.watermark ?? modelConfig.defaultParams.watermark,
-            audio_setting: dto.audioSetting,
         };
         const billingAmount = await this.billingRuleService.calculateAmount({
             modelConfigId: modelConfig.id,
@@ -138,29 +151,14 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             resolution: generationParams.resolution,
         });
         const billingRule = await this.billingRuleService.resolveRule(modelConfig.id, modelConfig.model);
-
-        if (dto.requestKey) {
-            const existing = await this.generationRepository.findOne({
-                where: { userId, requestKey: dto.requestKey } as FindOptionsWhere<VideoGeneration>,
-            });
-            if (existing) {
-                this.logger.warn(
-                    `Duplicate video requestKey ${dto.requestKey} for user ${userId}, returning ${existing.id}`,
-                );
-                return existing;
-            }
-        }
-
-        const hasPower = await this.billingService.hasSufficientPower(userId, billingAmount);
-        if (!hasPower) {
+        if (!(await this.billingService.hasSufficientPower(userId, billingAmount))) {
             throw HttpErrorFactory.badRequest("可用算力不足，请充值后重试");
         }
 
-        // Create DB record
         const record = this.generationRepository.create({
             userId,
             requestKey: dto.requestKey,
-            model,
+            model: modelConfig.model,
             modelConfigId: modelConfig.id,
             provider: modelConfig.provider,
             modelName: modelConfig.displayName,
@@ -184,105 +182,215 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
                 refundOnFailure: billingRule.refundOnFailure,
             }),
             progress: 0,
-            startedAt: new Date(),
-            statusEvents: [
-                this.makeStatusEvent(
-                    VideoGenerationStatus.PENDING,
-                    "任务已创建，等待统一视频生成服务处理",
-                    "web",
-                ),
-            ],
+            statusEvents: [this.makeStatusEvent(VideoGenerationStatus.PENDING, "任务已创建，等待队列处理", "web")],
         });
 
         let saved: VideoGeneration;
         try {
-            saved = await this.generationRepository.save(record);
+            saved = await this.withTransaction(async (manager) => {
+                await manager.query(LOCK_TIMEOUT);
+                const user = await manager.findOne(User, {
+                    where: { id: userId },
+                    lock: { mode: "pessimistic_write" },
+                });
+                if (!user) throw HttpErrorFactory.notFound("用户不存在");
+                if (dto.requestKey) {
+                    const existing = await manager.findOne(VideoGeneration, {
+                        where: { userId, requestKey: dto.requestKey } as FindOptionsWhere<VideoGeneration>,
+                    });
+                    if (existing) return existing;
+                }
+                const activeCount = await manager.count(VideoGeneration, {
+                    where: { userId, status: In([VideoGenerationStatus.PENDING, VideoGenerationStatus.PROCESSING]) } as FindOptionsWhere<VideoGeneration>,
+                });
+                if (activeCount >= policy.maxConcurrentJobsPerUser) {
+                    throw HttpErrorFactory.badRequest(`当前已有 ${activeCount} 个视频任务处理中，请稍后再试`);
+                }
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+                const todayCount = await manager.count(VideoGeneration, {
+                    where: { userId, createdAt: MoreThanOrEqual(todayStart) } as FindOptionsWhere<VideoGeneration>,
+                });
+                if (todayCount >= policy.dailyJobsPerUser) {
+                    throw HttpErrorFactory.badRequest("今日视频生成次数已达上限");
+                }
+                return manager.save(VideoGeneration, record);
+            });
         } catch (error) {
             if (dto.requestKey && this.isUniqueConstraintError(error)) {
                 const existing = await this.generationRepository.findOne({
                     where: { userId, requestKey: dto.requestKey } as FindOptionsWhere<VideoGeneration>,
                 });
-                if (existing) {
-                    this.logger.warn(
-                        `Duplicate video requestKey ${dto.requestKey} for user ${userId}, returning ${existing.id}`,
-                    );
-                    return existing;
-                }
+                if (existing) return existing;
             }
             throw error;
         }
 
-        try {
-            saved = await this.withTransaction(async (manager) => {
-                await manager.query(LOCK_TIMEOUT);
-                const locked = await manager.findOne(VideoGeneration, {
-                    where: { id: saved.id } as FindOptionsWhere<VideoGeneration>,
-                    lock: { mode: "pessimistic_write" },
-                });
-                if (!locked) {
-                    throw HttpErrorFactory.notFound("视频生成记录不存在");
-                }
+        await this.enqueueGenerationJob(saved.id);
+        return saved;
+    }
 
-                const duplicateDeduction = await this.hasBillingLog(locked.id, ACTION.DEC, manager);
-                if (!duplicateDeduction) {
-                    await this.billingService.deductUserPower({
-                        userId,
-                        amount: billingAmount,
-                        remark: `Echoflow Video: ${model}`,
-                        associationNo: locked.id,
-                        associationUserId: userId,
-                    }, manager);
-                }
-                locked.billingStatus = VideoGenerationBillingStatus.DEDUCTED;
-                return manager.save(VideoGeneration, locked);
-            });
-        } catch (error) {
-            saved.status = VideoGenerationStatus.FAILED;
-            saved.billingStatus = VideoGenerationBillingStatus.FAILED;
-            saved.errorMessage = "算力扣费失败，请稍后重试";
-            saved.failureCategory = "billing";
-            saved.completedAt = new Date();
-            this.appendStatusEvent(saved, VideoGenerationStatus.FAILED, "算力扣费失败", "system");
-            await this.generationRepository.save(saved);
-            this.logger.error(`Video generation ${saved.id} billing deduction failed`, error);
-            throw HttpErrorFactory.badRequest("算力扣费失败，请稍后重试");
+    async executeGenerationJob(id: string) {
+        const saved = await this.generationRepository.findOne({
+            where: { id } as FindOptionsWhere<VideoGeneration>,
+        });
+        if (!saved) throw HttpErrorFactory.notFound("视频生成记录不存在");
+        if (saved.status !== VideoGenerationStatus.PENDING) return saved;
+
+        const claimed = await this.generationRepository.update(
+            { id, status: VideoGenerationStatus.PENDING } as FindOptionsWhere<VideoGeneration>,
+            {
+                status: VideoGenerationStatus.PROCESSING,
+                startedAt: new Date(),
+                progress: Math.max(saved.progress ?? 0, 5),
+            },
+        );
+        if (!claimed.affected) return this.findGenerationById(id);
+
+        if (!saved.modelConfigId) {
+            throw HttpErrorFactory.badRequest("视频任务缺少模型配置，无法执行");
         }
-
+        const modelConfig = await this.modelConfigService.findEnabledById(saved.modelConfigId);
+        let deducted: VideoGeneration;
         try {
-            saved.status = VideoGenerationStatus.PROCESSING;
-            saved.progress = 20;
-            this.appendStatusEvent(saved, VideoGenerationStatus.PROCESSING, "统一视频生成服务处理中", "provider");
-            await this.generationRepository.save(saved);
-
-            const result = await this.generateWithProvider(saved, modelConfig);
-            const stored = await this.storeResultVideo(saved.id, result.video);
-
-            saved.status = VideoGenerationStatus.SUCCEEDED;
-            saved.videoUrl = stored.url;
-            saved.rawRequest = this.compactRawPayload(result.rawRequest);
-            saved.rawResponse = this.compactRawPayload(result.rawResponse);
-            saved.progress = 100;
-            saved.completedAt = new Date();
-            this.appendStatusEvent(saved, VideoGenerationStatus.SUCCEEDED, "视频生成完成", "provider");
-            const completed = await this.generationRepository.save(saved);
-            await this.notifyTerminalStatus(completed);
-            return completed;
+            deducted = await this.deductGenerationBilling(saved, modelConfig.model);
         } catch (error) {
-            saved.status = VideoGenerationStatus.FAILED;
-            saved.errorMessage = this.truncateText(
-                error instanceof Error ? error.message : "视频生成失败",
-                2000,
+            await this.markGenerationCrashed(id, error, {
+                errorMessage: "算力扣费失败，请稍后重试",
+                billingStatus: VideoGenerationBillingStatus.FAILED,
+                refundOnFailure: false,
+            });
+            return this.findGenerationById(id);
+        }
+        if (deducted.status !== VideoGenerationStatus.PROCESSING) return deducted;
+
+        let stored: { path: string; url: string } | undefined;
+        let completed: VideoGeneration;
+        try {
+            await this.generationRepository.update(
+                { id, status: VideoGenerationStatus.PROCESSING } as FindOptionsWhere<VideoGeneration>,
+                { progress: 20 },
             );
-            saved.failureCategory = this.classifyFailure(error);
-            saved.progress = 100;
-            saved.completedAt = new Date();
-            this.appendStatusEvent(saved, VideoGenerationStatus.FAILED, "视频生成失败", "provider");
-            await this.refundIfNeeded(saved, userId, "视频生成失败自动退款");
-            await this.generationRepository.save(saved);
-            await this.notifyTerminalStatus(saved);
-            this.logger.error(`Video generation ${saved.id} failed`, error);
+            const result = await this.generateWithProvider(deducted, modelConfig);
+            stored = await this.storeResultVideo(id, result.video);
+            completed = await this.completeGeneration(id, stored.url, result.rawRequest, result.rawResponse);
+            if (completed.status !== VideoGenerationStatus.SUCCEEDED) {
+                await this.deleteStoredResultVideo(stored.path);
+            }
+        } catch (error) {
+            if (stored) await this.deleteStoredResultVideo(stored.path);
+            const failed = await this.markGenerationCrashed(id, error);
+            if (failed) return failed;
             throw error;
         }
+        if (completed.status === VideoGenerationStatus.SUCCEEDED) {
+            await this.notifyTerminalStatus(completed);
+        }
+        return completed;
+    }
+
+    private async enqueueGenerationJob(id: string) {
+        try {
+            await this.generationQueue.add(
+                VIDEO_GENERATION_JOB,
+                { id },
+                {
+                    jobId: `video-generation-${id}`,
+                    attempts: 1,
+                    removeOnComplete: true,
+                    removeOnFail: false,
+                },
+            );
+        } catch (error) {
+            this.logger.error(`Queue video generation ${id} failed`, error);
+            await this.markGenerationCrashed(id, new Error("视频生成队列暂不可用，请稍后重试"), {
+                refundOnFailure: false,
+            });
+            throw HttpErrorFactory.badRequest("视频生成队列暂不可用，请稍后重试");
+        }
+    }
+
+    private async deductGenerationBilling(record: VideoGeneration, model: string) {
+        return this.withTransaction(async (manager) => {
+            await manager.query(LOCK_TIMEOUT);
+            const locked = await manager.findOne(VideoGeneration, {
+                where: { id: record.id } as FindOptionsWhere<VideoGeneration>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!locked) throw HttpErrorFactory.notFound("视频生成记录不存在");
+            if (locked.status !== VideoGenerationStatus.PROCESSING) return locked;
+            if (!(await this.hasBillingLog(locked.id, ACTION.DEC, manager))) {
+                await this.billingService.deductUserPower({
+                    userId: locked.userId,
+                    amount: locked.billingAmount,
+                    remark: `Echoflow Video: ${model}`,
+                    associationNo: locked.id,
+                    associationUserId: locked.userId,
+                }, manager);
+            }
+            locked.billingStatus = VideoGenerationBillingStatus.DEDUCTED;
+            return manager.save(VideoGeneration, locked);
+        });
+    }
+
+    private async completeGeneration(
+        id: string,
+        videoUrl: string,
+        rawRequest: Record<string, unknown>,
+        rawResponse: Record<string, unknown>,
+    ) {
+        return this.withTransaction(async (manager) => {
+            await manager.query(LOCK_TIMEOUT);
+            const current = await manager.findOne(VideoGeneration, {
+                where: { id } as FindOptionsWhere<VideoGeneration>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!current) throw HttpErrorFactory.notFound("视频生成记录不存在");
+            if (!canCompleteVideoGeneration(current.status, videoUrl)) return current;
+            current.status = VideoGenerationStatus.SUCCEEDED;
+            current.videoUrl = videoUrl;
+            current.rawRequest = this.compactRawPayload(rawRequest);
+            current.rawResponse = this.compactRawPayload(rawResponse);
+            current.progress = 100;
+            current.completedAt = new Date();
+            this.appendStatusEvent(current, VideoGenerationStatus.SUCCEEDED, "视频生成完成", "provider");
+            return manager.save(VideoGeneration, current);
+        });
+    }
+
+    async markGenerationCrashed(
+        id: string,
+        error: unknown,
+        options: { errorMessage?: string; billingStatus?: VideoGenerationBillingStatus; refundOnFailure?: boolean } = {},
+    ) {
+        let transitioned = false;
+        const failed = await this.withTransaction(async (manager) => {
+            await manager.query(LOCK_TIMEOUT);
+            const current = await manager.findOne(VideoGeneration, {
+                where: { id } as FindOptionsWhere<VideoGeneration>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!current || !canFailVideoGeneration(current.status)) return current;
+            const category = this.classifyFailure(error);
+            current.status = VideoGenerationStatus.FAILED;
+            current.failureCategory = category;
+            current.errorMessage = options.errorMessage ?? this.publicFailureMessage(category);
+            current.billingStatus = options.billingStatus ?? current.billingStatus;
+            current.progress = 100;
+            current.completedAt = new Date();
+            this.appendStatusEvent(current, VideoGenerationStatus.FAILED, current.errorMessage, "system");
+            transitioned = true;
+            return manager.save(VideoGeneration, current);
+        });
+        if (!failed) throw HttpErrorFactory.notFound("视频生成记录不存在");
+        if (!transitioned) return failed;
+
+        if (options.refundOnFailure !== false) {
+            await this.refundIfNeeded(failed, failed.userId, "视频生成失败自动退款");
+        }
+        const current = await this.findGenerationById(id);
+        await this.notifyTerminalStatus(current);
+        return current;
     }
 
     async pollAndUpdate(id: string, userId: string) {
@@ -397,8 +505,7 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
     /** Admin: delete any record by id (no user check). */
     async deleteOne(id: string) {
         const record = await this.findGenerationById(id);
-        this.assertVideoCanBeDeleted(record);
-        await this.delete(id);
+        await this.deleteGenerationRecord(record);
         return { success: true, message: "删除成功" };
     }
 
@@ -415,22 +522,19 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         message?: string,
         failureCategory?: string,
     ) {
-        const record = await this.findGenerationById(id);
-        record.status = status;
-        if (status === VideoGenerationStatus.FAILED) {
-            record.errorMessage = this.truncateText(message || record.errorMessage || "管理员标记失败", 2000);
-            record.failureCategory = failureCategory || record.failureCategory || "admin_marked";
-            record.progress = 100;
-            record.completedAt = record.completedAt ?? new Date();
-            await this.refundIfNeeded(record, record.userId, "管理员标记失败自动退款");
-        } else if (status === VideoGenerationStatus.SUCCEEDED) {
-            record.progress = 100;
-            record.completedAt = record.completedAt ?? new Date();
+        if (status !== VideoGenerationStatus.FAILED) {
+            throw HttpErrorFactory.badRequest("Console 只能将任务标记为失败，成功必须由有效结果确认");
         }
-        this.appendStatusEvent(record, status, message || "管理员更新状态", "console");
-        const saved = await this.saveNonTerminalUpdate(record);
-        await this.notifyTerminalStatus(saved);
-        return saved;
+        const failed = await this.markGenerationCrashed(
+            id,
+            new Error(message || "管理员标记失败"),
+            { errorMessage: this.truncateText(message || "管理员标记失败", 2000) },
+        );
+        if (failed && failureCategory) {
+            failed.failureCategory = failureCategory;
+            await this.generationRepository.update(id, { failureCategory });
+        }
+        return failed;
     }
 
     async batchMarkFailed(ids: string[], message = "管理员批量标记失败") {
@@ -449,47 +553,81 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         if (this.scanningStale) return;
         this.scanningStale = true;
         try {
-        const cutoff = new Date(Date.now() - maxAgeMinutes * 60_000);
-        const records = await this.generationRepository.find({
-            where: {
-                status: In([VideoGenerationStatus.PENDING, VideoGenerationStatus.PROCESSING]),
-                updatedAt: LessThanOrEqual(cutoff),
-            } as FindOptionsWhere<VideoGeneration>,
-        });
-        const updated: VideoGeneration[] = [];
-        for (const record of records) {
-            record.status = VideoGenerationStatus.FAILED;
-            record.errorMessage = `任务超过 ${maxAgeMinutes} 分钟未更新，已自动标记失败`;
-            record.failureCategory = "processing_timeout";
-            record.progress = 100;
-            record.completedAt = new Date();
-            this.appendStatusEvent(record, VideoGenerationStatus.FAILED, record.errorMessage, "system");
-            await this.refundIfNeeded(record, record.userId, "视频任务超时自动退款");
-            const saved = await this.saveNonTerminalUpdate(record);
-            await this.notifyTerminalStatus(saved);
-            updated.push(saved);
-        }
-        return { total: records.length, updated };
+            const nowMs = Date.now();
+            const processingCutoff = new Date(nowMs - maxAgeMinutes * 60_000);
+            const records = await this.generationRepository.find({
+                where: {
+                    status: In([VideoGenerationStatus.PENDING, VideoGenerationStatus.PROCESSING]),
+                    updatedAt: LessThanOrEqual(processingCutoff),
+                } as FindOptionsWhere<VideoGeneration>,
+                order: { updatedAt: "ASC" },
+                take: 50,
+            });
+            const refundCandidates = await this.generationRepository.find({
+                where: {
+                    status: VideoGenerationStatus.FAILED,
+                    billingStatus: VideoGenerationBillingStatus.DEDUCTED,
+                } as FindOptionsWhere<VideoGeneration>,
+                order: { updatedAt: "ASC" },
+                take: 50,
+            });
+            for (const record of refundCandidates) {
+                await this.refundIfNeeded(record, record.userId, "视频生成失败自动退款恢复");
+            }
+
+            let resumed = 0;
+            let timedOut = 0;
+            const updated: VideoGeneration[] = [];
+            for (const record of records) {
+                if (shouldResumeVideoGeneration(record, nowMs)) {
+                    try {
+                        const claimed = await this.claimVideoGenerationForRecovery(record.id, nowMs);
+                        if (!claimed) continue;
+                        await this.enqueueGenerationJob(record.id);
+                        resumed += 1;
+                    } catch (error) {
+                        this.logger.warn(`Resume video generation ${record.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+                    }
+                    continue;
+                }
+                if (!shouldTimeoutVideoGeneration(record, nowMs)) continue;
+                const failed = await this.markGenerationCrashed(
+                    record.id,
+                    new Error(`任务超过 ${maxAgeMinutes} 分钟未更新`),
+                );
+                if (failed) {
+                    timedOut += 1;
+                    updated.push(failed);
+                }
+            }
+            return { total: records.length, resumed, timedOut, updated };
         } finally {
             this.scanningStale = false;
         }
     }
 
+    private async claimVideoGenerationForRecovery(id: string, nowMs: number) {
+        return this.generationRepository.manager.transaction(async (manager) => {
+            await manager.query(LOCK_TIMEOUT);
+            const generation = await manager.findOne(VideoGeneration, {
+                where: { id } as FindOptionsWhere<VideoGeneration>,
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!generation || !shouldResumeVideoGeneration(generation, nowMs)) return null;
+            await manager.update(VideoGeneration, id, {
+                progress: getResumedVideoProgress(generation.progress),
+                updatedAt: new Date(),
+            });
+            return generation;
+        });
+    }
+
     async cancelRecord(id: string, message = "管理员取消任务") {
-        const record = await this.findGenerationById(id);
-        if (isTerminalStatus(record.status)) {
-            return record;
-        }
-        record.status = VideoGenerationStatus.FAILED;
-        record.errorMessage = this.truncateText(message, 2000);
-        record.failureCategory = "admin_cancelled";
-        record.progress = 100;
-        record.completedAt = new Date();
-        this.appendStatusEvent(record, VideoGenerationStatus.FAILED, message, "console");
-        await this.refundIfNeeded(record, record.userId, "管理员取消任务自动退款");
-        const saved = await this.saveNonTerminalUpdate(record);
-        await this.notifyTerminalStatus(saved);
-        return saved;
+        return this.markGenerationCrashed(
+            id,
+            new Error(message),
+            { errorMessage: this.truncateText(message, 2000) },
+        );
     }
 
     async batchCancel(ids: string[], message = "管理员批量取消任务") {
@@ -506,8 +644,11 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
 
     async retryRecord(id: string) {
         const record = await this.findGenerationById(id);
-        if (record.status !== VideoGenerationStatus.FAILED) {
-            throw HttpErrorFactory.badRequest("只有失败任务可以重试");
+        if (!canRetryVideoGeneration(record.status, record.billingStatus)) {
+            throw HttpErrorFactory.badRequest("生成任务的退款尚未完成，暂不能重试");
+        }
+        if (!record.modelConfigId) {
+            throw HttpErrorFactory.badRequest("历史视频任务未保存模型配置，无法重试，请重新选择模型");
         }
         if (record.media?.some((item) => !item.fileId)) {
             throw HttpErrorFactory.badRequest("历史视频任务未保存 fileId，无法重试，请重新上传素材");
@@ -519,14 +660,13 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             promptOptimizationSource: record.promptOptimizationSource,
             promptOptimizationStyle: record.promptOptimizationStyle,
             promptOptimizerModelId: record.promptOptimizerModelId,
-            model: record.model,
-            requestKey: `${record.id}:admin-retry:${Date.now()}`,
+            modelConfigId: record.modelConfigId,
+            requestKey: `${record.id}:admin-retry`,
             media: record.media,
             resolution: record.parameters?.resolution,
             duration: record.parameters?.duration,
             ratio: record.parameters?.ratio,
             watermark: record.parameters?.watermark,
-            audioSetting: record.parameters?.audio_setting,
         }, record.userId);
     }
 
@@ -590,9 +730,15 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
 
     async deleteOwnedById(id: string, userId: string) {
         const record = await this.findOwnedById(id, userId);
-        this.assertVideoCanBeDeleted(record);
-        await this.delete(id);
+        await this.deleteGenerationRecord(record);
         return { success: true, message: "删除成功" };
+    }
+
+    private async deleteGenerationRecord(record: VideoGeneration) {
+        this.assertVideoCanBeDeleted(record);
+        await this.delete(record.id);
+        const relativePath = this.getGeneratedVideoStoragePath(record.videoUrl, record.id);
+        if (relativePath) await this.deleteStoredResultVideo(relativePath);
     }
 
     private async generateWithProvider(record: VideoGeneration, modelConfig: ResolvedVideoModelConfig) {
@@ -614,7 +760,6 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
             providerOptions: {
                 [modelConfig.provider]: {
                     watermark: record.parameters?.watermark,
-                    audio_setting: record.parameters?.audio_setting,
                 },
             },
         });
@@ -637,6 +782,24 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         };
     }
 
+    private getGeneratedVideoStoragePath(videoUrl: string | undefined, generationId: string): string | undefined {
+        const prefix = `/echoflow-video/uploads/`;
+        if (!videoUrl?.startsWith(prefix)) return undefined;
+        const relativePath = videoUrl.slice(prefix.length);
+        const normalizedPath = path.posix.normalize(relativePath);
+        const escapedId = generationId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const expectedPath = new RegExp(`^generated/\\d{4}/\\d{2}/${escapedId}\\.(mp4|webm|mov)$`);
+        return relativePath === normalizedPath && expectedPath.test(normalizedPath) ? normalizedPath : undefined;
+    }
+
+    private async deleteStoredResultVideo(relativePath: string): Promise<void> {
+        try {
+            await this.fileStorageService.deleteFile(relativePath, { extensionId: EXTENSION_ID });
+        } catch (error) {
+            this.logger.error(`Failed to reclaim video result file ${relativePath}`, error);
+        }
+    }
+
     private async storeResultVideo(
         generationId: string,
         video: { uint8Array: Uint8Array; mediaType?: string },
@@ -648,6 +811,9 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         const month = String(now.getMonth() + 1).padStart(2, "0");
         const relativePath = path.posix.join("generated", year, month, `${generationId}.${extension}`);
         const buffer = Buffer.from(video.uint8Array);
+        if (buffer.byteLength === 0 || buffer.byteLength > MAX_GENERATED_VIDEO_BYTES) {
+            throw HttpErrorFactory.badRequest("生成视频结果超过大小限制");
+        }
 
         await this.fileStorageService.saveBuffer(
             buffer,
@@ -1005,6 +1171,14 @@ export class GenerationService extends BaseService<VideoGeneration> implements O
         if (message.includes("balance") || message.includes("余额")) return "provider_balance";
         if (message.includes("参数") || message.includes("400")) return "invalid_request";
         return "upstream";
+    }
+
+    private publicFailureMessage(category?: string): string {
+        if (category === "rate_limit") return "视频服务当前繁忙，请稍后重试；如已扣费将按账务结果处理。";
+        if (category === "timeout") return "视频服务响应超时，请稍后重试；如已扣费将按账务结果处理。";
+        if (category === "auth" || category === "permission") return "视频服务配置暂不可用，请稍后重试。";
+        if (category === "invalid_request") return "视频生成参数无效，请调整后重试。";
+        return "视频服务暂不可用，请稍后重试；如已扣费将按账务结果处理。";
     }
 
     private async getRecentFailureStats() {

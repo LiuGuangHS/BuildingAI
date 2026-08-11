@@ -19,6 +19,7 @@ const CONSOLE_MODELS_PAGE_FILE = new URL("../src/web/pages/console/models.tsx", 
 const VIDEO_LABELS_FILE = new URL("../src/web/lib/video-labels.ts", import.meta.url);
 const WEB_CONTROLLER_FILE = new URL("../src/api/modules/generation/controllers/web/generation.web.controller.ts", import.meta.url);
 const GENERATION_MODULE_FILE = new URL("../src/api/modules/generation/generation.module.ts", import.meta.url);
+const GENERATION_PROCESSOR_FILE = new URL("../src/api/modules/generation/processors/video-generation.processor.ts", import.meta.url);
 const VIDEO_HTTP_CLIENT_FILE = new URL("../src/api/modules/generation/services/video-http-client.ts", import.meta.url);
 const PROVIDER_CONFIG_SERVICE_FILE = new URL("../src/api/modules/generation/services/provider-config.service.ts", import.meta.url);
 const PACKAGE_FILE = new URL("../package.json", import.meta.url);
@@ -28,7 +29,8 @@ const MAIN_FILE = new URL("../src/web/main.tsx", import.meta.url);
 const WEB_SERVICES_BILLING_FILE = new URL("../src/web/services/web/billing.ts", import.meta.url);
 const WEB_SERVICES_GENERATION_FILE = new URL("../src/web/services/web/generation.ts", import.meta.url);
 const WEB_SERVICES_TEMPLATES_FILE = new URL("../src/web/services/web/templates.ts", import.meta.url);
-const UPGRADE_FILE = new URL("../src/api/upgrade/0.0.1/index.ts", import.meta.url);
+const UPGRADE_FILE = new URL("../src/api/upgrade/0.0.2/index.ts", import.meta.url);
+const INITIAL_UPGRADE_FILE = new URL("../src/api/upgrade/0.0.1/index.ts", import.meta.url);
 
 function extractMethod(source, name) {
     const start = Math.max(source.indexOf(`private ${name}`), source.indexOf(`private async ${name}`));
@@ -62,7 +64,7 @@ test("video public model options use config ids for generation submit", async ()
     const source = await readFile(MODEL_CONFIG_SERVICE_FILE, "utf8");
     const method = source.slice(
         source.indexOf("toWebOption("),
-        source.indexOf("\n    private async ensureRuntimeSchema", source.indexOf("toWebOption(")),
+        source.indexOf("\n    private supportsRuntimeGeneration", source.indexOf("toWebOption(")),
     );
 
     assert.match(method, /id:\s*config\.id/);
@@ -80,7 +82,7 @@ test("video upgrade creates and backfills the soft-delete column used by the ent
     const source = await readFile(UPGRADE_FILE, "utf8");
 
     assert.match(source, /"deleted_at" TIMESTAMP/);
-    assert.match(source, /ensureColumn\("video_generation", "deleted_at", "TIMESTAMP"\)/);
+    assert.match(source, /ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMP/);
 });
 
 test("video web services use public client and public generation type", async () => {
@@ -361,6 +363,32 @@ test("video web rate limits use the extension SDK limiter instead of a plugin-lo
     assert.doesNotMatch(moduleSource, /VideoRequestLimiterService/);
 });
 
+test("video worker rejects malformed queue jobs", async () => {
+    const source = await readFile(GENERATION_PROCESSOR_FILE, "utf8");
+
+    assert.match(source, /throw new Error\("Unknown video generation job type"\)/);
+    assert.match(source, /throw new Error\("Missing video generation id"\)/);
+    assert.doesNotMatch(source, /return \{ success: false, reason: "Unknown job type" \}/);
+});
+
+test("video worker and recovery paths preserve trusted model and state boundaries", async () => {
+    const source = await readFile(SERVICE_FILE, "utf8");
+
+    assert.match(source, /findEnabledById\(saved\.modelConfigId\)/);
+    assert.doesNotMatch(source, /findEnabledById\(saved\.modelConfigId \?\? saved\.model\)/);
+    assert.match(source, /claimVideoGenerationForRecovery/);
+    assert.match(source, /lock:\s*\{ mode: "pessimistic_write" \}/);
+    assert.match(source, /deleteStoredResultVideo\(stored\.path\)/);
+    assert.match(source, /canRetryVideoGeneration\(record\.status, record\.billingStatus\)/);
+    assert.match(source, /status: VideoGenerationStatus\.FAILED,[\s\S]*billingStatus: VideoGenerationBillingStatus\.DEDUCTED/);
+    assert.match(source, /if \(stored\) await this\.deleteStoredResultVideo\(stored\.path\)/);
+    assert.match(source, /manager\.findOne\(User,[\s\S]*pessimistic_write/);
+    assert.match(source, /deleteGenerationRecord\(record\)/);
+    assert.match(source, /getGeneratedVideoStoragePath\(record\.videoUrl, record\.id\)/);
+    assert.doesNotMatch(source, /audio_setting: dto\.audioSetting/);
+    assert.doesNotMatch(source, /audio_setting: record\.parameters\?\.audio_setting/);
+});
+
 test("video provider HTTP requests reuse the extension SDK provider client", async () => {
     const [source, generationSource] = await Promise.all([
         readFile(VIDEO_HTTP_CLIENT_FILE, "utf8"),
@@ -397,16 +425,16 @@ test("video async writes skip soft-deleted records", async () => {
 });
 
 test("video config no longer exposes legacy webhook secret plumbing", async () => {
-    const [providerSource, moduleSource, upgradeSource] = await Promise.all([
+    const [providerSource, moduleSource, initialUpgradeSource] = await Promise.all([
         readFile(PROVIDER_CONFIG_SERVICE_FILE, "utf8"),
         readFile(GENERATION_MODULE_FILE, "utf8"),
-        readFile(UPGRADE_FILE, "utf8"),
+        readFile(INITIAL_UPGRADE_FILE, "utf8"),
     ]);
 
     assert.doesNotMatch(providerSource, /webhookSecret|verifyHappyHorseWebhookSecret|timingSafeEqual|safeCompareSecret/);
     assert.doesNotMatch(moduleSource, /WebhookController/);
-    assert.match(upgradeSource, /dropColumnIfExists\("video_provider_config", "webhook_secret_id"\)/);
-    assert.match(upgradeSource, /dropColumnIfExists\("video_provider_config", "templates"\)/);
+    assert.match(initialUpgradeSource, /dropColumnIfExists\("video_provider_config", "webhook_secret_id"\)/);
+    assert.match(initialUpgradeSource, /dropColumnIfExists\("video_provider_config", "templates"\)/);
 });
 
 test("video plugin does not depend on the low-level ai sdk", async () => {

@@ -2,7 +2,7 @@
     "identifier": "echoflow-video",
     "name": "视频工作台",
     "type": "application",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "description": "用文字或参考图生成视频，支持多模型选择、任务历史和结果查看。",
     "icon": "/echoflow-video/static/logo.png",
     "homepage": "",

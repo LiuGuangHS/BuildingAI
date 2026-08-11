@@ -32,7 +32,6 @@ export default {
     duration: "Duration (seconds)",
     ratio: "Aspect Ratio",
     watermark: "Watermark",
-    audioSetting: "Audio Setting",
     submitting: "Submitting task...",
     submitSuccess: "Task submitted, generating...",
     submitFailed: "Submission failed",

@@ -38,20 +38,6 @@ export const VIDEO_MODE_DEFINITIONS: VideoModeDefinition[] = [
         description: "上传 1 张首帧图，控制开场画面。",
         abilityTypes: ["first_frame_i2v"],
     },
-    {
-        id: "reference",
-        label: "多参考图",
-        shortLabel: "参考图",
-        description: "上传 1-4 张参考图，统一主体和风格。",
-        abilityTypes: ["reference_to_video"],
-    },
-    {
-        id: "edit",
-        label: "视频编辑",
-        shortLabel: "编辑",
-        description: "上传视频素材，做动作、风格或画面改造。",
-        abilityTypes: ["video_editing", "action_transfer"],
-    },
 ];
 
 export function getModeDefinition(mode: VideoGenerationMode) {

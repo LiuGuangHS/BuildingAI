@@ -325,13 +325,12 @@ function ReuseButton({ generation }: { generation: VideoGeneration }) {
                     originalPrompt: generation.originalPrompt,
                     promptOptimizationSource: generation.promptOptimizationSource,
                     promptOptimizationStyle: generation.promptOptimizationStyle,
-                    model: generation.model,
+                    modelConfigId: generation.modelConfigId,
                     media: generation.media,
                     resolution: generation.parameters.resolution,
                     duration: generation.parameters.duration,
                     ratio: generation.parameters.ratio,
                     watermark: generation.parameters.watermark,
-                    audioSetting: generation.parameters.audio_setting,
                 });
                 toast.success("已复制参数");
                 navigate("/");

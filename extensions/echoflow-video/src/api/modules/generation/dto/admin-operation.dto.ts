@@ -1,4 +1,5 @@
-import { ArrayMaxSize, IsArray, IsEnum, IsOptional, IsString, IsUUID, Length } from "class-validator";
+import { Type } from "class-transformer";
+import { ArrayMaxSize, IsArray, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from "class-validator";
 
 import { VideoGenerationStatus } from "../../../db/entities/video-generation.entity";
 
@@ -21,6 +22,19 @@ export class MarkVideoStatusDto {
     @Length(1, 50)
     @IsOptional()
     failureCategory?: string;
+}
+
+export class BatchVideoStatusDto {
+    @IsIn([VideoGenerationStatus.PENDING, VideoGenerationStatus.PROCESSING])
+    @IsOptional()
+    status?: "pending" | "processing";
+
+    @Type(() => Number)
+    @IsInt()
+    @Min(1)
+    @Max(100)
+    @IsOptional()
+    limit?: number;
 }
 
 export class BatchVideoIdsDto {

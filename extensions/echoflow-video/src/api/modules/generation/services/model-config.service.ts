@@ -48,8 +48,6 @@ const DEFAULT_PARAMS: VideoModelDefaultParams = {
 
 @Injectable()
 export class ModelConfigService extends BaseService<VideoModelConfig> {
-    private schemaReadyPromise?: Promise<void>;
-
     constructor(
         @InjectRepository(VideoModelConfig)
         private readonly modelConfigRepository: Repository<VideoModelConfig>,
@@ -83,7 +81,9 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         return configs
             .map((config) => {
                 const model = modelsById.get(config.mainModelId);
-                return model ? this.toWebOption(this.toResolvedConfig(config, model)) : null;
+                if (!model) return null;
+                const resolved = this.toResolvedConfig(config, model);
+                return this.supportsRuntimeGeneration(resolved) ? this.toWebOption(resolved) : null;
             })
             .filter((item): item is NonNullable<typeof item> => Boolean(item));
     }
@@ -102,25 +102,26 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         };
     }
 
-    async findEnabledByModel(model: string): Promise<ResolvedVideoModelConfig> {
-        await this.ensureRuntimeSchema();
-        const config = await this.modelConfigRepository.findOne({ where: { id: model } as FindOptionsWhere<VideoModelConfig> });
+    async findEnabledById(modelConfigId: string): Promise<ResolvedVideoModelConfig> {
+        const config = await this.modelConfigRepository.findOne({ where: { id: modelConfigId } as FindOptionsWhere<VideoModelConfig> });
         if (!config || !config.enabled || !config.visibleToUser) {
-            throw HttpErrorFactory.badRequest(`视频模型已在管理后台禁用: ${model}`);
+            throw HttpErrorFactory.badRequest(`视频模型已在管理后台禁用: ${modelConfigId}`);
         }
         const mainModel = await this.getVideoModelOrFail(config.mainModelId);
-        return this.toResolvedConfig(config, mainModel);
+        const resolved = this.toResolvedConfig(config, mainModel);
+        if (!this.supportsRuntimeGeneration(resolved)) {
+            throw HttpErrorFactory.badRequest("当前视频模型能力尚未完成验证");
+        }
+        return resolved;
     }
 
     async findByIdOrFail(id: string) {
-        await this.ensureRuntimeSchema();
         const config = await this.modelConfigRepository.findOne({ where: { id } as FindOptionsWhere<VideoModelConfig> });
         if (!config) throw HttpErrorFactory.notFound("视频模型配置不存在");
         return config;
     }
 
     async createConfig(dto: UpdateVideoModelConfigDto) {
-        await this.ensureRuntimeSchema();
         const mainModelId = dto.mainModelId?.trim();
         if (!mainModelId) throw HttpErrorFactory.badRequest("请选择主站视频模型");
         const model = await this.getVideoModelOrFail(mainModelId);
@@ -155,26 +156,16 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
         };
     }
 
-    private async ensureRuntimeSchema(): Promise<void> {
-        if (!this.modelConfigRepository.manager?.query) return;
-        this.schemaReadyPromise ??= (async () => {
-            await this.modelConfigRepository.manager.query(`
-                ALTER TABLE "echoflow_video"."video_model_config"
-                ADD COLUMN IF NOT EXISTS "main_model_id" uuid,
-                ADD COLUMN IF NOT EXISTS "display_name_override" varchar(120),
-                ADD COLUMN IF NOT EXISTS "description_override" text,
-                ADD COLUMN IF NOT EXISTS "visible_to_user" boolean NOT NULL DEFAULT true,
-                ADD COLUMN IF NOT EXISTS "capabilities" jsonb NOT NULL DEFAULT '{}',
-                ADD COLUMN IF NOT EXISTS "default_params" jsonb NOT NULL DEFAULT '{}',
-                ADD COLUMN IF NOT EXISTS "sort_order" int NOT NULL DEFAULT 0
-            `);
-            await this.modelConfigRepository.manager.query(`
-                CREATE UNIQUE INDEX IF NOT EXISTS "uq_video_model_config_main_model"
-                ON "echoflow_video"."video_model_config" ("main_model_id")
-                WHERE "main_model_id" IS NOT NULL
-            `);
-        })();
-        await this.schemaReadyPromise;
+    private supportsRuntimeGeneration(config: ResolvedVideoModelConfig): boolean {
+        const abilityTypes = config.capabilities.abilityTypes ?? [];
+        const mediaTypes = config.capabilities.mediaTypes ?? [];
+        const supportsTextOnly = abilityTypes.length === 1 && abilityTypes[0] === "text_to_video" && mediaTypes.length === 0;
+        const supportsSingleFirstFrame =
+            abilityTypes.length === 1 &&
+            abilityTypes[0] === "first_frame_i2v" &&
+            mediaTypes.length === 1 &&
+            mediaTypes[0] === "first_frame";
+        return config.capabilities.apiContractVerified === true && (supportsTextOnly || supportsSingleFirstFrame);
     }
 
     private normalizeOperationalConfig(dto: UpdateVideoModelConfigDto, existing?: VideoModelConfig) {
@@ -191,7 +182,6 @@ export class ModelConfigService extends BaseService<VideoModelConfig> {
     }
 
     private async getConfigsByMainModelId() {
-        await this.ensureRuntimeSchema();
         const configs = await this.modelConfigRepository.find();
         return new Map(configs.map((config) => [config.mainModelId, config]));
     }

@@ -1,11 +1,13 @@
 import { Transform, Type } from "class-transformer";
 import {
+    ArrayMaxSize,
     IsArray,
     IsBoolean,
     IsIn,
     IsInt,
     IsOptional,
     IsString,
+    IsUUID,
     Length,
     Max,
     Min,
@@ -59,14 +61,12 @@ export class CreateVideoGenerationDto {
     @IsOptional()
     promptOptimizationStyle?: string;
 
-    @IsString()
-    @Length(1, 80)
+    @IsUUID("4")
     @IsOptional()
     promptOptimizerModelId?: string;
 
-    @IsString()
-    @Length(1, 100)
-    model: string;
+    @IsUUID("4")
+    modelConfigId: string;
 
     @IsString()
     @Length(1, 100)
@@ -74,6 +74,7 @@ export class CreateVideoGenerationDto {
     requestKey?: string;
 
     @IsArray()
+    @ArrayMaxSize(5)
     @ValidateNested({ each: true })
     @Type(() => VideoMediaItemDto)
     @IsOptional()
@@ -105,7 +106,4 @@ export class CreateVideoGenerationDto {
     @IsOptional()
     watermark?: boolean;
 
-    @IsString()
-    @IsOptional()
-    audioSetting?: string;
 }

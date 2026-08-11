@@ -64,7 +64,7 @@ export function getModeLabel(mode: VideoGenerationMode) {
 
 export function getGenerationModeLabel(generation: VideoGeneration) {
     const fallbackModel = {
-        id: generation.model,
+        id: generation.modelConfigId || generation.model,
         name: generation.modelName || generation.model,
         model: generation.model,
         modelType: "",

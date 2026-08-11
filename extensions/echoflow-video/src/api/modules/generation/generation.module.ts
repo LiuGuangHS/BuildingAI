@@ -1,5 +1,5 @@
 import { RedisModule, RedisService } from "@buildingai/cache";
-import { SecretModule, UploadModule } from "@buildingai/core/modules";
+import { QueueModule, SecretModule, UploadModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import {
     AiPublicModule,
@@ -7,8 +7,11 @@ import {
     ExtensionNotificationModule,
     ExtensionRateLimitService,
 } from "@buildingai/extension-sdk";
+import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
 
+import { VideoGenerationProcessor } from "./processors/video-generation.processor";
+import { VIDEO_GENERATION_QUEUE } from "./services/generation-queue.constants";
 import { BillingRuleController } from "./controllers/console/billing-rule.controller";
 import { GenerationController } from "./controllers/console/generation.controller";
 import { ModelConfigController } from "./controllers/console/model-config.controller";
@@ -33,6 +36,8 @@ import {
         SecretModule,
         UploadModule,
         RedisModule,
+        QueueModule,
+        BullModule.registerQueue({ name: VIDEO_GENERATION_QUEUE }),
     ],
     controllers: [
         GenerationController,
@@ -52,6 +57,7 @@ import {
             useFactory: (redisService: RedisService) => new ExtensionRateLimitService(redisService),
             inject: [RedisService],
         },
+        VideoGenerationProcessor,
     ],
     exports: [GenerationService],
 })

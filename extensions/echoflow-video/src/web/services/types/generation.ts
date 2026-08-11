@@ -18,15 +18,6 @@ export const VideoGenerationBillingStatus = {
 export type VideoGenerationBillingStatus =
     (typeof VideoGenerationBillingStatus)[keyof typeof VideoGenerationBillingStatus];
 
-export const HappyHorseModel = {
-    I2V: "happyhorse-1.0-i2v",
-    R2V: "happyhorse-1.0-r2v",
-    T2V: "happyhorse-1.0-t2v",
-    VIDEO_EDIT: "happyhorse-1.0-video-edit",
-} as const;
-
-export type HappyHorseModel = (typeof HappyHorseModel)[keyof typeof HappyHorseModel];
-
 export interface VideoMediaItem {
     type: "first_frame" | "reference_image" | "video";
     url: string;
@@ -174,14 +165,13 @@ export interface CreateVideoParams {
     promptOptimizationSource?: "ai" | "local";
     promptOptimizationStyle?: string;
     promptOptimizerModelId?: string;
-    model: string;
+    modelConfigId: string;
     requestKey?: string;
     media?: VideoMediaItem[];
     resolution?: string;
     duration?: number;
     ratio?: string;
     watermark?: boolean;
-    audioSetting?: string;
 }
 
 export type PromptOptimizationStyle = "cinematic" | "commercial" | "realistic" | "anime" | "minimal";
