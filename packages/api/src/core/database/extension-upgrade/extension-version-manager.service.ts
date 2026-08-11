@@ -36,9 +36,13 @@ export class ExtensionVersionManagerService {
             const versionInfo = await detector.detect();
 
             if (!versionInfo.needsUpgrade) {
-                this.logger.log(
-                    `Extension ${this.extensionIdentifier} is up to date: ${versionInfo.current}`,
-                );
+                const upgradeService = new ExtensionUpgradeService(this.dataSource, this.extensionIdentifier);
+                if (await upgradeService.supportsSameVersionRepair(versionInfo.current)) {
+                    await upgradeService.executeUpgrades([versionInfo.current]);
+                    this.logger.log(`Extension ${this.extensionIdentifier} same-version repair completed: ${versionInfo.current}`);
+                } else {
+                    this.logger.log(`Extension ${this.extensionIdentifier} is up to date: ${versionInfo.current}`);
+                }
                 return;
             }
 

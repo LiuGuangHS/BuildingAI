@@ -28,6 +28,7 @@
     "devDependencies": {
         "@buildingai/eslint-config": "workspace:*",
         "@buildingai/typescript-config": "workspace:*",
-        "@rolldown/plugin-babel": "catalog:web"
+        "@rolldown/plugin-babel": "catalog:web",
+        "babel-plugin-react-compiler": "^1.0.0"
     }
 }

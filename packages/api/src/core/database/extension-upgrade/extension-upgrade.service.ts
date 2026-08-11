@@ -24,6 +24,13 @@ export class ExtensionUpgradeService {
         this.upgradeDir = path.join(this.extensionDir, "build", "upgrade");
     }
 
+    async supportsSameVersionRepair(version: string): Promise<boolean> {
+        const indexPath = path.join(this.upgradeDir, version, "index.js");
+        if (!(await fse.pathExists(indexPath))) return false;
+        const upgradeModule = await import(indexPath);
+        return upgradeModule.Upgrade?.supportsSameVersionRepair === true;
+    }
+
     /**
      * Execute upgrade script for a specific version
      */

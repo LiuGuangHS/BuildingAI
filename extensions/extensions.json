@@ -4,7 +4,7 @@
             "manifest": {
                 "identifier": "echoflow-video",
                 "name": "视频工作台",
-                "version": "0.0.1",
+                "version": "0.0.2",
                 "description": "用文字或参考图生成视频，支持多模型选择、任务历史和结果查看。",
                 "icon": "/echoflow-video/static/logo.png",
                 "author": {
@@ -14,7 +14,7 @@
                 }
             },
             "isLocal": true,
-            "enabled": true,
+            "enabled": false,
             "installedAt": "2026-06-12T08:09:37.480Z"
         },
         "echoflow-image": {
@@ -55,7 +55,7 @@
                 "identifier": "echoflow-contract-generation",
                 "name": "合同生成",
                 "version": "0.0.1",
-                "description": "覆盖创业、劳动、租赁等场景，快速生成可编辑合同草稿。",
+                "description": "合同起草与审查插件，支持多行业模板、条款编辑、异步任务队列、风险提示、改写建议与 Word 导出。",
                 "icon": "/echoflow-contract-generation/static/icon.png",
                 "author": {
                     "avatar": "/echoflow-contract-generation/static/icon.png",
@@ -72,7 +72,7 @@
                 "identifier": "echoflow-astrology-fortune",
                 "name": "星盘运势",
                 "version": "0.0.1",
-                "description": "输入出生信息，生成个人星盘、运势解读与提问建议。",
+                "description": "按出生日期计算太阳星座和公历年生肖，结合用户补充信息生成运势解读与提问建议；不提供传统农历生肖或完整星盘计算。",
                 "icon": "/echoflow-astrology-fortune/static/icon.png",
                 "author": {
                     "avatar": "/echoflow-astrology-fortune/static/icon.png",

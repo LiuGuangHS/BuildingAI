@@ -160,7 +160,9 @@ export class HttpClient {
                 return undefined as TResponse;
             }
             const raw = res.data as unknown;
-            return this.unwrapOrThrow<TResponse>(raw);
+            return mergedConfig.responseType === "blob"
+                ? raw as TResponse
+                : this.unwrapOrThrow<TResponse>(raw);
         } catch (error) {
             if (
                 (error instanceof DOMException && error.name === "AbortError") ||
@@ -180,7 +182,9 @@ export class HttpClient {
                             return undefined as TResponse;
                         }
                         const raw = res.data as unknown;
-                        return this.unwrapOrThrow<TResponse>(raw);
+                        return mergedConfig.responseType === "blob"
+                            ? raw as TResponse
+                            : this.unwrapOrThrow<TResponse>(raw);
                     } catch (retryError) {
                         if (this.options.hooks?.onAuthError) {
                             await this.options.hooks.onAuthError(retryError);

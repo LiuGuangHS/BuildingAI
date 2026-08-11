@@ -42,6 +42,9 @@ const imageUploadVariants = cva(
 
 export interface ImageUploadProps extends VariantProps<typeof imageUploadVariants> {
   className?: string;
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
   value?: string;
   defaultValue?: string;
   disabled?: boolean;
@@ -58,6 +61,9 @@ export interface ImageUploadProps extends VariantProps<typeof imageUploadVariant
 
 function ImageUpload({
   className,
+  id,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
   variant,
   size,
   shape,
@@ -197,14 +203,23 @@ function ImageUpload({
       {isInitialized === false ? (
         <input
           ref={initInputRef}
+          id={id}
           type="file"
           accept={accept}
           style={{ display: "none" }}
           onChange={handleInitInputChange}
           disabled={isDisabled}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
         />
       ) : (
-        <input {...getInputProps()} disabled={isDisabled} />
+        <input
+          {...getInputProps()}
+          id={id}
+          disabled={isDisabled}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+        />
       )}
 
       {currentValue ? (
