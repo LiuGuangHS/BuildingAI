@@ -48,6 +48,10 @@ export type AstrologyReportResult = {
 };
 
 @ExtensionEntity({ name: "astrology_reports" })
+@Index("uq_astrology_reports_user_request_key", ["userId", "requestKey"], {
+    unique: true,
+    where: `"request_key" IS NOT NULL AND "deleted_at" IS NULL`,
+})
 export class AstrologyReport {
     @PrimaryGeneratedColumn("uuid")
     @Index()
@@ -68,6 +72,9 @@ export class AstrologyReport {
     @Column({ type: "uuid", comment: "Provider ID" })
     @Index()
     providerId: string;
+
+    @Column({ type: "varchar", length: 36, nullable: true, comment: "Idempotency key from client" })
+    requestKey?: string | null;
 
     @Column({ type: "varchar", length: 30, comment: "Report type" })
     @Index()

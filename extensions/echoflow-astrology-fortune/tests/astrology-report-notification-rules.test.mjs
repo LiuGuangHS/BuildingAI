@@ -128,7 +128,7 @@ describe("astrology report notification rules", () => {
         assert.equal("rawProvider" in notification.data.reviewChecklist[0], false);
     });
 
-    it("includes refund metadata in failed notifications without exposing provider raw data", () => {
+    it("includes safe refund metadata in failed notifications without exposing provider raw data", () => {
         const notification = buildAstrologyReportFailedNotification(
             report({
                 reportType: "compatibility",
@@ -150,7 +150,6 @@ describe("astrology report notification rules", () => {
             reason: "模型暂不可用",
             billingStatus: "refunded",
             refundedAt: "2026-06-19T10:00:00.000Z",
-            refundError: "refund pending",
         });
         assert.equal("rawResponse" in notification.data, false);
     });
@@ -158,7 +157,7 @@ describe("astrology report notification rules", () => {
     it("normalizes empty failure messages and report type names", () => {
         const notification = buildAstrologyReportFailedNotification(report({ reportType: "unknown" }), "");
 
-        assert.equal(notification.data.taskName, "星盘运势报告");
+        assert.equal(notification.data.taskName, "出生资料运势报告");
         assert.equal(notification.data.reason, "请稍后重试或联系管理员");
         assert.equal(getAstrologyReportDisplayName("weekly"), "每周运势报告");
         assert.equal(getAstrologyReportDisplayName("monthly"), "每月运势报告");

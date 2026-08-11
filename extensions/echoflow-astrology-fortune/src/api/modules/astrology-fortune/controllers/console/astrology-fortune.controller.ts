@@ -5,6 +5,7 @@ import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
 import { QueryAstrologyProfileDto, QueryAstrologyReportDto, UpdateAstrologyFortuneSettingDto } from "../../dto";
 import { AstrologyFortuneService } from "../../services";
+import { toConsoleAstrologyProfile, toConsoleAstrologyReport } from "../../services/astrology-public-serializers";
 
 @ExtensionConsoleController("astrology-fortune", "AI星盘运势管理")
 export class AstrologyFortuneConsoleController extends BaseController {
@@ -13,8 +14,12 @@ export class AstrologyFortuneConsoleController extends BaseController {
     }
 
     @Get("profiles")
-    profiles(@Query() query: QueryAstrologyProfileDto) {
-        return this.astrologyFortuneService.getAllProfiles(query);
+    async profiles(@Query() query: QueryAstrologyProfileDto) {
+        const page = await this.astrologyFortuneService.getAllProfiles(query);
+        return {
+            ...page,
+            items: page.items.map(toConsoleAstrologyProfile),
+        };
     }
 
     @Get("settings")
@@ -33,8 +38,12 @@ export class AstrologyFortuneConsoleController extends BaseController {
     }
 
     @Get("reports")
-    reports(@Query() query: QueryAstrologyReportDto) {
-        return this.astrologyFortuneService.getAllReports(query);
+    async reports(@Query() query: QueryAstrologyReportDto) {
+        const page = await this.astrologyFortuneService.getAllReports(query);
+        return {
+            ...page,
+            items: page.items.map(toConsoleAstrologyReport),
+        };
     }
 
     @Get("reports/stats")
@@ -43,8 +52,8 @@ export class AstrologyFortuneConsoleController extends BaseController {
     }
 
     @Get("reports/:id")
-    reportDetail(@Param("id", UUIDValidationPipe) id: string) {
-        return this.astrologyFortuneService.getAdminReportDetail(id);
+    async reportDetail(@Param("id", UUIDValidationPipe) id: string) {
+        return toConsoleAstrologyReport(await this.astrologyFortuneService.getAdminReportDetail(id));
     }
 
     @Post("reports/cleanup-stale")

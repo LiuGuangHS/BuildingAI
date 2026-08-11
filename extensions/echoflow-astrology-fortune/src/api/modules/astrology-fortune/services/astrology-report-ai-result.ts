@@ -23,6 +23,7 @@ const allowedEvidenceSourceFragments = [
 ];
 const unavailableEvidenceSourcePattern = /未提供|没有提供|未包含|缺失|无法确认|未知|猜测|推测|臆测|假设|虚构|编造/;
 const deterministicPromisePattern = /必然|注定|保证|百分百|100%|一定会|绝对会|必定|肯定会|永远不会|必赚|稳赚|必胜/;
+const computedChartClaimPattern = /月亮(?:落在|位于)|上升(?:点)?(?:位于|落在)|月亮星座(?:是|为)|上升星座(?:是|为)|宫位|相位|天体位置/;
 const requiredSectionGroups = [
     { label: "洞察", test: /洞察|分析|判断/ },
     { label: "机会", test: /机会|优势|可借力|突破/ },
@@ -164,6 +165,8 @@ export const astrologyReportAiResultSchema = z.object({
         rejectDeterministicPromise(context, item, ["followUps", index]);
     });
     if (result.closing) rejectDeterministicPromise(context, result.closing, ["closing"]);
+
+    rejectComputedChartClaims(context, result);
 });
 
 export type AstrologyReportAiResult = z.infer<typeof astrologyReportAiResultSchema>;
@@ -336,6 +339,28 @@ function isAllowedEvidenceSource(value: string) {
     const normalized = normalizeTraceText(value);
     if (unavailableEvidenceSourcePattern.test(normalized)) return false;
     return allowedEvidenceSourceFragments.some((source) => normalized.includes(normalizeTraceText(source)));
+}
+
+function rejectComputedChartClaims(context: z.RefinementCtx, result: AstrologyReportAiResult) {
+    const fields: Array<[string, Array<string | number>]> = [
+        [result.title, ["title"]],
+        [result.summary, ["summary"]],
+        ...result.evidence.map((item, index) => [item.insight, ["evidence", index, "insight"]] as [string, Array<string | number>]),
+        ...result.sections.map((item, index) => [`${item.heading} ${item.content}`, ["sections", index, "content"]] as [string, Array<string | number>]),
+        ...result.actions.map((item, index) => [`${item.item} ${item.reason}`, ["actions", index, "reason"]] as [string, Array<string | number>]),
+        ...result.warnings.map((item, index) => [`${item.title} ${item.detail}`, ["warnings", index, "detail"]] as [string, Array<string | number>]),
+        ...result.reviewChecklist.map((item, index) => [`${item.item} ${item.why}`, ["reviewChecklist", index, "why"]] as [string, Array<string | number>]),
+        ...result.followUps.map((item, index) => [item, ["followUps", index]] as [string, Array<string | number>]),
+        ...(result.closing ? [[result.closing, ["closing"]] as [string, Array<string | number>]] : []),
+    ];
+    for (const [text, path] of fields) {
+        if (!computedChartClaimPattern.test(normalizeTraceText(text))) continue;
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "月亮星座和上升星座只能作为用户补充信息，不能写成系统计算的星盘事实",
+            path,
+        });
+    }
 }
 
 function rejectDeterministicPromise(context: z.RefinementCtx, value: string, path: Array<string | number>) {

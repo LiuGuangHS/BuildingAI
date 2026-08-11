@@ -1,7 +1,7 @@
 {
     "name": "echoflow-astrology-fortune",
     "version": "0.0.1",
-    "description": "星盘与运势报告插件，基于出生档案/星座生肖/LLM 生成结构化每日运势、性格洞察、情感配对、事业财富报告，支持追问、质量反馈、复盘清单与计费退款。",
+    "description": "按出生日期计算太阳星座和公历年生肖，基于出生档案与 LLM 生成结构化运势报告；月亮/上升为用户补充信息，不提供传统农历生肖或完整星盘计算。",
     "author": "EchoFlowAI Team",
     "private": true,
     "main": "./manifest.json",

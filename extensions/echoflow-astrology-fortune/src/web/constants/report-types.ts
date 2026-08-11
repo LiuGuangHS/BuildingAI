@@ -20,7 +20,7 @@ export type ReportIntent = ReportTypeOption & {
 
 export const reportTypeOptions: ReportTypeOption[] = [
     { value: "daily", label: "今日运势", priceGroup: "daily" },
-    { value: "profile", label: "星盘画像", priceGroup: "report" },
+    { value: "profile", label: "出生资料画像", priceGroup: "report" },
     { value: "personality", label: "性格洞察", priceGroup: "report" },
     { value: "weekly", label: "周运报告", priceGroup: "report" },
     { value: "monthly", label: "月运报告", priceGroup: "report" },

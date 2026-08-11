@@ -9,16 +9,24 @@ export type AstrologyProfileInput = {
     birthTime?: string;
     birthPlace?: string;
     zodiacSign?: string;
+    /** 用户补充的信息，不是系统计算的月亮星座事实。 */
     moonSign?: string;
+    /** 用户补充的信息，不是系统计算的上升星座事实。 */
     risingSign?: string;
 };
 
-export type AstrologyProfile = AstrologyProfileInput & {
+export type AstrologyProfile = {
     id: string;
+    name: string;
+    gender: string | null;
+    birthDate: string;
+    birthTime: string | null;
+    birthPlace: string | null;
     zodiacSign: string;
+    moonSign: string | null;
+    risingSign: string | null;
     chineseZodiac: string;
     personalitySnapshot: Record<string, unknown>;
-    metadata: Record<string, unknown>;
     createdAt: string;
     updatedAt: string;
 };
@@ -86,7 +94,12 @@ export type PublicAstrologyReportMetadata = {
     };
 };
 
-export type ConsoleAstrologyReportMetadata = PublicAstrologyReportMetadata & Record<string, unknown>;
+export type ConsoleAstrologyReportMetadata = PublicAstrologyReportMetadata & {
+    failureType?: string;
+    hasRefundError?: boolean;
+    aiRepairAttempted?: boolean;
+    aiRepairSucceeded?: boolean;
+};
 
 export type AstrologyReport = {
     id: string;
@@ -108,10 +121,9 @@ export type AstrologyReport = {
 
 export type ConsoleAstrologyReport = Omit<AstrologyReport, "providerMetadata"> & {
     userId: string;
-    modelId?: string;
-    providerId?: string;
+    modelId: string;
+    providerId: string;
     providerMetadata?: ConsoleAstrologyReportMetadata | null;
-    requestPayload?: Record<string, unknown> | null;
 };
 
 export type UpdateReportFeedbackParams = {
@@ -166,6 +178,7 @@ export type AiModelOption = {
 
 export type GenerateAstrologyReportParams = {
     reportType: AstrologyReportType;
+    requestKey: string;
     profileId?: string;
     profile?: Partial<AstrologyProfileInput>;
     question?: string;

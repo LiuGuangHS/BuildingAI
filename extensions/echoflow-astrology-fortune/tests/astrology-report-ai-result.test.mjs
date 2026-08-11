@@ -96,6 +96,22 @@ describe("astrology report AI result contract", () => {
         assert.deepEqual(normalized.followUps, validPayload.followUps);
     });
 
+    it("rejects user-provided moon and rising signs presented as computed chart facts", () => {
+        const computedClaims = [
+            ["月亮落在双子座", "当前问题"],
+            ["上升点位于狮子座", "当前问题"],
+            ["月亮星座为双子座", "用户档案"],
+            ["上升星座是狮子座", "用户档案"],
+            ["第七宫有重要相位", "用户档案"],
+        ];
+        for (const [insight, source] of computedClaims) {
+            assert.throws(
+                () => parseAstrologyReportAiResult({ text: JSON.stringify({ ...validPayload, evidence: [{ source, insight, confidence: "high" }, validPayload.evidence[1]] }) }),
+                /AI星盘报告结构解析失败/,
+            );
+        }
+    });
+
     it("rejects empty, invalid, or schema-breaking model output", () => {
         const { evidence, ...payloadWithoutEvidence } = validPayload;
 

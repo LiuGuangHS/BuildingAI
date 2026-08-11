@@ -35,11 +35,16 @@ describe("astrology prompt boundary", () => {
         const promptBody = methodBody("buildPrompt");
 
         for (const phrase of [
-            "你是 EchoFlowAI 的星盘与生活决策分析师",
+            "你是 EchoFlowAI 的出生档案与生活决策分析师",
             "请避免绝对化断言",
             "不得使用“必然、注定、保证、一定会、绝对会、必赚、稳赚”等确定性承诺",
             "只输出一个 JSON 对象",
             "报告类型:",
+            "太阳星座（按严格公历日期计算）",
+            "月亮星座（用户补充信息，非系统计算）",
+            "上升星座（用户补充信息，非系统计算）",
+            "公历年生肖（按公历年份，不按农历换年）",
+            "不是本系统计算的星盘事实",
             "关注方向:",
             "当前状态:",
             "用户问题:",
@@ -69,6 +74,16 @@ describe("astrology prompt boundary", () => {
         assert.match(promptBody, /summarizeAstrologyQuestionQuality/);
         assert.match(promptBody, /如果问题质量是 weak/);
         assert.doesNotMatch(promptBody, /secret|provider|apiKey/i);
+    });
+
+    it("keeps user-provided moon and rising signs out of computed chart facts", () => {
+        const promptBody = methodBody("buildPrompt");
+
+        assert.match(promptBody, /月亮星座（用户补充信息，非系统计算）/);
+        assert.match(promptBody, /上升星座（用户补充信息，非系统计算）/);
+        assert.match(promptBody, /不是本系统计算的星盘事实/);
+        assert.match(promptBody, /不得把它们写成已计算的天体位置、宫位、相位/);
+        assert.match(promptBody, /传统农历生肖和完整本命盘尚未提供/);
     });
 
     it("feeds sanitized source report feedback into follow-up prompt context", () => {

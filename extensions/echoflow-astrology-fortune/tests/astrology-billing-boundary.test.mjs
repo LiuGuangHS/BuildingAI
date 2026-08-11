@@ -45,10 +45,11 @@ describe("astrology billing and refund boundary", () => {
         assert.match(body, /billingService\.addUserPower\(\{ userId: report\.userId, amount: Number\(report\.costCredits\)/);
         assert.match(body, /billingStatus: "refunded"/);
         assert.match(body, /refundedAt: new Date\(\)\.toISOString\(\)/);
-        assert.match(body, /refundError: refundMessage/);
+        assert.match(body, /refundError: "退款记账失败"/);
+        assert.match(body, /refundFailedAt: new Date\(\)\.toISOString\(\)/);
     });
 
-    it("keeps failed generation and task recovery refund-first before marking reports failed", () => {
+    it("marks failure before attempting a refund so success cannot win after refund", () => {
         const processBody = methodBody("processReport");
         const taskCrashBody = methodBody("markReportCrashed");
         const staleFailureBody = methodBody("failStaleReports");
@@ -57,9 +58,9 @@ describe("astrology billing and refund boundary", () => {
             const refundIndex = body.indexOf("await this.refundReportCreditsIfNeeded");
             const failIndex = body.indexOf("await this.markReportFailedIfActive");
 
-            assert.ok(refundIndex >= 0, "failure path should attempt refund");
+            assert.ok(refundIndex >= 0, "failure path should attempt refund after terminal transition");
             assert.ok(failIndex >= 0, "failure path should mark report failed");
-            assert.ok(refundIndex < failIndex, "refund should be attempted before failed terminal state");
+            assert.ok(failIndex < refundIndex, "failed terminal state must be committed before refund");
         }
     });
 
@@ -71,16 +72,17 @@ describe("astrology billing and refund boundary", () => {
         assert.match(enqueueBody, /failureReason: message/);
         assert.match(enqueueBody, /await this\.markReportCrashed\(id, new Error\("AI星盘运势任务队列暂不可用，请稍后重试"\), \{/);
         assert.match(crashBody, /metadata\?: Record<string, unknown>/);
-        assert.match(crashBody, /await this\.markReportFailedIfActive\(reportId, message, metadata\)/);
+        assert.match(crashBody, /const failedReport = await this\.markReportFailedIfActive\(reportId, "星盘报告生成失败/);
     });
 
     it("classifies worker crashes and stale timeout cleanup for console troubleshooting", () => {
         const staleFailureBody = methodBody("failStaleReports");
 
         assert.match(processorSource, /failureType: "worker_job_failed"/);
-        assert.match(processorSource, /failureReason: error instanceof Error \? error\.message : String\(error\)/);
+        assert.doesNotMatch(processorSource, /failureReason: error instanceof Error \? error\.message : String\(error\)/);
         assert.match(staleFailureBody, /failureType: "stale_report_timeout"/);
         assert.match(staleFailureBody, /failureReason: message/);
-        assert.match(staleFailureBody, /await this\.markReportFailedIfActive\(report\.id, message, \{/);
+        assert.match(staleFailureBody, /const failedReport = await this\.markReportFailedIfActive\(report\.id, message, \{/);
+        assert.match(staleFailureBody, /\}, cutoff\)/);
     });
 });

@@ -70,7 +70,9 @@ describe("astrology web generation availability", () => {
 
         assert.match(rootBody, /useAstrologyGenerationStatusQuery/);
         assert.match(rootBody, /generationDisabled/);
-        assert.match(rootBody, /generationStatus\.data\?\.canGenerate === false/);
+        assert.match(rootBody, /isGenerationUnavailable\(/);
+        assert.match(rootBody, /generationStatus\.isPending/);
+        assert.match(rootBody, /generationStatus\.isError/);
         assert.match(composerBody, /disabled={generationDisabled}/);
         assert.match(composerBody, /当前生成服务暂不可用/);
         assert.match(footerBody, /disabled={busy \|\| generationDisabled}/);
@@ -90,6 +92,9 @@ describe("astrology web generation availability", () => {
         assert.match(requiredBody, /\["name", "姓名"\]/);
         assert.match(requiredBody, /\["birthDate", "出生日期"\]/);
         assert.doesNotMatch(requiredBody, /birthTime|birthPlace|zodiacSign|moonSign|risingSign/);
+        assert.match(pageSource, /YYYY-MM-DD/);
+        assert.match(pageSource, /月亮星座（用户补充信息）/);
+        assert.match(pageSource, /上升星座（用户补充信息）/);
         assert.match(blockBody, /generationDisabled/);
     });
 

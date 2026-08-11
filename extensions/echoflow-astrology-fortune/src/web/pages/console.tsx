@@ -775,7 +775,7 @@ function ProfilesPanel({
                         <TableRow>
                             <TableHead>档案</TableHead>
                             <TableHead>星座</TableHead>
-                            <TableHead>生肖</TableHead>
+                            <TableHead>公历年生肖</TableHead>
                             <TableHead>出生信息</TableHead>
                             <TableHead>用户</TableHead>
                             <TableHead>创建时间</TableHead>
@@ -862,12 +862,12 @@ function ReportDetailDialog({
                             <Detail label="消耗积分" value={formatCredits(report.costCredits)} />
                             <Detail label="模型 ID" value={report.modelId} />
                             <Detail label="Provider ID" value={report.providerId} />
-                            <Detail label="退款异常" value={formatMetadataValue(metadata.refundError)} />
+                            <Detail label="退款异常" value={metadata.hasRefundError ? "有退款异常" : "无"} />
                             <Detail label="失败类型" value={formatMetadataValue(metadata.failureType)} />
-                            <Detail label="失败原因" value={formatMetadataValue(metadata.failureReason)} />
+                            <Detail label="失败原因" value={report.errorMessage ? "已记录，请查看服务端日志" : "-"} />
                             <Detail label="AI 修复重试" value={formatAiRepairAttempt(metadata.aiRepairAttempted)} />
                             <Detail label="修复结果" value={formatAiRepairResult(metadata.aiRepairAttempted, metadata.aiRepairSucceeded)} />
-                            <Detail label="修复原因" value={formatMetadataValue(metadata.aiRepairReason)} />
+                            <Detail label="修复原因" value={metadata.aiRepairAttempted ? "已记录修复审计" : "-"} />
                         </div>
                         {report.errorMessage && <div className="text-destructive rounded-md border p-3 text-sm">{report.errorMessage}</div>}
                         {!!scores.length && (

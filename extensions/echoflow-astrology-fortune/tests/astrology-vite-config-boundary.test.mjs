@@ -13,11 +13,11 @@ describe("astrology vite config boundary", () => {
         assert.match(pluginViteSource, /defineExtensionViteConfig/);
     });
 
-    it("keeps shared extension dependency aliases in web-core", () => {
-        assert.match(platformViteSource, /react-router-dom/);
-        assert.match(platformViteSource, /react-router\/dom/);
-        assert.match(platformViteSource, /zustand/);
-        assert.match(platformViteSource, /@buildingai\/utils/);
-        assert.match(platformViteSource, /toAliasArray/);
+    it("uses upstream standard package resolution without workspace-specific dependency aliases", () => {
+        assert.doesNotMatch(platformViteSource, /node_modules\/\.pnpm/);
+        assert.doesNotMatch(platformViteSource, /react-router-dom/);
+        assert.doesNotMatch(platformViteSource, /zustand/);
+        assert.doesNotMatch(platformViteSource, /@buildingai\/utils/);
+        assert.match(platformViteSource, /tsconfigPaths: true/);
     });
 });

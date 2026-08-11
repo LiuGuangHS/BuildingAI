@@ -47,7 +47,7 @@ export function getAstrologyReportDisplayName(reportType: string) {
         daily: "每日运势报告",
         weekly: "每周运势报告",
         monthly: "每月运势报告",
-        natal: "本命星盘报告",
+        natal: "出生资料分析报告",
         love: "情感运势报告",
         career: "事业运势报告",
         wealth: "财富运势报告",
@@ -57,7 +57,7 @@ export function getAstrologyReportDisplayName(reportType: string) {
         profile: "长期画像报告",
         personality: "性格画像报告",
     };
-    return names[reportType] || "星盘运势报告";
+    return names[reportType] || "出生资料运势报告";
 }
 
 export function buildAstrologyReportSucceededNotification(report: NotificationReportLike) {
@@ -92,7 +92,6 @@ export function buildAstrologyReportFailedNotification(report: NotificationRepor
             reason: message || "请稍后重试或联系管理员",
             billingStatus: report.providerMetadata?.billingStatus,
             refundedAt: report.providerMetadata?.refundedAt,
-            refundError: report.providerMetadata?.refundError,
         },
     };
 }

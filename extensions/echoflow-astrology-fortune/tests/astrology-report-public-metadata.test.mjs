@@ -86,8 +86,11 @@ describe("astrology report public metadata", () => {
 
         for (const field of ["userId", "modelId", "providerId", "requestPayload"]) {
             assert.equal(publicType.includes(field), false, `AstrologyReport must not expose ${field}`);
+        }
+        for (const field of ["userId", "modelId", "providerId"]) {
             assert.equal(consoleType.includes(field), true, `ConsoleAstrologyReport should expose ${field}`);
         }
+        assert.equal(consoleType.includes("requestPayload"), false, "ConsoleAstrologyReport must not expose requestPayload");
 
         assert.match(webServiceSource, /\bAstrologyReport\b/);
         assert.doesNotMatch(webServiceSource, /\bConsoleAstrologyReport\b/);

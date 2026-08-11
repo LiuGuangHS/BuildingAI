@@ -4,7 +4,7 @@
     "type": "application",
     "version": "0.0.1",
     "icon": "/echoflow-astrology-fortune/static/icon.png",
-    "description": "输入出生信息，生成个人星盘、运势解读与提问建议。",
+    "description": "按出生日期计算太阳星座和公历年生肖，结合用户补充信息生成运势解读与提问建议；不提供传统农历生肖或完整星盘计算。",
     "homepage": "",
     "author": {
         "avatar": "/echoflow-astrology-fortune/static/icon.png",

@@ -103,7 +103,7 @@ describe("astrology report recovery rules", () => {
 
     it("does not refund successful reports after a late crash", () => {
         assert.equal(canRefundAstrologyReportCredits(report({ status: ASTROLOGY_REPORT_SUCCESS_STATUS, costCredits: 10 })), false);
-        assert.equal(canRefundAstrologyReportCredits(report({ status: ASTROLOGY_REPORT_PROCESSING_STATUS, costCredits: 10 })), true);
+        assert.equal(canRefundAstrologyReportCredits(report({ status: ASTROLOGY_REPORT_PROCESSING_STATUS, costCredits: 10 })), false);
         assert.equal(canRefundAstrologyReportCredits(report({ status: ASTROLOGY_REPORT_FAILED_STATUS, costCredits: "10" })), true);
         assert.equal(canRefundAstrologyReportCredits(report({ status: ASTROLOGY_REPORT_FAILED_STATUS, costCredits: 0 })), false);
     });

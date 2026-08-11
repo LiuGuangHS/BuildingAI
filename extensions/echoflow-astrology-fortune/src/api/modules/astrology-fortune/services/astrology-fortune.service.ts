@@ -15,6 +15,7 @@ import type { Queue } from "bullmq";
 import { AstrologyFortuneSetting, AstrologyProfile, AstrologyReport, AstrologyReportStatus, AstrologyReportType, type AstrologyReportResult } from "../../../db/entities";
 import { CreateAstrologyProfileDto, GenerateAstrologyReportDto, QueryAstrologyProfileDto, QueryAstrologyReportDto, UpdateAstrologyFortuneSettingDto, UpdateAstrologyProfileDto, UpdateReportFeedbackDto } from "../dto";
 import { ASTROLOGY_REPORT_JOB, ASTROLOGY_REPORT_QUEUE } from "./astrology-queue.constants";
+import { getChineseZodiacForGregorianYear, getSunSign, parseBirthDate } from "./astrology-calendar";
 import { normalizeAstrologyReportAiResult, parseAstrologyReportAiResult } from "./astrology-report-ai-result";
 import { generateAstrologyReportAiResultWithRepair } from "./astrology-report-ai-retry";
 import { buildAstrologyReportFailure } from "./astrology-report-failure";
@@ -34,6 +35,8 @@ import {
     canRecoverAstrologyReport,
     isAstrologyReportBusyStatus,
 } from "./astrology-report-recovery-rules";
+import { hasAstrologyReportRequestKey, isAstrologyReportRequestKeyUniqueConstraint } from "./astrology-report-idempotency";
+import { canTransitionAstrologyReportToFailed, shouldNotifyAstrologyReport } from "./astrology-report-billing-rules";
 import {
     ASTROLOGY_FORTUNE_EXTENSION_ID,
     ASTROLOGY_REPORT_FAILED_SCENE,
@@ -48,7 +51,6 @@ const LOCK_TIMEOUT = 'SET LOCAL lock_timeout = 3000';
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_TARGET_PROFILE_KEYS = 20;
 const MAX_TARGET_PROFILE_CHARS = 2000;
-const CHINESE_ZODIACS = ["猴", "鸡", "狗", "猪", "鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊"];
 const SETTING_KEY = "default";
 
 type AstrologySourceReportPromptContext = {
@@ -166,10 +168,22 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
     }
 
     async generateReport(userId: string, dto: GenerateAstrologyReportDto) {
+        if (!hasAstrologyReportRequestKey(dto.requestKey)) {
+            throw HttpErrorFactory.badRequest("缺少有效请求幂等键");
+        }
+
+        const existing = await this.reportRepo.findOne({
+            where: { userId, requestKey: dto.requestKey },
+        });
+        if (existing) return existing;
+
         const setting = await this.getSetting();
         const model = await this.loadConfiguredModel(setting.defaultModelId);
         const cost = this.calculateCost(setting, dto.reportType);
-        const normalizedDto = { ...dto, targetProfile: this.normalizeTargetProfile(dto.targetProfile) };
+        const normalizedDto = {
+            ...dto,
+            targetProfile: this.normalizeTargetProfile(dto.targetProfile as unknown as Record<string, unknown>),
+        } as GenerateAstrologyReportDto;
 
         if (cost > 0 && !(await this.billingService.hasSufficientPower(userId, cost))) {
             throw HttpErrorFactory.badRequest("积分不足");
@@ -184,11 +198,14 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
             ...(sourceReport ? { sourceReportContext: this.buildSourceReportPromptContext(sourceReport) } : {}),
         };
 
-        const report = await this.create({
-            userId,
+        let report: AstrologyReport;
+        try {
+            report = await this.create({
+                userId,
             profileId: profile?.id ?? null,
             modelId: model.id,
             providerId: model.provider.id,
+            requestKey: dto.requestKey,
             reportType: dto.reportType,
             question: normalizedDto.question ?? null,
             targetProfile: normalizedDto.targetProfile ?? null,
@@ -213,8 +230,17 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
                       }
                     : {}),
             },
-            requestPayload: promptPayload as unknown as Record<string, unknown>,
-        } as Partial<AstrologyReport>);
+                requestPayload: promptPayload as unknown as Record<string, unknown>,
+            } as Partial<AstrologyReport>);
+        } catch (error) {
+            if (isAstrologyReportRequestKeyUniqueConstraint(error)) {
+                const racedReport = await this.reportRepo.findOne({
+                    where: { userId, requestKey: dto.requestKey },
+                });
+                if (racedReport) return racedReport;
+            }
+            throw error;
+        }
 
         await this.enqueueReportJob(report.id);
 
@@ -226,7 +252,11 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
         if (!report) return null;
         if (!isAstrologyReportBusyStatus(report.status)) return report;
         if (!report.requestPayload) {
-            await this.markReportFailedIfActive(report.id, "报告请求载荷缺失，请重新生成");
+            const failedReport = await this.markReportFailedIfActive(report.id, "报告请求载荷缺失，请重新生成");
+            if (failedReport) {
+                await this.refundReportCreditsIfNeeded(report.id, "报告请求载荷缺失自动退款");
+                await this.notifyReportFailed(failedReport, "报告请求载荷缺失，请重新生成");
+            }
             return this.reportRepo.findOne({ where: { id: report.id } });
         }
         return this.processReport(report.id, report.requestPayload as unknown as AstrologyReportPromptPayload, report.profileId ?? null);
@@ -239,7 +269,6 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
         try {
             const model = await this.loadModel(report.modelId, "AI星盘运势默认模型不可用，请管理员重新配置");
             const profile = profileId ? await this.profileRepo.findOne({ where: { id: profileId, userId: report.userId } }) : null;
-            await this.reserveReportCreditsOnce(report, model.name);
             const aiGeneration = await generateAstrologyReportAiResultWithRepair({
                 basePrompt: this.buildPrompt(dto, profile),
                 generate: (prompt) =>
@@ -253,11 +282,16 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
             const resultText = buildAstrologyReportText(normalized);
             const score = this.extractOverallScore(normalized);
 
+            let transitionedToSuccess = false;
             const savedReport = await this.reportRepo.manager.transaction(async (entityManager) => {
                 await entityManager.query(LOCK_TIMEOUT);
-                const currentReport = await this.findActiveReportForWrite(report.id, entityManager);
+                const currentReport = await this.findActiveReportForWrite(report.id, entityManager, true);
                 if (!currentReport) return null;
                 if (!isAstrologyReportBusyStatus(currentReport.status)) return currentReport;
+                await this.reserveReportCreditsOnce(currentReport, model.name, entityManager);
+                const billedReport = await this.findActiveReportForWrite(report.id, entityManager, true);
+                if (!billedReport || !isAstrologyReportBusyStatus(billedReport.status)) return billedReport;
+                transitionedToSuccess = true;
                 await entityManager.update(AstrologyReport, report.id, {
                     status: AstrologyReportStatus.SUCCESS,
                     result: normalized,
@@ -265,7 +299,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
                     score,
                     errorMessage: null,
                     providerMetadata: {
-                        ...(currentReport.providerMetadata ?? {}),
+                        ...(billedReport.providerMetadata ?? {}),
                         provider: model.provider.provider,
                         model: model.model,
                         ...aiGeneration.metadata,
@@ -287,13 +321,14 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
 
                 return (await entityManager.findOne(AstrologyReport, { where: { id: report.id } })) as AstrologyReport;
             });
-            await this.notifyReportSucceeded(savedReport);
+            if (transitionedToSuccess) await this.notifyReportSucceeded(savedReport);
             return savedReport;
         } catch (error) {
             const failure = buildAstrologyReportFailure(error);
             this.logger.error(`Astrology report ${report.id} failed: ${failure.metadata.failureReason}`);
-            await this.refundReportCreditsIfNeeded(report.id, "AI星盘运势生成失败自动退款");
-            await this.markReportFailedIfActive(report.id, failure.message, failure.metadata);
+            const failedReport = await this.markReportFailedIfActive(report.id, failure.message, failure.metadata);
+            if (failedReport) await this.refundReportCreditsIfNeeded(report.id, "AI星盘运势生成失败自动退款");
+            await this.notifyReportFailed(failedReport, failure.message);
             return this.reportRepo.findOne({ where: { id: report.id } });
         }
     }
@@ -518,7 +553,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
                 ASTROLOGY_REPORT_JOB,
                 { id },
                 {
-                    jobId: `astrology-report-${id}-${Date.now()}`,
+                    jobId: `astrology-report-${id}`,
                     attempts: 1,
                     removeOnComplete: true,
                     removeOnFail: false,
@@ -543,14 +578,18 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
                 where: { status: In(ASTROLOGY_REPORT_BUSY_STATUSES), updatedAt: LessThan(cutoff) },
                 take: 100,
             });
+            let affected = 0;
             for (const report of staleReports) {
-                await this.refundReportCreditsIfNeeded(report.id, message);
-                await this.markReportFailedIfActive(report.id, message, {
+                const failedReport = await this.markReportFailedIfActive(report.id, message, {
                     failureType: "stale_report_timeout",
                     failureReason: message,
-                });
+                }, cutoff);
+                if (!failedReport) continue;
+                await this.refundReportCreditsIfNeeded(report.id, message);
+                await this.notifyReportFailed(failedReport, message);
+                affected += 1;
             }
-            result = { affected: staleReports.length };
+            result = { affected };
         } catch (error) {
             if ((error as { code?: string }).code === "42P01") {
                 this.logger.warn("Astrology report table does not exist yet, skipping stale report cleanup");
@@ -589,9 +628,14 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
 
     private buildProfile(input: Partial<CreateAstrologyProfileDto> & { userId: string }) {
         const name = this.toOptionalString(input.name);
-        const birthDate = this.toOptionalString(input.birthDate);
+        const birthDate = typeof input.birthDate === "string" ? input.birthDate : "";
         if (!name) throw HttpErrorFactory.badRequest("请填写档案名称");
         if (!birthDate) throw HttpErrorFactory.badRequest("请填写出生日期");
+        try {
+            parseBirthDate(birthDate);
+        } catch {
+            throw HttpErrorFactory.badRequest("出生日期必须是有效的 YYYY-MM-DD");
+        }
 
         return {
             userId: input.userId,
@@ -600,17 +644,24 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
             birthDate,
             birthTime: this.toOptionalString(input.birthTime),
             birthPlace: this.toOptionalString(input.birthPlace),
-            zodiacSign: this.toOptionalString(input.zodiacSign) || this.getZodiacSign(birthDate),
+            zodiacSign: getSunSign(birthDate),
             moonSign: this.toOptionalString(input.moonSign),
             risingSign: this.toOptionalString(input.risingSign),
-            chineseZodiac: this.getChineseZodiac(birthDate),
+            chineseZodiac: getChineseZodiacForGregorianYear(birthDate),
             personalitySnapshot: {},
             metadata: {},
         };
     }
 
     private async resolveProfile(userId: string, dto: GenerateAstrologyReportDto) {
-        if (dto.profileId) return this.getProfileDetail(userId, dto.profileId);
+        if (dto.profileId) {
+            const profile = await this.getProfileDetail(userId, dto.profileId);
+            return {
+                ...profile,
+                zodiacSign: getSunSign(profile.birthDate),
+                chineseZodiac: getChineseZodiacForGregorianYear(profile.birthDate),
+            };
+        }
         if (!dto.profile) return null;
         if (!this.toOptionalString(dto.profile.birthDate)) throw HttpErrorFactory.badRequest("请提供出生日期或选择星盘档案");
         return this.createProfile(userId, dto.profile as CreateAstrologyProfileDto);
@@ -736,18 +787,28 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
         } catch (error) {
             const refundMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Astrology report ${reportId} refund failed: ${refundMessage}`);
-            const report = await this.reportRepo.findOne({ where: { id: reportId }, withDeleted: true });
-            if (!report) return;
-            await this.reportRepo.update(reportId, { providerMetadata: { ...(report.providerMetadata ?? {}), refundError: refundMessage } });
+            await this.reportRepo.manager.transaction(async (entityManager) => {
+                await entityManager.query(LOCK_TIMEOUT);
+                const report = await entityManager.findOne(AstrologyReport, { where: { id: reportId }, lock: { mode: "pessimistic_write" }, withDeleted: true });
+                if (!report || report.status !== AstrologyReportStatus.FAILED) return;
+                await entityManager.update(AstrologyReport, reportId, {
+                    providerMetadata: {
+                        ...(report.providerMetadata ?? {}),
+                        refundError: "退款记账失败",
+                        refundFailedAt: new Date().toISOString(),
+                    },
+                });
+            });
         }
     }
 
-    private async markReportFailedIfActive(reportId: string, message: string, metadata?: Record<string, unknown>) {
+    private async markReportFailedIfActive(reportId: string, message: string, metadata?: Record<string, unknown>, staleCutoff?: Date) {
         let failedReport: AstrologyReport | null = null;
         await this.reportRepo.manager.transaction(async (entityManager) => {
             await entityManager.query(LOCK_TIMEOUT);
             const report = await this.findActiveReportForWrite(reportId, entityManager, true);
-            if (!report || !isAstrologyReportBusyStatus(report.status)) return;
+            if (!report || !canTransitionAstrologyReportToFailed(report.status)) return;
+            if (staleCutoff && report.updatedAt > staleCutoff) return;
             const providerMetadata = { ...(report.providerMetadata ?? {}), error: message, ...(metadata ?? {}) };
             await entityManager.update(AstrologyReport, reportId, {
                 status: AstrologyReportStatus.FAILED,
@@ -761,32 +822,73 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
                 providerMetadata,
             };
         });
-        if (failedReport) {
-            await this.notifyReportFailed(failedReport, message);
-        }
+        return failedReport;
+    }
+
+    private async claimReportNotification(reportId: string, status: AstrologyReportStatus.SUCCESS | AstrologyReportStatus.FAILED) {
+        return this.reportRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
+            const report = await this.findActiveReportForWrite(reportId, entityManager, true);
+            const metadata = report?.providerMetadata ?? {};
+            if (!report || report.status !== status || !shouldNotifyAstrologyReport({ status, notificationSentAt: typeof metadata.notificationSentAt === "string" ? metadata.notificationSentAt : null })) return null;
+            const providerMetadata = {
+                ...metadata,
+                notificationSentAt: new Date().toISOString(),
+                notificationStatus: status,
+            };
+            await entityManager.update(AstrologyReport, report.id, { providerMetadata });
+            return { ...report, providerMetadata };
+        });
+    }
+
+    private async clearReportNotificationClaim(reportId: string) {
+        await this.reportRepo.manager.transaction(async (entityManager) => {
+            await entityManager.query(LOCK_TIMEOUT);
+            const report = await this.findActiveReportForWrite(reportId, entityManager, true);
+            if (!report) return;
+            const metadata = { ...(report.providerMetadata ?? {}) };
+            delete metadata.notificationSentAt;
+            delete metadata.notificationStatus;
+            await entityManager.query(
+                `UPDATE "echoflow_astrology_fortune"."astrology_reports" SET "provider_metadata" = $1::jsonb WHERE "id" = $2`,
+                [JSON.stringify(metadata), report.id],
+            );
+        });
     }
 
     private async notifyReportSucceeded(report: AstrologyReport | null) {
         if (!report) return;
+        const claimedReport = await this.claimReportNotification(report.id, AstrologyReportStatus.SUCCESS);
+        if (!claimedReport) return;
         try {
-            await this.notificationService.notifyUser(buildAstrologyReportSucceededNotification(report));
+            const result = await this.notificationService.notifyUser(buildAstrologyReportSucceededNotification(claimedReport));
+            if (result?.skipped) await this.clearReportNotificationClaim(claimedReport.id);
         } catch (error) {
             this.logger.warn(`Notify astrology report ${report.id} succeeded failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
-    private async notifyReportFailed(report: AstrologyReport, message: string) {
+    private async notifyReportFailed(report: AstrologyReport | null, message: string) {
+        if (!report) return;
+        const claimedReport = await this.claimReportNotification(report.id, AstrologyReportStatus.FAILED);
+        if (!claimedReport) return;
         try {
-            await this.notificationService.notifyUser(buildAstrologyReportFailedNotification(report, message));
+            const result = await this.notificationService.notifyUser(buildAstrologyReportFailedNotification(claimedReport, message));
+            if (result?.skipped) await this.clearReportNotificationClaim(claimedReport.id);
         } catch (error) {
             this.logger.warn(`Notify astrology report ${report.id} failed failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
     async markReportCrashed(reportId: string, error: unknown, metadata?: Record<string, unknown>) {
-        const message = error instanceof Error ? error.message : String(error);
+        const diagnosticReason = error instanceof Error ? error.message : String(error);
+        const failedReport = await this.markReportFailedIfActive(reportId, "星盘报告生成失败，本次生成已按账务事实处理，请稍后重试。", {
+            ...(metadata ?? {}),
+            failureReason: diagnosticReason.slice(0, 500),
+        });
+        if (!failedReport) return;
         await this.refundReportCreditsIfNeeded(reportId, "AI星盘运势任务异常自动退款");
-        await this.markReportFailedIfActive(reportId, message, metadata);
+        await this.notifyReportFailed(failedReport, "星盘报告生成失败，本次生成已按账务事实处理，请稍后重试。");
     }
 
     private assertReportNotBusy(report: AstrologyReport) {
@@ -818,7 +920,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
 
     private buildPrompt(dto: AstrologyReportPromptPayload, profile: AstrologyProfile | null) {
         const profileText = profile
-            ? `姓名:${profile.name}\n性别:${profile.gender || "未填写"}\n生日:${profile.birthDate}\n出生时间:${profile.birthTime || "未填写"}\n出生地:${profile.birthPlace || "未填写"}\n太阳星座:${profile.zodiacSign}\n月亮星座:${profile.moonSign || "未填写"}\n上升星座:${profile.risingSign || "未填写"}\n生肖:${profile.chineseZodiac}\n长期画像:${JSON.stringify(profile.personalitySnapshot || {})}`
+            ? `姓名:${profile.name}\n性别:${profile.gender || "未填写"}\n生日:${profile.birthDate}\n出生时间:${profile.birthTime || "未填写"}\n出生地:${profile.birthPlace || "未填写"}\n太阳星座（按严格公历日期计算）:${profile.zodiacSign}\n月亮星座（用户补充信息，非系统计算）:${profile.moonSign || "未填写"}\n上升星座（用户补充信息，非系统计算）:${profile.risingSign || "未填写"}\n公历年生肖（按公历年份，不按农历换年）:${profile.chineseZodiac}\n长期画像:${JSON.stringify(profile.personalitySnapshot || {})}`
             : "用户尚未创建长期档案。";
         const sourceReportText = dto.sourceReportContext
             ? `追问来源报告:\n${JSON.stringify(dto.sourceReportContext, null, 2)}`
@@ -827,7 +929,7 @@ export class AstrologyFortuneService extends BaseService<AstrologyReport> implem
             dto.questionQuality ?? buildAstrologyQuestionQualityContext(dto),
         );
 
-        return `你是 EchoFlowAI 的星盘与生活决策分析师。请结合星座、生肖、出生信息、长期画像、用户问题和现实生活建议生成个性化报告，让用户知道依据、机会、风险和下一步行动。
+        return `你是 EchoFlowAI 的出生档案与生活决策分析师。请结合按严格公历日期计算的太阳星座、按公历年份计算的生肖、用户补充信息、出生信息、长期画像、用户问题和现实生活建议生成个性化报告，让用户知道依据、机会、风险和下一步行动。太阳星座是本系统根据 YYYY-MM-DD 出生日期计算的基础事实；月亮星座和上升星座如果存在，只能作为用户填写的背景信息，不是本系统计算的星盘事实。不得把它们写成已计算的天体位置、宫位、相位或确定性结论。传统农历生肖和完整本命盘尚未提供，不得自行推断。
 请避免绝对化断言、医疗/法律/投资保证，不要声称确定预测未来。不得使用“必然、注定、保证、一定会、绝对会、必赚、稳赚”等确定性承诺；如果把建议写成确定结果，后端会拒绝本次报告。只输出一个 JSON 对象，不要输出 Markdown、代码块或额外解释。
 
 报告类型: ${dto.reportType}
@@ -897,8 +999,16 @@ ${questionQualityText}
         return typeof score === "number" && Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null;
     }
 
-    private normalizeTargetProfile(value: Record<string, unknown> | undefined) {
+    private normalizeTargetProfile(value: Record<string, unknown> | undefined): Record<string, string> | undefined {
         if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+        const birthDate = typeof value.birthDate === "string" ? value.birthDate : undefined;
+        if (birthDate) {
+            try {
+                value = { ...value, zodiacSign: getSunSign(birthDate) };
+            } catch {
+                throw HttpErrorFactory.badRequest("目标对象出生日期必须是有效的 YYYY-MM-DD");
+            }
+        }
         let remaining = MAX_TARGET_PROFILE_CHARS;
         const entries = Object.entries(value).slice(0, MAX_TARGET_PROFILE_KEYS);
         return entries.reduce<Record<string, string>>((accumulator, [key, rawValue]) => {
@@ -940,21 +1050,6 @@ ${questionQualityText}
         return Number.isFinite(count) ? count : 0;
     }
 
-    private getZodiacSign(date: string) {
-        const parsed = new Date(date);
-        if (isNaN(parsed.getTime())) return "未知";
-        const month = parsed.getMonth() + 1;
-        const day = parsed.getDate();
-        const signs = ["摩羯座", "水瓶座", "双鱼座", "白羊座", "金牛座", "双子座", "巨蟹座", "狮子座", "处女座", "天秤座", "天蝎座", "射手座", "摩羯座"];
-        const edgeDays = [20, 19, 21, 20, 21, 22, 23, 23, 23, 24, 23, 22];
-        return day < (edgeDays[month - 1] ?? 20) ? (signs[month - 1] ?? "摩羯座") : (signs[month] ?? "摩羯座");
-    }
-
-    private getChineseZodiac(date: string) {
-        const year = Number(date.slice(0, 4));
-        if (!Number.isFinite(year) || year < 1900) return "猴";
-        return CHINESE_ZODIACS[year % 12] ?? "猴";
-    }
 }
 
 function formatReportActionItem(item: NonNullable<AstrologyReportResult["actions"]>[number]) {

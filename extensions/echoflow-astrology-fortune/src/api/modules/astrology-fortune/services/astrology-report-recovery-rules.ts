@@ -68,5 +68,5 @@ export function canClaimAstrologyReportForProcessing<T extends ReportLike>(
 export function canRefundAstrologyReportCredits<T extends { status: string; costCredits?: number | string | null }>(
     report: T | null | undefined,
 ): report is T {
-    return Boolean(report && report.status !== ASTROLOGY_REPORT_SUCCESS_STATUS && Number(report.costCredits ?? 0) > 0);
+    return Boolean(report && report.status === ASTROLOGY_REPORT_FAILED_STATUS && Number(report.costCredits ?? 0) > 0);
 }

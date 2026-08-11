@@ -8,6 +8,7 @@ import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 
 import { CreateAstrologyProfileDto, GenerateAstrologyReportDto, QueryAstrologyProfileDto, QueryAstrologyReportDto, UpdateAstrologyProfileDto, UpdateFavoriteDto, UpdateReportFeedbackDto } from "../../dto";
 import { AstrologyFortuneService } from "../../services";
+import { toPublicAstrologyProfile, toPublicAstrologyReport } from "../../services/astrology-public-serializers";
 
 const ASTROLOGY_RATE_LIMIT_WINDOWS: ExtensionRateLimitWindow[] = [
     { suffix: "short", ttlSeconds: 10, limit: 5 },
@@ -29,23 +30,27 @@ export class AstrologyFortuneWebController extends BaseController {
     }
 
     @Post("profiles")
-    createProfile(@Playground() user: UserPlayground, @Body() dto: CreateAstrologyProfileDto) {
-        return this.astrologyFortuneService.createProfile(user.id, dto);
+    async createProfile(@Playground() user: UserPlayground, @Body() dto: CreateAstrologyProfileDto) {
+        return toPublicAstrologyProfile(await this.astrologyFortuneService.createProfile(user.id, dto));
     }
 
     @Get("profiles")
-    listProfiles(@Playground() user: UserPlayground, @Query() query: QueryAstrologyProfileDto) {
-        return this.astrologyFortuneService.listUserProfiles(user.id, query);
+    async listProfiles(@Playground() user: UserPlayground, @Query() query: QueryAstrologyProfileDto) {
+        const page = await this.astrologyFortuneService.listUserProfiles(user.id, query);
+        return {
+            ...page,
+            items: page.items.map(toPublicAstrologyProfile),
+        };
     }
 
     @Get("profiles/:id")
-    profileDetail(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
-        return this.astrologyFortuneService.getProfileDetail(user.id, id);
+    async profileDetail(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
+        return toPublicAstrologyProfile(await this.astrologyFortuneService.getProfileDetail(user.id, id));
     }
 
     @Patch("profiles/:id")
-    updateProfile(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: UpdateAstrologyProfileDto) {
-        return this.astrologyFortuneService.updateProfile(user.id, id, dto);
+    async updateProfile(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Body() dto: UpdateAstrologyProfileDto) {
+        return toPublicAstrologyProfile(await this.astrologyFortuneService.updateProfile(user.id, id, dto));
     }
 
     @Delete("profiles/:id")
@@ -99,24 +104,6 @@ export class AstrologyFortuneWebController extends BaseController {
     }
 
     private toPublicReport(report: Awaited<ReturnType<AstrologyFortuneService["generateReport"]>> | Awaited<ReturnType<AstrologyFortuneService["listUserReports"]>>["items"][number] | Awaited<ReturnType<AstrologyFortuneService["getReportDetail"]>> | Awaited<ReturnType<AstrologyFortuneService["updateFavorite"]>> | Awaited<ReturnType<AstrologyFortuneService["updateReportFeedback"]>>) {
-        const {
-            userId: _userId,
-            modelId: _modelId,
-            providerId: _providerId,
-            requestPayload: _requestPayload,
-            deletedAt: _deletedAt,
-            errorMessage,
-            providerMetadata,
-            ...publicReport
-        } = report;
-        return {
-            ...publicReport,
-            errorMessage: errorMessage ? "报告生成失败，请稍后重试" : undefined,
-            providerMetadata: {
-                feedback: providerMetadata?.feedback,
-                sourceReport: providerMetadata?.sourceReport,
-                generationContext: providerMetadata?.generationContext,
-            },
-        };
+        return toPublicAstrologyReport(report);
     }
 }

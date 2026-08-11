@@ -62,6 +62,8 @@ import {
     type ReportIntent,
 } from "../constants/report-types";
 import { formatCredits, formatDateTime } from "../utils/format";
+import { createAstrologyRequestKey } from "../utils/request-key";
+import { isGenerationUnavailable } from "../utils/generation-gate";
 import {
     useAstrologyGenerationStatusQuery,
     useAstrologyProfilesQuery,
@@ -252,6 +254,8 @@ export default function AstrologyFortuneHomePage() {
     const [activeReport, setActiveReport] = useState<AstrologyReport | null>(null);
     const [detailReport, setDetailReport] = useState<AstrologyReport | null>(null);
     const [pendingReportId, setPendingReportId] = useState<string | null>(null);
+    const [retryRequestKey, setRetryRequestKey] = useState<string | null>(null);
+    const [retryRequestSignature, setRetryRequestSignature] = useState<string | null>(null);
     const [followUpSourceReportId, setFollowUpSourceReportId] = useState<string | null>(null);
     const [historyType, setHistoryType] = useState<AstrologyReportType | "all" | "favorite">("all");
     const [historyPage, setHistoryPage] = useState(1);
@@ -302,7 +306,11 @@ export default function AstrologyFortuneHomePage() {
               ? dailyIntent
               : currentIntent;
     const dataUnavailable = profilesQuery.isError || reportsQuery.isError;
-    const generationDisabled = generationStatus.data?.canGenerate === false;
+    const generationDisabled = isGenerationUnavailable({
+        isPending: generationStatus.isPending,
+        isError: generationStatus.isError,
+        canGenerate: generationStatus.data?.canGenerate,
+    });
     const generationUnavailableReason =
         generationStatus.data?.unavailableReason || "当前生成服务暂不可用，请稍后再试。";
     const generationBlock = getGenerationBlock({
@@ -418,12 +426,26 @@ export default function AstrologyFortuneHomePage() {
             return;
         }
         const intent = override?.intent ?? currentIntent;
+        const signature = JSON.stringify({
+            view: activeView,
+            reportType: intent.value,
+            profileId: selectedProfile?.id ?? null,
+            focusArea: override?.focusArea ?? focusArea,
+            currentState: override?.currentState ?? currentState,
+            question: override?.question ?? question,
+            sourceReportId: override?.sourceReportId ?? followUpSourceReportId ?? null,
+            partner,
+        });
+        const requestKey = retryRequestSignature === signature && retryRequestKey ? retryRequestKey : createAstrologyRequestKey();
+        setRetryRequestKey(requestKey);
+        setRetryRequestSignature(signature);
         try {
             const profile =
                 selectedProfile ?? (await createProfileMutation.mutateAsync(profileForm));
             setSelectedProfileId(profile.id);
             const nextQuestion = override?.question ?? question;
             const params: GenerateAstrologyReportParams = {
+                requestKey,
                 reportType: intent.value,
                 profileId: profile.id,
                 focusArea: override?.focusArea ?? focusArea,
@@ -441,6 +463,8 @@ export default function AstrologyFortuneHomePage() {
             setActiveReport(report);
             setDetailReport(report);
             setPendingReportId(report.id);
+            setRetryRequestKey(null);
+            setRetryRequestSignature(null);
             setFollowUpSourceReportId(null);
             toast.success("报告任务已提交，生成完成后会自动刷新。");
         } catch (error) {
@@ -458,8 +482,12 @@ export default function AstrologyFortuneHomePage() {
             reportIntents.find((item) => item.value === report.reportType) ?? currentIntent;
         selectIntent(intent);
         setHistoryType("all");
+        const requestKey = createAstrologyRequestKey();
+        setRetryRequestKey(requestKey);
+        setRetryRequestSignature(JSON.stringify({ view: activeView, reportType: report.reportType, reportId: report.id }));
         try {
             const regenerated = await generateReportMutation.mutateAsync({
+                requestKey,
                 reportType: report.reportType,
                 profileId: report.profileId ?? selectedProfile?.id ?? undefined,
                 focusArea: report.tags?.[1],
@@ -469,8 +497,11 @@ export default function AstrologyFortuneHomePage() {
             setActiveReport(regenerated);
             setDetailReport(regenerated);
             setPendingReportId(regenerated.id);
+            setRetryRequestKey(null);
+            setRetryRequestSignature(null);
             toast.success("报告任务已提交，生成完成后会自动刷新。");
         } catch (error) {
+            setRetryRequestKey(createAstrologyRequestKey());
             toast.error(getErrorMessage(error, "重新生成失败"));
             reportsQuery.refetch();
         }
@@ -916,7 +947,7 @@ function TodayView({
                         <CalendarDays size={15} /> 今日建议
                     </div>
                     <h2 className="mt-2 text-2xl font-bold tracking-tight">{generationBlock?.title || "今天想关注什么？"}</h2>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{generationBlock?.text || "结合星盘档案、今日状态和关注点，生成一份能执行的今日建议。"}</p>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{generationBlock?.text || "结合出生档案、今日状态和关注点，生成一份能执行的今日建议。"}</p>
                     {generationBlock && generationBlock.tone !== "warning" && (
                         <Button className="mt-3 font-semibold" variant="outline" onClick={onOpenProfile} type="button">
                             <UserRound size={16} />
@@ -1260,7 +1291,7 @@ function PartnerFields({
                 value={partner.zodiacSign}
                 onChange={(value) => onChange({ ...partner, zodiacSign: value })}
                 disabled={disabled}
-                placeholder="留空自动推算"
+                placeholder="按出生日期自动计算"
             />
             <TextField
                 label="关系状态"
@@ -1290,7 +1321,7 @@ function ProfileManager(props: {
             <div className="rounded-md border bg-card p-4">
                 <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
-                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">星盘档案</div>
+                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">出生档案</div>
                         <h2>选择生成依据</h2>
                         <p>档案是报告的长期记忆，不需要每次重新填写。</p>
                     </div>
@@ -1317,7 +1348,7 @@ function ProfileManager(props: {
                                 <div>
                                     <strong>{profile.name}</strong>
                                     <span>
-                                        {profile.zodiacSign || "待推算"} · 生肖
+                                        {profile.zodiacSign || "待推算"} · 公历年生肖
                                         {profile.chineseZodiac || "待补充"}
                                     </span>
                                     <small>
@@ -1363,7 +1394,7 @@ function ProfileManager(props: {
                             {props.editingProfileId ? "编辑档案" : "新建档案"}
                         </div>
                         <h2>{props.editingProfileId ? "更新出生信息" : "创建生成基础"}</h2>
-                        <p>先填基础项即可开始生成，星座细节可以之后补。</p>
+                        <p>出生日期只接受 YYYY-MM-DD；太阳星座会按日期计算，月亮和上升星座仅作为用户补充信息。</p>
                     </div>
                 </div>
                 <div className="my-3 text-xs font-semibold text-muted-foreground">基础信息</div>
@@ -1413,23 +1444,23 @@ function ProfileManager(props: {
                         onChange={(value) =>
                             props.onChange({ ...props.profileForm, zodiacSign: value })
                         }
-                        placeholder="留空自动推算"
+                        placeholder="按出生日期自动计算"
                     />
                     <TextField
-                        label="月亮星座"
+                        label="月亮星座（用户补充信息）"
                         value={props.profileForm.moonSign || ""}
                         onChange={(value) =>
                             props.onChange({ ...props.profileForm, moonSign: value })
                         }
-                        placeholder="可选"
+                        placeholder="可选，仅记录你提供的信息"
                     />
                     <TextField
-                        label="上升星座"
+                        label="上升星座（用户补充信息）"
                         value={props.profileForm.risingSign || ""}
                         onChange={(value) =>
                             props.onChange({ ...props.profileForm, risingSign: value })
                         }
-                        placeholder="可选"
+                        placeholder="可选，仅记录你提供的信息"
                     />
                 </div>
                 <Button
@@ -2612,7 +2643,7 @@ function getGenerationBlock({
     if (requiredMissing.length) {
         return {
             title: profile ? `还差 ${requiredMissing.join("、")}` : "请先填写基础档案",
-            text: "姓名和出生日期即可生成；出生时间、地点和星座信息可提升精度。",
+            text: "姓名和 YYYY-MM-DD 出生日期即可生成；出生时间和地点可补充背景，月亮/上升星座仅接受用户提供的信息。",
             actionLabel: profile ? "去完善档案" : "去创建档案",
         };
     }

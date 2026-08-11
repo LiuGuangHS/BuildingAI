@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, ValidateNested } from "class-validator";
 
 import { AstrologyReportStatus, AstrologyReportType } from "../../../db/entities";
 
@@ -14,7 +14,8 @@ export class CreateAstrologyProfileDto {
     @MaxLength(20)
     gender?: string;
 
-    @IsDateString()
+    @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "出生日期必须是 YYYY-MM-DD" })
+    @IsNotEmpty({ message: "出生日期不能为空" })
     birthDate: string;
 
     @IsString()
@@ -43,6 +44,37 @@ export class CreateAstrologyProfileDto {
     risingSign?: string;
 }
 
+export class AstrologyTargetProfileDto {
+    @IsString()
+    @IsOptional()
+    @MaxLength(120)
+    name?: string;
+
+    @Matches(/^\d{4}-\d{2}-\d{2}$/)
+    @IsOptional()
+    birthDate?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(20)
+    birthTime?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(120)
+    birthPlace?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(20)
+    zodiacSign?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(30)
+    relationshipStatus?: string;
+}
+
 export class UpdateAstrologyProfileDto {
     @IsString()
     @IsOptional()
@@ -54,7 +86,7 @@ export class UpdateAstrologyProfileDto {
     @MaxLength(20)
     gender?: string;
 
-    @IsDateString()
+    @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "出生日期必须是 YYYY-MM-DD" })
     @IsOptional()
     birthDate?: string;
 
@@ -89,6 +121,12 @@ export class GenerateAstrologyReportDto {
     @IsIn(Object.values(AstrologyReportType))
     reportType: AstrologyReportType;
 
+    @IsString()
+    @IsNotEmpty({ message: "请求号不能为空" })
+    @Length(36, 36, { message: "请求号格式无效" })
+    @IsUUID("4", { message: "请求号必须是 UUID v4" })
+    requestKey: string;
+
     @IsOptional()
     @IsUUID("4")
     profileId?: string;
@@ -107,8 +145,8 @@ export class GenerateAstrologyReportDto {
     @IsObject()
     @IsOptional()
     @ValidateNested()
-    @Type(() => CreateAstrologyProfileDto)
-    targetProfile?: Record<string, unknown>;
+    @Type(() => AstrologyTargetProfileDto)
+    targetProfile?: AstrologyTargetProfileDto;
 
     @IsString()
     @IsOptional()

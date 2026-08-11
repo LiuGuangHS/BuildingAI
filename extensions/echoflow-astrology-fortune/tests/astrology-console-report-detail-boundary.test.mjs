@@ -19,7 +19,7 @@ describe("astrology console report detail diagnostics", () => {
         const body = componentBody("ReportDetailDialog");
 
         assert.match(body, /metadata\.failureType/);
-        assert.match(body, /metadata\.failureReason/);
+        assert.doesNotMatch(body, /metadata\.failureReason/);
         assert.match(body, /label="失败类型"/);
         assert.match(body, /label="失败原因"/);
     });
@@ -29,7 +29,7 @@ describe("astrology console report detail diagnostics", () => {
 
         assert.match(body, /metadata\.aiRepairAttempted/);
         assert.match(body, /metadata\.aiRepairSucceeded/);
-        assert.match(body, /metadata\.aiRepairReason/);
+        assert.doesNotMatch(body, /metadata\.aiRepairReason/);
         assert.match(body, /label="AI 修复重试"/);
         assert.match(body, /label="修复结果"/);
         assert.match(body, /label="修复原因"/);
