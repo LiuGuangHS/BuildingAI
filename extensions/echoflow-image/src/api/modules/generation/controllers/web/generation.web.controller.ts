@@ -4,7 +4,8 @@ import { type UserPlayground } from "@buildingai/db";
 import { Playground } from "@buildingai/decorators/playground.decorator";
 import { ExtensionRateLimitService, type ExtensionRateLimitWindow } from "@buildingai/extension-sdk";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
-import { Body, Delete, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Delete, Get, Param, Post, Query, Res } from "@nestjs/common";
+import type { Response } from "express";
 
 import { CreateGenerationDto, PromptEnhanceDto, QueryGenerationDto } from "../../dto";
 import { GenerationService } from "../../services/generation.service";
@@ -43,6 +44,16 @@ export class GenerationWebController extends BaseController {
     @Get(":id")
     async findOne(@Param("id", UUIDValidationPipe) id: string, @Playground() user: UserPlayground) {
         return this.generationService.findOwnedPublicById(id, user.id);
+    }
+
+    @Get("results/:generationId/:fileId")
+    async downloadResult(
+        @Param("generationId", UUIDValidationPipe) generationId: string,
+        @Param("fileId", UUIDValidationPipe) fileId: string,
+        @Playground() user: UserPlayground,
+        @Res() response: Response,
+    ) {
+        await this.generationService.getGenerationResultStream(generationId, fileId, user.id, response);
     }
 
     @Delete(":id")

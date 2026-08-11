@@ -33,9 +33,9 @@ export const ImageResponseFormat = {
 export type ImageResponseFormat = (typeof ImageResponseFormat)[keyof typeof ImageResponseFormat];
 
 export interface GeneratedImageRecord {
-    url?: string;
-    b64Json?: string;
-    mimeType?: string;
+    fileId: string;
+    mimeType: string;
+    size: number;
     revisedPrompt?: string;
 }
 
@@ -76,7 +76,6 @@ export interface ImageGeneration {
 export interface ConsoleImageGeneration extends ImageGeneration {
     userId: string;
     provider?: string;
-    baseURL?: string;
 }
 
 export interface ImageModelOption {

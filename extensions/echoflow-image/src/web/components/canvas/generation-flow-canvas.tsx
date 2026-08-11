@@ -7,9 +7,10 @@ import { Copy, Download, ExternalLink, GitBranch, ImageIcon, RefreshCcw, Trash2 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import type { CreateGenerationParams, ImageGeneration } from "../../services/types/generation";
+import type { CreateGenerationParams, GeneratedImageRecord, ImageGeneration } from "../../services/types/generation";
 import { ImageGenerationStatus } from "../../services/types/generation";
-import { downloadImage, resolveImageSrc } from "../image-utils";
+import { ControlledImage } from "../controlled-image";
+import { downloadImage, openImage } from "../image-utils";
 
 const FLOW_STORAGE_KEY = "echoflow-image:generation-flow:v1";
 const MAX_FLOW_GROUPS = 20;
@@ -43,9 +44,7 @@ interface FlowImageNode {
     id: string;
     generationId: string;
     index: number;
-    src?: string;
-    revisedPrompt?: string;
-    mimeType?: string;
+    image: GeneratedImageRecord;
 }
 
 interface GenerationFlowCanvasProps {
@@ -110,9 +109,7 @@ function generationToGroup(generation: ImageGeneration, parentImageId?: string):
             id: `${generation.id}:${index}`,
             generationId: generation.id,
             index,
-            src: resolveImageSrc(image),
-            revisedPrompt: image.revisedPrompt,
-            mimeType: image.mimeType,
+            image,
         })),
     };
 }
@@ -174,16 +171,12 @@ export function GenerationFlowCanvas({ generation, onContinueFromImage }: Genera
             toast.info("参考图生成能力将在后续版本开放");
             return;
         }
-        if (!image.src) {
-            toast.info("这张图片暂时不能作为参考图");
-            return;
-        }
         setState((prev) => ({ ...prev, pendingParentImageId: image.id }));
         onContinueFromImage?.({
-            prompt: image.revisedPrompt || group.prompt,
+            prompt: image.image.revisedPrompt || group.prompt,
             negativePrompt: group.negativePrompt,
-            referenceImageUrl: image.src,
-            sourceImages: [{ url: image.src, mimeType: image.mimeType }],
+            referenceImageFileId: image.image.fileId,
+            sourceImages: [{ fileId: image.image.fileId, mimeType: image.image.mimeType }],
             modelId: group.modelId,
             size: group.size,
             n: group.n,
@@ -226,8 +219,8 @@ export function GenerationFlowCanvas({ generation, onContinueFromImage }: Genera
                                     <div key={image.id} className="space-y-3">
                                         <div className="overflow-hidden rounded-lg border bg-background shadow-sm">
                                             <div className="aspect-square bg-muted">
-                                                {image.src ? (
-                                                    <img src={image.src} alt={`生成图 ${image.index + 1}`} className="size-full object-cover" loading="lazy" />
+                                                {image.image.fileId ? (
+                                                    <ControlledImage image={image.image} generationId={group.generationId} alt={`生成图 ${image.index + 1}`} className="size-full object-cover" />
                                                 ) : (
                                                     <div className="flex size-full items-center justify-center">
                                                         <ImageIcon className="size-8 text-muted-foreground" />
@@ -240,19 +233,19 @@ export function GenerationFlowCanvas({ generation, onContinueFromImage }: Genera
                                                     {childGroups.length > 0 && <Badge variant="outline">{childGroups.length} 分支</Badge>}
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-1.5">
-                                                    <Button size="sm" className="gap-1.5" disabled={!image.src || !canContinueFromImage} onClick={() => continueFromImage(group, image)}>
+                                                    <Button size="sm" className="gap-1.5" disabled={!image.image.fileId || !canContinueFromImage} onClick={() => continueFromImage(group, image)}>
                                                         <GitBranch className="size-3.5" />
                                                         {canContinueFromImage ? "继续生成" : "待模型支持"}
                                                     </Button>
-                                                    <Button size="sm" variant="outline" disabled={!image.src} aria-label="打开图片" onClick={() => image.src && window.open(image.src, "_blank", "noopener,noreferrer")}>
+                                                    <Button size="sm" variant="outline" disabled={!image.image.fileId} aria-label="打开图片" onClick={() => void openImage(image.image, group.generationId)}>
                                                         <ExternalLink className="size-3.5" />
                                                         打开
                                                     </Button>
-                                                    <Button size="sm" variant="outline" disabled={!image.src} aria-label="下载图片" onClick={() => image.src && downloadImage(image.src, `echoflow-flow-${group.generationId}-${image.index + 1}.png`)}>
+                                                    <Button size="sm" variant="outline" disabled={!image.image.fileId} aria-label="下载图片" onClick={() => void downloadImage(image.image, group.generationId, `echoflow-flow-${group.generationId}-${image.index + 1}.png`)}>
                                                         <Download className="size-3.5" />
                                                         下载
                                                     </Button>
-                                                    <Button size="sm" variant="outline" disabled={!image.revisedPrompt} aria-label="复制优化提示词" onClick={() => copyText(image.revisedPrompt)}>
+                                                    <Button size="sm" variant="outline" disabled={!image.image.revisedPrompt} aria-label="复制优化提示词" onClick={() => copyText(image.image.revisedPrompt)}>
                                                         <Copy className="size-3.5" />
                                                         提示词
                                                     </Button>

@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 
 import type { ImageGeneration } from "../services/types/generation";
 import { ImageGenerationBillingStatus, ImageGenerationStatus } from "../services/types/generation";
-import { resolveImageSrc } from "./image-utils";
+import { ControlledImage } from "./controlled-image";
 import { HistorySkeleton } from "./skeleton-card";
 
 type HistoryListItem = ImageGeneration & { userId?: string };
@@ -24,6 +24,7 @@ type HistoryListProps = {
     showUserId?: boolean;
     compact?: boolean;
     variant?: "default" | "filmstrip";
+    scope?: "web" | "console";
     onDelete?: (id: string) => Promise<void> | void;
     onRetry?: (id: string) => Promise<void> | void;
     onReuse?: (generation: HistoryListItem) => void;
@@ -52,6 +53,7 @@ export function HistoryList({
     showUserId = false,
     compact = false,
     variant = "default",
+    scope = "web",
     onDelete,
     onRetry,
     onReuse,
@@ -118,7 +120,7 @@ export function HistoryList({
                     ) : (
                         <div className="grid gap-2 xl:grid-flow-col xl:auto-cols-[minmax(11rem,12.5rem)] xl:grid-cols-none xl:overflow-x-auto xl:pb-0.5">
                             {items.map((item) => {
-                                const src = resolveImageSrc(item.resultImages?.[0]);
+                                const image = item.resultImages?.[0];
                                 const isRetrying = retryingId === item.id;
                                 const openDetail = () => navigate(`${detailBasePath}/${item.id}`);
                                 return (
@@ -136,8 +138,8 @@ export function HistoryList({
                                         }}
                                     >
                                         <span className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
-                                            {src ? (
-                                                <img src={src} alt={item.prompt} className="size-full object-cover" />
+                                            {image ? (
+                                                <ControlledImage image={image} generationId={item.id} scope={scope} alt={item.prompt} className="size-full object-cover" />
                                             ) : (
                                                 <ImageIcon className="size-5 text-muted-foreground" />
                                             )}
@@ -219,7 +221,7 @@ export function HistoryList({
                     ) : (
                         <div className={compact ? "grid grid-cols-2 gap-2 sm:grid-cols-3" : "space-y-2.5"}>
                             {items.map((item) => {
-                                const src = resolveImageSrc(item.resultImages?.[0]);
+                                const image = item.resultImages?.[0];
                                 const isRetrying = retryingId === item.id;
                                 const openDetail = () => navigate(`${detailBasePath}/${item.id}`);
                                 const openDetailWithKeyboard = (event: KeyboardEvent) => {
@@ -239,8 +241,8 @@ export function HistoryList({
                                             onKeyDown={openDetailWithKeyboard}
                                         >
                                             <div className="relative aspect-square bg-muted">
-                                                {src ? (
-                                                    <img src={src} alt={item.prompt} className="size-full object-cover transition duration-500 group-hover:scale-105" />
+                                                {image ? (
+                                                    <ControlledImage image={image} generationId={item.id} scope={scope} alt={item.prompt} className="size-full object-cover transition duration-500 group-hover:scale-105" />
                                                 ) : (
                                                     <div className="flex size-full items-center justify-center">
                                                         <ImageIcon className="size-6 text-muted-foreground" />
@@ -286,8 +288,8 @@ export function HistoryList({
                                         onKeyDown={openDetailWithKeyboard}
                                     >
                                         <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
-                                            {src ? (
-                                                <img src={src} alt={item.prompt} className="size-full object-cover transition duration-500 group-hover:scale-110" />
+                                            {image ? (
+                                                <ControlledImage image={image} generationId={item.id} scope={scope} alt={item.prompt} className="size-full object-cover transition duration-500 group-hover:scale-110" />
                                             ) : (
                                                 <ImageIcon className="size-6 text-muted-foreground" />
                                             )}

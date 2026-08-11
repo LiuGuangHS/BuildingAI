@@ -1,6 +1,7 @@
 import { RedisModule, RedisService } from "@buildingai/cache";
 import { QueueModule, UploadModule } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
+import { StorageConfig } from "@buildingai/db/entities";
 import {
     AiPublicModule,
     ExtensionBillingModule,
@@ -25,7 +26,7 @@ import {
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature(generationModuleEntities),
+        TypeOrmModule.forFeature([...generationModuleEntities, StorageConfig]),
         ConfigModule,
         BillingModule,
         PolicyModule,

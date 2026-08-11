@@ -9,11 +9,12 @@ import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
 import { useMemo, useState } from "react";
 
-import type { GeneratedImageRecord, ImageGeneration } from "../../services/types/generation";
-import { ImageGenerationBillingStatus, ImageGenerationStatus } from "../../services/types/generation";
+import { ImageGenerationBillingStatus, ImageGenerationStatus, type ImageGeneration } from "../../services/types/generation";
 import {
     designArtwork,
     designCapabilityRows,
+    type DesignGeneratedImage,
+    type DesignGeneration,
     designGenerations,
     designModels,
     designScenarioOptions,
@@ -241,7 +242,7 @@ export default function DesignSandboxPage() {
 
 interface PrototypeProps {
     scenario: DesignScenario;
-    generation?: ImageGeneration;
+    generation?: DesignGeneration;
     prompt: string;
     onPromptChange: (value: string) => void;
     modelId: string;
@@ -569,7 +570,7 @@ function ArtworkStage(props: PrototypeProps & { mode: "balanced" | "light-table"
     const { scenario, generation, selectedImage, onSelectedImageChange, onAction, mode } = props;
     const images = generation?.resultImages ?? [];
     const selected = images[Math.min(selectedImage, Math.max(images.length - 1, 0))];
-    const selectedSrc = selected?.url;
+    const selectedSrc = selected?.mockUrl;
     const isRunning = scenario === "pending" || scenario === "processing";
     const isFailed = scenario === "failed";
     const isEmpty = !generation && !isRunning && !isFailed;
@@ -612,10 +613,10 @@ function ArtworkStage(props: PrototypeProps & { mode: "balanced" | "light-table"
     );
 }
 
-function ArtworkThumb({ image, index, selected, onClick }: { image: GeneratedImageRecord; index: number; selected: boolean; onClick: () => void }) {
+function ArtworkThumb({ image, index, selected, onClick }: { image: DesignGeneratedImage; index: number; selected: boolean; onClick: () => void }) {
     return (
         <button type="button" aria-label={`选择作品 ${index + 1}`} aria-pressed={selected} className={cn("ef-image-artwork-thumb relative overflow-hidden rounded-md border bg-muted/20 p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", selected && "border-primary ring-1 ring-primary/30")} onClick={onClick}>
-            <img src={image.url} alt="" className="aspect-square size-full rounded-sm object-contain" />
+            <img src={image.mockUrl} alt="" className="aspect-square size-full rounded-sm object-contain" />
             <span className="absolute bottom-1 left-1 rounded bg-background/85 px-1.5 py-0.5 font-mono text-[10px]">{String(index + 1).padStart(2, "0")}</span>
         </button>
     );
@@ -700,7 +701,7 @@ function HistoryStrip(props: PrototypeProps) {
                 {items.map((item, index) => (
                     <div key={item.id} className="min-w-0 rounded-lg border bg-background p-2">
                         <div className="flex gap-2">
-                            <img src={item.resultImages[0]?.url || designArtwork.square} alt="" className="size-16 shrink-0 rounded-md border object-contain" />
+                            <img src={item.resultImages[0]?.mockUrl || designArtwork.square} alt="" className="size-16 shrink-0 rounded-md border object-contain" />
                             <div className="min-w-0"><p className="line-clamp-2 text-xs font-medium">{item.prompt}</p><p className="mt-1 text-[11px] text-muted-foreground">{item.size} · {item.modelName}</p></div>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-1.5">
@@ -718,7 +719,7 @@ function StoryboardRail(props: PrototypeProps & { mobile?: boolean }) {
     const frames = [
         { time: "00:01", label: "原始提示", image: designArtwork.square, active: false },
         { time: "00:18", label: "宽幅探索", image: designArtwork.landscape, active: props.scenario.includes("landscape") },
-        { time: "00:42", label: "当前镜头", image: props.generation?.resultImages[props.selectedImage]?.url || designArtwork.portrait, active: true },
+        { time: "00:42", label: "当前镜头", image: props.generation?.resultImages[props.selectedImage]?.mockUrl || designArtwork.portrait, active: true },
         { time: "NEXT", label: "下一分支", image: undefined, active: false },
     ];
 

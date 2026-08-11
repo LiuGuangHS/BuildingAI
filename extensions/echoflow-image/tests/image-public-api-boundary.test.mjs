@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const SERVICE_FILE = new URL("../src/api/modules/generation/services/generation.service.ts", import.meta.url);
+const PROCESSOR_FILE = new URL("../src/api/modules/generation/processors/image-generation.processor.ts", import.meta.url);
 const MODEL_CONFIG_SERVICE_FILE = new URL("../src/api/modules/config/services/model-config.service.ts", import.meta.url);
 const WEB_SERVICE_FILE = new URL("../src/web/services/web/generation.ts", import.meta.url);
 const CONSOLE_SERVICE_FILE = new URL("../src/web/services/console/generation.ts", import.meta.url);
@@ -56,9 +57,10 @@ test("image web serializer uses an explicit public whitelist", async () => {
     const source = await readFile(SERVICE_FILE, "utf8");
     const method = extractMethod(source, "toPublicGeneration");
 
-    for (const field of ["id", "status", "prompt", "modelId", "resultImages", "billingAmount"]) {
+    for (const field of ["id", "status", "prompt", "modelId", "billingAmount"]) {
         assert.match(method, new RegExp(`${field}: record\\.${field}`));
     }
+    assert.match(method, /resultImages: \(record\.resultImages \?\? \[\]\)\.flatMap/);
     for (const field of ["rawRequest", "rawResponse", "rawEvents", "baseURL", "provider", "apiMode", "requestPolicy", "failureCode", "failureCategory", "storageFiles", "deletedAt"]) {
         assert.doesNotMatch(method, new RegExp(`record\\.${field}\\b`));
     }
@@ -98,10 +100,24 @@ test("image service barrel exports console services used by console pages", asyn
 
 test("image generation stores compact raw provider payloads", async () => {
     const source = await readFile(SERVICE_FILE, "utf8");
-    assert.match(source, /saved\.rawRequest = this\.compactRawPayload\(result\.rawRequest\)/);
-    assert.match(source, /saved\.rawResponse = this\.compactRawPayload\(result\.rawResponse\)/);
+
+    assert.match(source, /private async completeGeneration/);
+    assert.match(source, /current\.rawRequest = this\.compactRawPayload\(rawRequest\)/);
+    assert.match(source, /current\.rawResponse = this\.compactRawPayload\(rawResponse\)/);
     assert.match(source, /value\.replace\(\/;base64,\.\+\$\/i, ";base64,\[omitted\]"\)/);
     assert.match(source, /lowerKey\.includes\("b64_json"\) \|\| lowerKey\.includes\("base64"\)/);
+});
+
+test("image generation fails closed when active storage cannot serve private result media", async () => {
+    const [serviceSource, moduleSource] = await Promise.all([
+        readFile(SERVICE_FILE, "utf8"),
+        readFile(GENERATION_MODULE_FILE, "utf8"),
+    ]);
+
+    assert.match(serviceSource, /assertPrivateResultStorageSupported/);
+    assert.match(serviceSource, /!storageConfig \|\| storageConfig\.storageType !== StorageType\.LOCAL/);
+    assert.match(serviceSource, /await this\.assertPrivateResultStorageSupported\(\)/);
+    assert.match(moduleSource, /StorageConfig/);
 });
 
 test("image generated result files use the core file storage service", async () => {
@@ -113,11 +129,58 @@ test("image generated result files use the core file storage service", async () 
 
     assert.match(source, /FileStorageService/);
     assert.match(method, /this\.fileStorageService\.saveBuffer/);
-    assert.match(method, /extensionId:\s*"echoflow-image"/);
-    assert.match(method, /\/echoflow-image\/uploads\/\$\{relativePath\}/);
+    assert.match(source, /const EXTENSION_ID = "echoflow-image"/);
+    assert.match(method, /storageRoot:\s*PRIVATE_STORAGE_ROOT/);
+    assert.match(method, /storageRoot: PRIVATE_STORAGE_ROOT/);
+    assert.doesNotMatch(method, /\/echoflow-image\/uploads\/\$\{relativePath\}/);
     assert.doesNotMatch(source, /from "node:fs\/promises"/);
     assert.doesNotMatch(method, /\bmkdir\(/);
     assert.doesNotMatch(method, /\bwriteFile\(/);
+});
+
+test("image execution reclaims uncommitted generated files", async () => {
+    const source = await readFile(SERVICE_FILE, "utf8");
+    const start = source.indexOf("private async storeResultImages");
+    const next = source.indexOf("\n    private ", start + 1);
+    const storeResultImages = source.slice(start, next === -1 ? undefined : next);
+
+    assert.match(source, /private async cleanupStoredResultFiles/);
+    assert.match(source, /const EXTENSION_ID = "echoflow-image"/);
+    assert.match(source, /this\.fileStorageService\.deleteFile\(\s*storageFile\.path,\s*\{\s*storageRoot: PRIVATE_STORAGE_ROOT,?\s*\}\s*\)/);
+    assert.match(storeResultImages, /catch \(error\) \{\s*await this\.cleanupStoredResultFiles\(storageFiles\);\s*throw error;/);
+    assert.match(source, /if \(!completion\.transitioned\) \{\s*await this\.reclaimUncommittedResultFiles\(id, storedResult\.storageFiles\);/);
+    assert.match(source, /this\.getImageBillingMetadata\(completion\.record\)\.refundRequired === true/);
+    assert.match(source, /return this\.findById\(id\);/);
+});
+
+test("image generation journals staged output paths before writing and reclaims failed journals", async () => {
+    const source = await readFile(SERVICE_FILE, "utf8");
+
+    assert.match(source, /private async stageResultStorageFile/);
+    assert.match(source, /private async reclaimStagedResultFiles/);
+    assert.match(source, /await this\.stageResultStorageFile\(generation\.id, storageFile\)/);
+    assert.match(source, /await this\.reclaimStagedResultFiles\(failed\.id\)/);
+    assert.match(source, /stagedStorageFiles/);
+    assert.match(source, /current\.rawResponse = this\.compactRawPayload\(rawResponse\)/);
+});
+
+test("image generation validates generated binary size and signature before storage", async () => {
+    const source = await readFile(SERVICE_FILE, "utf8");
+
+    assert.match(source, /MAX_GENERATED_IMAGE_BYTES/);
+    assert.match(source, /MAX_GENERATED_BATCH_BYTES/);
+    assert.match(source, /private decodeGeneratedImage/);
+    assert.match(source, /this\.assertGeneratedImageSignature\(buffer, mimeType\)/);
+    assert.match(source, /生成图片结果超过大小限制/);
+    assert.match(source, /生成图片结果格式无效/);
+});
+
+test("image task deletion reclaims its stored result files", async () => {
+    const source = await readFile(SERVICE_FILE, "utf8");
+
+    assert.match(source, /\.\.\.\(generation\.storageFiles \?\? \[\]\)/);
+    assert.match(source, /\.\.\.\(generation\.stagedStorageFiles \?\? \[\]\)/);
+    assert.match(source, /await this\.cleanupStoredResultFiles\(storageFiles\)/);
 });
 
 test("image web services use public client and public generation type", async () => {
@@ -183,7 +246,7 @@ test("image result stage exposes prompt starters and image continuation without 
     assert.match(source, /onContinueFromImage\?: \(values: Partial<CreateGenerationParams>\) => void/);
     assert.match(source, /function getRunningStage/);
     assert.match(source, /const continueFromImage = \(image: GeneratedImageRecord\)/);
-    assert.match(source, /sourceImages: \[\{ url: src, mimeType: image\.mimeType \}\]/);
+    assert.match(source, /sourceImages: \[\{ fileId: image\.fileId, mimeType: image\.mimeType \}\]/);
     assert.match(source, /作为参考图继续生成/);
     assert.doesNotMatch(source, /\b45%|\b50%|\b75%/);
     assert.doesNotMatch(source, /setTimeout\(/);
@@ -310,28 +373,54 @@ test("image web rate limits use the extension SDK limiter instead of only busine
     assert.doesNotMatch(controllerSource + moduleSource, /ImageRequestLimiterService/);
 });
 
+test("image console generation endpoints require explicit operational access", async () => {
+    const source = await readFile(SERVICE_FILE, "utf8");
+    const controller = await readFile(new URL("../src/api/modules/generation/controllers/console/generation.controller.ts", import.meta.url), "utf8");
+
+    assert.match(source, /toConsoleGeneration/);
+    assert.match(controller, /createAndGenerateForConsole/);
+    assert.match(controller, /findConsoleById/);
+    assert.match(controller, /retryForConsole/);
+    assert.match(controller, /assertConsoleManageAccess\(user\)/);
+    assert.match(controller, /user\.isRoot === 1/);
+    assert.match(controller, /echoflow-image@generation:manage/);
+    assert.doesNotMatch(controller, /return this\.generationService\.findById\(id\)/);
+});
+
 test("image generation failures keep provider details out of public copy", async () => {
     const source = await readFile(SERVICE_FILE, "utf8");
 
     assert.match(source, /private publicFailureMessage/);
-    assert.match(source, /saved\.errorMessage = this\.publicFailureMessage\(saved\.failureCategory\)/);
+    assert.match(source, /errorMessage: options\.errorMessage \?\? this\.publicFailureMessage\(failureCategory\)/);
     assert.match(source, /reason: record\.status === ImageGenerationStatus\.FAILED/);
     assert.match(source, /this\.publicFailureMessage\(record\.failureCategory\)/);
     assert.doesNotMatch(source, /reason: record\.errorMessage/);
     assert.doesNotMatch(source, /saved\.errorMessage = this\.truncateText\(rawMessage/);
 });
 
+test("image failure diagnostics and worker logs omit upstream error bodies", async () => {
+    const [serviceSource, processorSource] = await Promise.all([
+        readFile(SERVICE_FILE, "utf8"),
+        readFile(PROCESSOR_FILE, "utf8"),
+    ]);
+
+    assert.match(serviceSource, /failure:\s*\{\s*category: failureCategory\s*\}/);
+    assert.doesNotMatch(serviceSource, /failure:\s*this\.compactRawPayload\(\{ message:/);
+    assert.doesNotMatch(serviceSource, /Deduction failed for generation \$\{id\}`, deductError/);
+    assert.doesNotMatch(serviceSource, /Queue image generation \$\{id\} failed: \$\{message\}/);
+    assert.doesNotMatch(processorSource, /\$\{error\.message\}/);
+});
+
 
 test("image refund failures are persisted as business metadata instead of only user copy", async () => {
     const source = await readFile(SERVICE_FILE, "utf8");
 
-    assert.match(source, /recordRefundFailureMetadata/);
     assert.match(source, /refundError/);
-    assert.match(source, /refundFailedAt/);
-    assert.match(source, /record\.rawResponse\s*=/);
-    assert.match(source, /\.\.\.\(record\.rawResponse \?\? \{\}\)/);
-    assert.match(source, /this\.generationRepository\.update\(record\.id,/);
-    assert.match(source, /this\.recordRefundFailureMetadata\(saved, refundError\)/);
+    assert.match(source, /rawResponse:/);
+    assert.match(source, /lock: \{ mode: "pessimistic_write" \}/);
+    assert.match(source, /await manager\.update\(ImageGeneration, current\.id/);
+    assert.match(source, /refundFailedAt: new Date\(\)\.toISOString\(\)/);
+    assert.match(source, /this\.refundGenerationBilling\(failed, `Refund for crashed generation/);
 });
 
 test("image provider result URLs are DNS-checked before being saved", async () => {
@@ -339,9 +428,93 @@ test("image provider result URLs are DNS-checked before being saved", async () =
 
     assert.match(source, /assertPublicHttpUrl/);
     assert.match(source, /private async normalizeResultImageUrl/);
-    assert.match(source, /await this\.normalizeResultImageUrl\(img\.url\)/);
+    assert.match(source, /await this\.downloadAndValidateResultImage\(img\.url, mimeType\)/);
     assert.match(source, /await assertPublicHttpUrl\(raw, \{ label: "图片结果 URL" \}\)/);
     assert.doesNotMatch(source, /new URL\(normalizePublicHttpUrl\(raw, \{ label: "图片结果 URL" \}\)\)/);
+});
+
+test("image generated results are platform files with generation ownership and no public static URL", async () => {
+    const [serviceSource, entitySource, typeSource] = await Promise.all([
+        readFile(SERVICE_FILE, "utf8"),
+        readFile(new URL("../src/api/db/entities/image-generation.entity.ts", import.meta.url), "utf8"),
+        readFile(TYPES_FILE, "utf8"),
+    ]);
+
+    assert.match(serviceSource, /registerGeneratedFile/);
+    assert.match(serviceSource, /fileId/);
+    assert.match(serviceSource, /generationId/);
+    assert.match(serviceSource, /PRIVATE_STORAGE_ROOT/);
+    assert.doesNotMatch(serviceSource, /\/echoflow-image\/uploads\/\$\{relativePath\}/);
+    assert.match(entitySource, /fileId\??: string/);
+    assert.match(entitySource, /generationId: string/);
+    assert.match(typeSource, /fileId\??: string/);
+    assert.doesNotMatch(typeSource, /b64Json\??: string/);
+});
+
+test("image result reads require authenticated ownership and controlled response headers", async () => {
+    const [serviceSource, webController, consoleController] = await Promise.all([
+        readFile(SERVICE_FILE, "utf8"),
+        readFile(WEB_CONTROLLER_FILE, "utf8"),
+        readFile(new URL("../src/api/modules/generation/controllers/console/generation.controller.ts", import.meta.url), "utf8"),
+    ]);
+
+    assert.match(serviceSource, /getGenerationResultStream/);
+    assert.match(serviceSource, /findOwnedById\(generationId, userId\)/);
+    assert.match(serviceSource, /file\.uploaderId !== generation\.userId/);
+    assert.match(webController, /@Get\("results\/:generationId\/:fileId"\)/);
+    assert.match(webController, /@Playground\(\) user/);
+    assert.match(consoleController, /getGenerationResultStream/);
+    assert.match(consoleController, /@Playground\(\) user/);
+    assert.match(await readFile(new URL("../src/web/pages/console/detail.tsx", import.meta.url), "utf8"), /scope="console"/);
+    assert.match(await readFile(new URL("../src/web/pages/console/history.tsx", import.meta.url), "utf8"), /scope="console"/);
+    assert.match(serviceSource, /user\?\.isRoot === 1/);
+    assert.match(serviceSource, /permissions\?\.includes\(`\$\{EXTENSION_ID\}@generation:media-read`\)/);
+    assert.match(serviceSource, /Content-Disposition/);
+    assert.match(serviceSource, /X-Content-Type-Options/);
+    assert.match(serviceSource, /Cache-Control/);
+});
+
+test("image provider result downloads revalidate redirects and verify headers, bytes, MIME, and signatures", async () => {
+    const source = await readFile(SERVICE_FILE, "utf8");
+
+    assert.match(source, /downloadPublicHttpUrl/);
+    assert.match(source, /content-length/);
+    assert.match(source, /response\.ok/);
+    assert.match(source, /assertGeneratedImageSignature/);
+    assert.match(source, /MAX_GENERATED_IMAGE_BYTES/);
+    assert.match(source, /timeoutMs/);
+    assert.match(source, /maxRedirects/);
+});
+
+test("image web fetches protected result media through the authenticated plugin client", async () => {
+    const [source, httpClientSource] = await Promise.all([
+        readFile(new URL("../src/web/components/image-utils.ts", import.meta.url), "utf8"),
+        readFile(new URL("../../../packages/@buildingai/web/http/src/core/http-client.ts", import.meta.url), "utf8"),
+    ]);
+
+    assert.match(source, /await client\.download\(path\)/);
+    const [flowSource, boardSource] = await Promise.all([
+        readFile(FLOW_CANVAS_FILE, "utf8"),
+        readFile(new URL("../src/web/components/canvas/inspiration-board.tsx", import.meta.url), "utf8"),
+    ]);
+    assert.match(flowSource, /resolveImageSrc\(image, generation\.id\)/);
+    assert.match(boardSource, /resolveImageSrc\(image, generation\?\.id\)/);
+    assert.match(httpClientSource, /responseType: "blob"/);
+    assert.match(source, /URL\.createObjectURL/);
+    assert.match(source, /URL\.revokeObjectURL/);
+    assert.doesNotMatch(source, /window\.fetch\(/);
+});
+
+test("image result cleanup deletes platform file records only for the derived generation path", async () => {
+    const source = await readFile(SERVICE_FILE, "utf8");
+
+    assert.match(source, /deleteGeneratedFileRecord/);
+    assert.match(source, /isGeneratedResultStoragePath\(storageFile\.generationId/);
+    assert.match(source, /typeof storageFile\.userId === "string"/);
+    assert.match(source, /Refusing to reclaim an untracked image result file/);
+    assert.match(source, /storageFile\.fileId/);
+    assert.match(source, /uploaderId/);
+    assert.match(source, /if \(!cleaned\)/);
 });
 
 test("image external reference and mask URLs are DNS-checked before being saved or sent upstream", async () => {

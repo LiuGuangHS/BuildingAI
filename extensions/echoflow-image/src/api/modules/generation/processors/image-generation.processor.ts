@@ -51,7 +51,7 @@ export class ImageGenerationProcessor extends WorkerHost {
     }
 
     @OnWorkerEvent("failed")
-    onFailed(job: Job | undefined, error: Error) {
-        this.logger.error(`Image generation job failed: ${job?.id ?? "unknown"} - ${error.message}`);
+    onFailed(job: Job | undefined) {
+        this.logger.error(`Image generation job failed: ${job?.id ?? "unknown"}`);
     }
 }

@@ -20,9 +20,13 @@ test("web image generation type does not expose endpoint base URL", async () => 
     const source = await readFile(TYPES_FILE, "utf8");
     const publicType = extractInterface(source, "ImageGeneration");
     const consoleType = extractInterface(source, "ConsoleImageGeneration");
+    const resultType = extractInterface(source, "GeneratedImageRecord");
 
     assert.equal(publicType.includes("baseURL"), false);
-    assert.equal(consoleType.includes("baseURL"), true);
+    assert.equal(consoleType.includes("baseURL"), false);
+    assert.match(resultType, /fileId\??: string/);
+    assert.doesNotMatch(resultType, /b64Json\??: string/);
+    assert.doesNotMatch(resultType, /url\??: string/);
 });
 
 

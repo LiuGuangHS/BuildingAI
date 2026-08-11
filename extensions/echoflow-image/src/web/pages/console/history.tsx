@@ -146,6 +146,7 @@ export default function HistoryPage() {
                         loading={isLoading}
                         detailBasePath="/console/history"
                         showUserId
+                        scope="console"
                         onDelete={handleDelete}
                         onRetry={handleRetry}
                     />

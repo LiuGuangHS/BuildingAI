@@ -3,6 +3,7 @@ import {
     ImageGenerationMode,
     ImageGenerationStatus,
     ImageResponseFormat,
+    type GeneratedImageRecord,
     type ImageGeneration,
     type ImageModelOption,
 } from "../../services/types/generation";
@@ -209,6 +210,14 @@ export const designTemplates: DesignTemplate[] = [
     },
 ];
 
+export interface DesignGeneratedImage extends GeneratedImageRecord {
+    mockUrl: string;
+}
+
+export type DesignGeneration = Omit<ImageGeneration, "resultImages"> & {
+    resultImages: DesignGeneratedImage[];
+};
+
 export const designGenerations = [
     {
         id: "design-success-square",
@@ -223,7 +232,7 @@ export const designGenerations = [
         quality: "standard",
         style: "natural",
         responseFormat: ImageResponseFormat.URL,
-        resultImages: [{ url: designArtwork.square, mimeType: "image/svg+xml", revisedPrompt: designTemplates[2].prompt }],
+        resultImages: [{ fileId: "design-square", mimeType: "image/svg+xml", size: 0, mockUrl: designArtwork.square, revisedPrompt: designTemplates[2].prompt }],
         billingAmount: 40,
         startedAt: now,
         completedAt: now,
@@ -243,7 +252,7 @@ export const designGenerations = [
         quality: "hd",
         style: "vivid",
         responseFormat: ImageResponseFormat.URL,
-        resultImages: [{ url: designArtwork.landscape, mimeType: "image/svg+xml", revisedPrompt: designTemplates[1].prompt }],
+        resultImages: [{ fileId: "design-landscape", mimeType: "image/svg+xml", size: 0, mockUrl: designArtwork.landscape, revisedPrompt: designTemplates[1].prompt }],
         billingAmount: 80,
         startedAt: now,
         completedAt: now,
@@ -263,7 +272,7 @@ export const designGenerations = [
         quality: "standard",
         style: "natural",
         responseFormat: ImageResponseFormat.URL,
-        resultImages: [{ url: designArtwork.portrait, mimeType: "image/svg+xml", revisedPrompt: designTemplates[0].prompt }],
+        resultImages: [{ fileId: "design-portrait", mimeType: "image/svg+xml", size: 0, mockUrl: designArtwork.portrait, revisedPrompt: designTemplates[0].prompt }],
         billingAmount: 60,
         startedAt: now,
         completedAt: now,
@@ -284,10 +293,10 @@ export const designGenerations = [
         style: "natural",
         responseFormat: ImageResponseFormat.URL,
         resultImages: [
-            { url: designArtwork.square, mimeType: "image/svg+xml", revisedPrompt: designTemplates[2].prompt },
-            { url: designArtwork.landscape, mimeType: "image/svg+xml", revisedPrompt: designTemplates[1].prompt },
-            { url: designArtwork.portrait, mimeType: "image/svg+xml", revisedPrompt: designTemplates[0].prompt },
-            { url: designArtwork.poster, mimeType: "image/svg+xml", revisedPrompt: designTemplates[3].prompt },
+            { fileId: "design-multiple-square", mimeType: "image/svg+xml", size: 0, mockUrl: designArtwork.square, revisedPrompt: designTemplates[2].prompt },
+            { fileId: "design-multiple-landscape", mimeType: "image/svg+xml", size: 0, mockUrl: designArtwork.landscape, revisedPrompt: designTemplates[1].prompt },
+            { fileId: "design-multiple-portrait", mimeType: "image/svg+xml", size: 0, mockUrl: designArtwork.portrait, revisedPrompt: designTemplates[0].prompt },
+            { fileId: "design-multiple-poster", mimeType: "image/svg+xml", size: 0, mockUrl: designArtwork.poster, revisedPrompt: designTemplates[3].prompt },
         ],
         billingAmount: 160,
         startedAt: now,
@@ -348,7 +357,7 @@ export const designGenerations = [
         createdAt: now,
         updatedAt: now,
     },
-] satisfies ImageGeneration[];
+] satisfies DesignGeneration[];
 
 export type DesignScenario =
     | "empty"
@@ -381,7 +390,7 @@ export const designScenarioOptions: Array<{ value: DesignScenario; label: string
     { value: "reserved", label: "Reserved 边界", group: "能力" },
 ];
 
-export function getDesignGeneration(scenario: DesignScenario): ImageGeneration | undefined {
+export function getDesignGeneration(scenario: DesignScenario): DesignGeneration | undefined {
     if (scenario === "pending") return designGenerations[4];
     if (scenario === "processing") return designGenerations[5];
     if (scenario === "success-square") return designGenerations[0];

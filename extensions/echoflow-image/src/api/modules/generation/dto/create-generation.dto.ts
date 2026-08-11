@@ -115,8 +115,6 @@ export class CreateGenerationDto {
     @IsOptional()
     mode?: ImageGenerationMode;
 
-    @Transform(emptyStringToUndefined)
-    @IsOptional()
     @IsUUID("4")
-    requestKey?: string;
+    requestKey: string;
 }

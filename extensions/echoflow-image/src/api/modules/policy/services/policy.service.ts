@@ -38,7 +38,7 @@ export class PolicyService extends BaseService<ImagePolicyConfig> {
         return this.upsertPolicy({ ...dto, scope: ImagePolicyScope.MODEL, modelConfigId });
     }
 
-    async validateGeneration(modelConfigId: string | undefined, dto: CreateGenerationDto, activeCount = 0, todayCount = 0) {
+    async validateGeneration(modelConfigId: string | undefined, dto: CreateGenerationDto, todayCount = 0) {
         const policy = await this.resolvePolicy(modelConfigId);
 
         if (!policy.enabled) return policy;
@@ -50,9 +50,6 @@ export class PolicyService extends BaseService<ImagePolicyConfig> {
         }
         if ((dto.n ?? 1) > policy.maxImagesPerRequest) {
             throw HttpErrorFactory.badRequest(`单次最多生成 ${policy.maxImagesPerRequest} 张图片`);
-        }
-        if (activeCount >= policy.maxConcurrentJobsPerUser) {
-            throw HttpErrorFactory.badRequest("当前已有生成任务处理中，请稍后再试");
         }
         if (todayCount >= policy.dailyJobsPerUser) {
             throw HttpErrorFactory.badRequest("今日生成次数已达上限");

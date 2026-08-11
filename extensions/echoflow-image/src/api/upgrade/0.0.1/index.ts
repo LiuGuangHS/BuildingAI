@@ -170,6 +170,7 @@ export class Upgrade {
                 "failure_category" varchar(100),
                 "progress" int NOT NULL DEFAULT 0,
                 "storage_files" jsonb NOT NULL DEFAULT '[]',
+                "staged_storage_files" jsonb NOT NULL DEFAULT '[]',
                 "raw_events" jsonb NOT NULL DEFAULT '[]',
                 "billing_amount" numeric(10,2) NOT NULL DEFAULT 0,
                 "started_at" timestamp,
@@ -192,6 +193,7 @@ export class Upgrade {
         await this.ensureColumn("image_generation", "steps", "int");
         await this.ensureColumn("image_generation", "cfg_scale", "double precision");
         await this.ensureColumn("image_generation", "storage_files", "jsonb NOT NULL DEFAULT '[]'");
+        await this.ensureColumn("image_generation", "staged_storage_files", "jsonb NOT NULL DEFAULT '[]'");
         await this.ensureColumn("image_generation", "raw_events", "jsonb NOT NULL DEFAULT '[]'");
         await this.ensureColumn("image_generation", "progress", "int NOT NULL DEFAULT 0");
         await this.ensureColumn("image_generation", "deleted_at", "timestamp");
@@ -212,22 +214,22 @@ export class Upgrade {
         const duplicateRows = await this.dataSource.query(`
             SELECT "user_id", "request_key", COUNT(*)::int AS count
             FROM "echoflow_image"."image_generation"
-            WHERE "request_key" IS NOT NULL
+            WHERE "request_key" IS NOT NULL AND "deleted_at" IS NULL
             GROUP BY "user_id", "request_key"
             HAVING COUNT(*) > 1
             LIMIT 1
         `);
 
         if (duplicateRows.length > 0) {
-            this.logger.warn("Skipped unique requestKey index because duplicate generation records already exist");
-            return;
+            throw new Error("Cannot create image generation requestKey index while active duplicate records exist");
         }
 
         await this.dataSource.query(`DROP INDEX IF EXISTS "echoflow_image"."idx_image_generation_user_request_key"`);
+        await this.dataSource.query(`DROP INDEX IF EXISTS "echoflow_image"."uq_image_generation_user_request_key"`);
         await this.dataSource.query(`
-            CREATE UNIQUE INDEX IF NOT EXISTS "uq_image_generation_user_request_key"
+            CREATE UNIQUE INDEX "uq_image_generation_user_request_key"
             ON "echoflow_image"."image_generation" ("user_id", "request_key")
-            WHERE "request_key" IS NOT NULL
+            WHERE "request_key" IS NOT NULL AND "deleted_at" IS NULL
         `);
     }
 

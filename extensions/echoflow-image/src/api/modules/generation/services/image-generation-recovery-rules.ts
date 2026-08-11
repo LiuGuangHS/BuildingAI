@@ -13,6 +13,27 @@ export function isImageGenerationTerminalStatus(status: string) {
     return status === "succeeded" || status === "failed";
 }
 
+export function canRetryImageGeneration(
+    status: string,
+    billingStatus: string,
+) {
+    return (
+        status === "failed" &&
+        (billingStatus === "failed" || billingStatus === "refunded")
+    );
+}
+
+export function canFailImageGeneration(status: string) {
+    return status === "pending" || status === "processing";
+}
+
+export function canCompleteImageGeneration(
+    status: string,
+    images: Array<{ fileId?: string }> | null | undefined,
+) {
+    return status === "processing" && Boolean(images?.some((image) => Boolean(image.fileId)));
+}
+
 export function shouldTimeoutImageGeneration(
     generation: ImageGenerationRecoverySnapshot | null | undefined,
     nowMs = Date.now(),

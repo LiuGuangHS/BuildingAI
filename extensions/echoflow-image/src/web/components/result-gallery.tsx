@@ -7,7 +7,8 @@ import { toast } from "sonner";
 
 import type { CreateGenerationParams, GeneratedImageRecord, ImageGeneration } from "../services/types/generation";
 import { ImageGenerationStatus } from "../services/types/generation";
-import { downloadImage, resolveImageSrc } from "./image-utils";
+import { ControlledImage } from "./controlled-image";
+import { downloadImage, openImage } from "./image-utils";
 import { ResultSkeleton } from "./skeleton-card";
 
 interface ResultGalleryProps {
@@ -18,6 +19,7 @@ interface ResultGalleryProps {
     onUsePrompt?: (prompt: string) => void;
     onContinueFromImage?: (values: Partial<CreateGenerationParams>) => void;
     variant?: "card" | "stage";
+    scope?: "web" | "console";
 }
 
 const emptyPromptSuggestions = [
@@ -48,6 +50,7 @@ export function ResultGallery({
     onUsePrompt,
     onContinueFromImage,
     variant = "card",
+    scope = "web",
 }: ResultGalleryProps) {
     const resolvedImages = images ?? generation?.resultImages ?? [];
     const isStage = variant === "stage";
@@ -64,24 +67,23 @@ export function ResultGallery({
 
     const handleDownloadAll = async () => {
         for (let i = 0; i < resolvedImages.length; i++) {
-            const src = resolveImageSrc(resolvedImages[i]);
-            if (src) {
-                downloadImage(src, `echoflow-image-${generation?.id || "result"}-${i + 1}.png`);
+            const image = resolvedImages[i];
+            if (image) {
+                await downloadImage(image, generation?.id, `echoflow-image-${generation?.id || "result"}-${i + 1}.png`, scope);
             }
         }
     };
 
     const continueFromImage = (image: GeneratedImageRecord) => {
-        const src = resolveImageSrc(image);
-        if (!src) {
+        if (!image.fileId) {
             toast.info("这张图片暂时不能作为参考图");
             return;
         }
         onContinueFromImage?.({
             prompt: image.revisedPrompt || generation?.prompt || "",
             negativePrompt: generation?.negativePrompt,
-            referenceImageUrl: src,
-            sourceImages: [{ url: src, mimeType: image.mimeType }],
+            referenceImageFileId: image.fileId,
+            sourceImages: [{ fileId: image.fileId, mimeType: image.mimeType }],
             modelId: generation?.modelId,
             size: generation?.size,
             n: generation?.n,
@@ -258,17 +260,18 @@ export function ResultGallery({
                             )}
                         >
                             {resolvedImages.map((image, index) => {
-                                const src = resolveImageSrc(image);
                                 return (
                                     <div key={index} className="ef-image-contact-frame group overflow-hidden rounded-lg border bg-background shadow-sm transition hover:border-primary/25 hover:shadow-md">
-                                        {src ? (
+                                        {image.fileId ? (
                                             <>
                                                 <div className="relative aspect-square overflow-hidden">
-                                                    <img
-                                                        src={src}
+                                                    <ControlledImage
+                                                        image={image}
+                                                        generationId={generation?.id}
+                                                        scope={scope}
                                                         alt={`生成图片 ${index + 1}`}
                                                         className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                                                        loading="lazy"
+                                                        fallback={<div className="size-full bg-muted" />}
                                                     />
                                                     <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                                                         {onContinueFromImage && generation && (
@@ -286,10 +289,10 @@ export function ResultGallery({
                                                                 <Copy className="size-3.5" />
                                                             </Button>
                                                         )}
-                                                        <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="打开图片" onClick={() => window.open(src, "_blank", "noopener,noreferrer")}>
+                                                        <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="打开图片" onClick={() => void openImage(image, generation?.id, scope)}>
                                                             <ExternalLink className="size-3.5" />
                                                         </Button>
-                                                        <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="下载图片" onClick={() => downloadImage(src, `echoflow-image-${generation?.id || "result"}-${index + 1}.png`)}>
+                                                        <Button size="icon-sm" variant="secondary" className="size-8 bg-white/90 hover:bg-white" aria-label="下载图片" onClick={() => void downloadImage(image, generation?.id, `echoflow-image-${generation?.id || "result"}-${index + 1}.png`, scope)}>
                                                             <Download className="size-3.5" />
                                                         </Button>
                                                     </div>

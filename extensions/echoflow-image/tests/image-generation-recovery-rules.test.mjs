@@ -49,3 +49,27 @@ test("isImageGenerationTerminalStatus identifies terminal generation states", ()
     assert.equal(rules.isImageGenerationTerminalStatus("pending"), false);
     assert.equal(rules.isImageGenerationTerminalStatus("processing"), false);
 });
+
+test("canRetryImageGeneration permits only failed tasks with settled billing", () => {
+    assert.equal(rules.canRetryImageGeneration("pending", "pending"), false);
+    assert.equal(rules.canRetryImageGeneration("processing", "deducted"), false);
+    assert.equal(rules.canRetryImageGeneration("succeeded", "refunded"), false);
+    assert.equal(rules.canRetryImageGeneration("failed", "pending"), false);
+    assert.equal(rules.canRetryImageGeneration("failed", "failed"), true);
+    assert.equal(rules.canRetryImageGeneration("failed", "deducted"), false);
+    assert.equal(rules.canRetryImageGeneration("failed", "refunded"), true);
+});
+
+test("canFailImageGeneration preserves terminal tasks", () => {
+    assert.equal(rules.canFailImageGeneration("pending"), true);
+    assert.equal(rules.canFailImageGeneration("processing"), true);
+    assert.equal(rules.canFailImageGeneration("succeeded"), false);
+    assert.equal(rules.canFailImageGeneration("failed"), false);
+});
+
+test("canCompleteImageGeneration requires processing status and a registered file", () => {
+    assert.equal(rules.canCompleteImageGeneration("pending", [{ fileId: "file-a" }]), false);
+    assert.equal(rules.canCompleteImageGeneration("processing", []), false);
+    assert.equal(rules.canCompleteImageGeneration("processing", [{ mimeType: "image/png" }]), false);
+    assert.equal(rules.canCompleteImageGeneration("processing", [{ fileId: "file-a" }]), true);
+});

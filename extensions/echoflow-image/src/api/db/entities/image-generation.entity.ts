@@ -36,9 +36,9 @@ export enum ImageResponseFormat {
 }
 
 export interface GeneratedImageRecord {
-    url?: string;
-    b64Json?: string;
-    mimeType?: string;
+    fileId: string;
+    mimeType: string;
+    size: number;
     revisedPrompt?: string;
 }
 
@@ -48,10 +48,20 @@ export interface ImageSourceRecord {
     mimeType?: string;
 }
 
+export interface GeneratedStorageFileRecord {
+    fileId: string;
+    generationId: string;
+    userId: string;
+    extensionId: string;
+    path: string;
+    mimeType: string;
+    size: number;
+}
+
 @ExtensionEntity()
 @Index("uq_image_generation_user_request_key", ["userId", "requestKey"], {
     unique: true,
-    where: `"request_key" IS NOT NULL`,
+    where: `"request_key" IS NOT NULL AND "deleted_at" IS NULL`,
 })
 export class ImageGeneration {
     @PrimaryGeneratedColumn("uuid")
@@ -169,7 +179,10 @@ export class ImageGeneration {
     progress: number;
 
     @Column({ type: "jsonb", default: () => "'[]'", comment: "Stored output files" })
-    storageFiles: ImageSourceRecord[];
+    storageFiles: GeneratedStorageFileRecord[];
+
+    @Column({ type: "jsonb", default: () => "'[]'", comment: "Staged output files awaiting completion" })
+    stagedStorageFiles: GeneratedStorageFileRecord[];
 
     @Column({ type: "jsonb", default: () => "'[]'", comment: "Raw event summaries" })
     rawEvents: Array<Record<string, unknown>>;

@@ -213,7 +213,7 @@ export default function DetailPage() {
                 </div>
 
                 {/* Results */}
-                <ResultGallery generation={data} />
+                <ResultGallery generation={data} scope="console" />
             </div>
 
             <ConfirmDialog
