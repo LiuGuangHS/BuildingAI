@@ -27,6 +27,16 @@ export class ContractGenerationConsoleController extends BaseController {
         return this.contractGenerationService.updateTemplate(id, dto);
     }
 
+    @Post("templates/:id/publish")
+    publishTemplate(@Param("id", UUIDValidationPipe) id: string) {
+        return this.contractGenerationService.publishTemplate(id);
+    }
+
+    @Post("templates/:id/offline")
+    offlineTemplate(@Param("id", UUIDValidationPipe) id: string) {
+        return this.contractGenerationService.offlineTemplate(id);
+    }
+
     @Delete("templates/:id")
     deleteTemplate(@Param("id", UUIDValidationPipe) id: string) {
         return this.contractGenerationService.deleteTemplate(id);

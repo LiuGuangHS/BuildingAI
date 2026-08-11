@@ -32,6 +32,7 @@ export class GenerateContractDto {
 
     @IsString()
     @IsOptional()
+    @IsUUID("4")
     templateId?: string;
 
     @IsString()
@@ -176,10 +177,6 @@ export class UpsertContractTemplateDto {
     @MaxLength(4000)
     promptTemplate?: string;
 
-    @IsBoolean()
-    @IsOptional()
-    isActive?: boolean;
-
     @IsInt()
     @IsOptional()
     @Type(() => Number)
@@ -187,6 +184,11 @@ export class UpsertContractTemplateDto {
 }
 
 export class UpdateContractContentDto {
+    @IsInt()
+    @Min(0)
+    @Transform(({ value }) => (value == null || (typeof value === "string" && value.trim() === "") ? value : Number(value)))
+    baseRevision: number;
+
     @IsString()
     @IsOptional()
     @MaxLength(120)
@@ -206,6 +208,11 @@ export class UpdateContractContentDto {
 }
 
 export class UpdateRiskActionDto {
+    @IsInt()
+    @Min(0)
+    @Transform(({ value }) => (value == null || (typeof value === "string" && value.trim() === "") ? value : Number(value)))
+    baseRevision: number;
+
     @IsString()
     @IsNotEmpty()
     @MaxLength(500)
@@ -221,6 +228,13 @@ export class UpdateRiskActionDto {
     @ValidateNested({ each: true })
     @Type(() => ContractSectionDto)
     sections?: ContractSectionDto[];
+}
+
+export class RestoreContractVersionDto {
+    @IsInt()
+    @Min(0)
+    @Transform(({ value }) => (value == null || (typeof value === "string" && value.trim() === "") ? value : Number(value)))
+    baseRevision: number;
 }
 
 export class RewriteContractClauseDto {

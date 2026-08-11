@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { apiHttpClient } from "../base";
-import { isContractBusyStatus, type ContractGenerationConfig, type ContractGenerationTask, type ContractGenerationVersion, type ContractTemplate, type ExportContractParams, type GenerateContractParams, type PaginatedResponse, type QueryContractTasksParams, type ReviewUploadedContractParams, type RewriteContractClauseParams, type RewriteContractClauseResult, type UpdateContractContentParams, type UpdateRiskActionParams } from "../types";
+import { isContractBusyStatus, type ContractGenerationConfig, type ContractGenerationTask, type ContractGenerationVersion, type ContractTemplate, type ExportContractParams, type GenerateContractParams, type PaginatedResponse, type QueryContractTasksParams, type RestoreContractVersionParams, type ReviewUploadedContractParams, type RewriteContractClauseParams, type RewriteContractClauseResult, type UpdateContractContentParams, type UpdateRiskActionParams } from "../types";
 
 const CONTRACT_TASKS_QUERY_KEY = ["echoflow-contract-generation", "web", "tasks"] as const;
 const CONTRACT_TEMPLATES_QUERY_KEY = ["echoflow-contract-generation", "web", "templates"] as const;
@@ -43,12 +43,16 @@ export function listContractVersions(taskId: string) {
     return apiHttpClient.get<ContractGenerationVersion[]>(`/contract-generation/tasks/${taskId}/versions`);
 }
 
-export function restoreContractVersion(taskId: string, versionId: string) {
-    return apiHttpClient.post<ContractGenerationTask>(`/contract-generation/tasks/${taskId}/versions/${versionId}/restore`);
+export function restoreContractVersion(taskId: string, versionId: string, params: RestoreContractVersionParams) {
+    return apiHttpClient.post<ContractGenerationTask>(`/contract-generation/tasks/${taskId}/versions/${versionId}/restore`, params);
 }
 
 export function exportContractTask(taskId: string, params?: ExportContractParams) {
     return apiHttpClient.post<ContractGenerationTask>(`/contract-generation/tasks/${taskId}/export`, params ?? {});
+}
+
+export function downloadContractExport(taskId: string) {
+    return apiHttpClient.download(`/contract-generation/tasks/${taskId}/export-file`);
 }
 
 export function listContractTasks(params?: QueryContractTasksParams) {
@@ -117,7 +121,7 @@ export function useContractTaskDetailQuery(taskId?: string) {
 }
 
 export function useRestoreContractVersionMutation() {
-    return useMutation({ mutationFn: ({ taskId, versionId }: { taskId: string; versionId: string }) => restoreContractVersion(taskId, versionId), onSuccess: useInvalidateOnSuccess(CONTRACT_TASKS_QUERY_KEY) });
+    return useMutation({ mutationFn: ({ taskId, versionId, params }: { taskId: string; versionId: string; params: RestoreContractVersionParams }) => restoreContractVersion(taskId, versionId, params), onSuccess: useInvalidateOnSuccess(CONTRACT_TASKS_QUERY_KEY) });
 }
 
 export function useExportContractMutation() {

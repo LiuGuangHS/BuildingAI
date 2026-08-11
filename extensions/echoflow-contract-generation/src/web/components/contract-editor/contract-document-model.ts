@@ -1,4 +1,5 @@
 import type { ContractRiskFinding, ContractSection, ContractTemplate, ContractTemplateField } from "../../services/types";
+import * as sharedContractAst from "../../../api/contract-document-ast.ts";
 
 export type DraftCheckItem = {
     key: string;
@@ -10,7 +11,122 @@ export type DocumentSection = ContractSection & {
     source: "task" | "draft" | "template" | "placeholder";
 };
 
+type PlateTextNode = { text?: string; [key: string]: unknown };
+type PlateNode = { type?: string; id?: string; sectionId?: string; title?: string; importance?: ContractSection["importance"]; children?: unknown[]; [key: string]: unknown };
+
+export type ContractBlock =
+    | { type: "heading" | "paragraph"; text: string }
+    | { type: "list"; ordered: boolean; items: string[] }
+    | { type: "table"; rows: string[][] };
+
+export type ContractAstSection = {
+    id: string;
+    title: string;
+    importance?: ContractSection["importance"];
+    blocks: ContractBlock[];
+};
+
+export type ContractDocumentAst = {
+    title: string;
+    revision: number;
+    sections: ContractAstSection[];
+    variables?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+    signatureBlocks: Array<{ party: string; label: string }>;
+};
+
 const riskRank: Record<ContractRiskFinding["level"], number> = { low: 1, medium: 2, high: 3 };
+const EMPTY_PLATE_PARAGRAPH = { type: "p", children: [{ text: "" }] };
+
+export function contractSectionsToPlateValue(sections: ContractSection[]): PlateNode[] {
+    return sharedContractAst.contractSectionsToPlateValue(sections);
+}
+
+export function plateValueToContractDocument(value: unknown, options: { title?: string; revision?: number; variables?: Record<string, unknown>; metadata?: Record<string, unknown> } = {}): ContractDocumentAst {
+    return sharedContractAst.plateValueToContractDocument(value, options);
+}
+
+export function contractDocumentToSections(document: ContractDocumentAst): ContractSection[] {
+    return sharedContractAst.contractDocumentToSections(document);
+}
+
+export function contractDocumentToPlainText(document: ContractDocumentAst): string {
+    return sharedContractAst.contractDocumentToPlainText(document);
+}
+
+export function contractDocumentToMarkdown(document: ContractDocumentAst): string {
+    return sharedContractAst.contractDocumentToMarkdown(document);
+}
+
+export function contractDocumentToModelInput(document: ContractDocumentAst): string {
+    return sharedContractAst.contractDocumentToModelInput(document);
+}
+
+function isPlateNode(value: unknown): value is PlateNode {
+    return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function parseContractSection(node: PlateNode, index: number): ContractAstSection {
+    const children = Array.isArray(node.children) ? node.children.filter(isPlateNode) : [];
+    return {
+        id: String(node.sectionId ?? node.id ?? `section-${index + 1}`),
+        title: String(node.title ?? findHeading(children) ?? `第 ${index + 1} 条`),
+        importance: node.importance,
+        blocks: parseBlocks(children.length ? children : [EMPTY_PLATE_PARAGRAPH]),
+    };
+}
+
+function parseBlocks(nodes: PlateNode[]): ContractBlock[] {
+    const blocks: ContractBlock[] = [];
+    for (const node of nodes) {
+        const type = String(node.type ?? "p");
+        if (["script", "html", "raw_html"].includes(type)) continue;
+        if (["h1", "h2", "h3", "heading"].includes(type)) blocks.push({ type: "heading", text: nodeText(node) });
+        else if (["ul", "ol", "list"].includes(type)) blocks.push({ type: "list", ordered: type === "ol" || Boolean(node.ordered), items: listItems(node) });
+        else if (["table"].includes(type)) blocks.push({ type: "table", rows: tableRows(node) });
+        else blocks.push({ type: "paragraph", text: nodeText(node) });
+    }
+    return blocks.length ? blocks : [{ type: "paragraph", text: "" }];
+}
+
+function nodeText(node: PlateNode): string {
+    return (Array.isArray(node.children) ? node.children : []).map((child) => typeof child === "string" ? child : isPlateNode(child) ? String((child as PlateTextNode).text ?? nodeText(child)) : "").join("");
+}
+
+function listItems(node: PlateNode): string[] {
+    return (Array.isArray(node.children) ? node.children : []).filter(isPlateNode).map((item) => nodeText(item));
+}
+
+function tableRows(node: PlateNode): string[][] {
+    return (Array.isArray(node.children) ? node.children : []).filter(isPlateNode).map((row) => (Array.isArray(row.children) ? row.children : []).filter(isPlateNode).map((cell) => nodeText(cell)));
+}
+
+function blockToText(block: ContractBlock): string {
+    if (block.type === "list") return block.items.join("\n");
+    if (block.type === "table") return block.rows.map((row) => row.join(" | ")).join("\n");
+    return block.text;
+}
+
+function blockToMarkdown(block: ContractBlock): string {
+    if (block.type === "heading") return `### ${sanitizeMarkdown(block.text)}`;
+    if (block.type === "list") return block.items.map((item, index) => `${block.ordered ? `${index + 1}.` : "-"} ${sanitizeMarkdown(item)}`).join("\n");
+    if (block.type === "table") return block.rows.map((row) => `| ${row.map(sanitizeMarkdown).join(" | ")} |`).join("\n");
+    return sanitizeMarkdown(block.text);
+}
+
+function sanitizeMarkdown(text: string): string {
+    return text.replace(/<[^>]*>/g, "");
+}
+
+function findHeading(nodes: PlateNode[]): string | undefined {
+    const heading = nodes.find((node) => ["h1", "h2", "h3", "heading"].includes(String(node.type)));
+    return heading ? nodeText(heading) : undefined;
+}
+
+function parseSignatureBlocks(text: string): Array<{ party: string; label: string }> {
+    const match = text.match(/(甲方|乙方)[^：:]*[：:](.+)/);
+    return match ? [{ party: match[1], label: match[2].trim() }] : [];
+}
 
 export function buildDocumentSections(options: {
     sections: ContractSection[];

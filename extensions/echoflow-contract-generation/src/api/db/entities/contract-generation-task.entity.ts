@@ -28,6 +28,9 @@ export type ContractSection = {
 export type ContractRiskFinding = {
     id?: string;
     sectionId?: string;
+    sourceRevision?: number;
+    sourceVersionId?: string;
+    stale?: boolean;
     kind?: "missing_fact" | "legal_risk" | "clarity" | "enforceability";
     sectionTitle: string;
     level: "low" | "medium" | "high";
@@ -114,6 +117,12 @@ export class ContractGenerationTask {
     @Column({ type: "varchar", length: 20, default: ContractGenerationStatus.PENDING, comment: "Task status" })
     @Index()
     status: ContractGenerationStatus;
+
+    @Column({ type: "int", default: 0, comment: "Monotonic contract revision" })
+    revision: number;
+
+    @Column({ name: "processing_attempt_id", type: "varchar", length: 80, nullable: true, comment: "Execution fencing token" })
+    processingAttemptId?: string | null;
 
     @Column({ type: "varchar", length: 1024, nullable: true, comment: "Generated DOCX result URL" })
     resultUrl?: string | null;

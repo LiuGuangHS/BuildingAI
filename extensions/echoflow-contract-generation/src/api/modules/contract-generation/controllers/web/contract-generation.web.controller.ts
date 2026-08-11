@@ -4,11 +4,11 @@ import { type UserPlayground } from "@buildingai/db";
 import { Playground } from "@buildingai/decorators/playground.decorator";
 import { ExtensionRateLimitService, type ExtensionRateLimitWindow } from "@buildingai/extension-sdk";
 import { UUIDValidationPipe } from "@buildingai/pipe/param-validate.pipe";
-import { Body, Delete, Get, Param, Patch, Post, Query, Req } from "@nestjs/common";
-import type { Request } from "express";
+import { Body, Delete, Get, Param, Patch, Post, Query, Req, Res } from "@nestjs/common";
+import type { Request, Response } from "express";
 
-import type { ContractGenerationTask } from "../../../../db/entities";
-import { ExportContractDto, GenerateContractDto, QueryContractTaskDto, ReviewUploadedContractDto, RewriteContractClauseDto, UpdateContractContentDto, UpdateRiskActionDto } from "../../dto";
+import { ContractGenerationStatus, type ContractGenerationTask } from "../../../../db/entities";
+import { ExportContractDto, GenerateContractDto, QueryContractTaskDto, RestoreContractVersionDto, ReviewUploadedContractDto, RewriteContractClauseDto, UpdateContractContentDto, UpdateRiskActionDto } from "../../dto";
 import { ContractGenerationService } from "../../services";
 
 const CONTRACT_RATE_LIMIT_WINDOWS: ExtensionRateLimitWindow[] = [
@@ -75,8 +75,8 @@ export class ContractGenerationWebController extends BaseController {
     }
 
     @Post("tasks/:id/versions/:versionId/restore")
-    async restoreVersion(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Param("versionId", UUIDValidationPipe) versionId: string) {
-        return this.toPublicTask(await this.contractGenerationService.restoreTaskVersion(user.id, id, versionId));
+    async restoreVersion(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Param("versionId", UUIDValidationPipe) versionId: string, @Body() dto: RestoreContractVersionDto) {
+        return this.toPublicTask(await this.contractGenerationService.restoreTaskVersion(user.id, id, versionId, dto));
     }
 
     @Post("tasks/:id/export")
@@ -99,6 +99,16 @@ export class ContractGenerationWebController extends BaseController {
         return this.toPublicTask(await this.contractGenerationService.getTaskDetail(user.id, id));
     }
 
+    @Get("tasks/:id/export-file")
+    async downloadExport(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string, @Res() response: Response) {
+        const file = await this.contractGenerationService.getExportFile(user.id, id);
+        response.setHeader("Content-Disposition", `attachment; filename=${encodeURIComponent(file.filename)}`);
+        response.setHeader("Content-Type", file.mimeType);
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        response.setHeader("Cache-Control", "private, no-store");
+        file.stream.pipe(response);
+    }
+
     @Delete("tasks/:id")
     remove(@Playground() user: UserPlayground, @Param("id", UUIDValidationPipe) id: string) {
         return this.contractGenerationService.deleteTask(user.id, id);
@@ -118,28 +128,37 @@ export class ContractGenerationWebController extends BaseController {
     }
 
     private toPublicTask(task: ContractGenerationTask) {
-        const {
-            userId: _userId,
-            modelId: _modelId,
-            providerId: _providerId,
-            requestPayload: _requestPayload,
-            providerMetadata,
-            errorMessage,
-            deletedAt: _deletedAt,
-            ...publicTask
-        } = task;
+        const exportStatus = task.status === ContractGenerationStatus.EXPORTING
+            ? "exporting"
+            : task.status === ContractGenerationStatus.SUCCESS
+                ? "ready"
+                : task.status === ContractGenerationStatus.EXPORT_FAILED
+                    ? "failed"
+                    : "not_exported";
         return {
-            ...publicTask,
-            errorMessage: errorMessage ? "合同任务处理失败，请稍后重试或联系管理员。" : null,
-            providerMetadata: {
-                templateName: providerMetadata?.templateName,
-                language: providerMetadata?.language,
-                stance: providerMetadata?.stance,
-                exportedAt: providerMetadata?.exportedAt,
-                exportType: providerMetadata?.exportType,
-                billingStatus: providerMetadata?.billingStatus,
-                refundedAt: providerMetadata?.refundedAt,
-            },
+            id: task.id,
+            title: task.title,
+            contractType: task.contractType,
+            industry: task.industry ?? null,
+            templateId: task.templateId ?? null,
+            parties: task.parties ?? [],
+            variables: task.providerMetadata?.source === "upload-review"
+                ? {}
+                : task.variables ?? {},
+            prompt: task.prompt ?? null,
+            summary: task.summary ?? null,
+            sections: task.sections ?? [],
+            riskFindings: task.riskFindings ?? [],
+            legalTerms: task.legalTerms ?? [],
+            score: task.score ?? null,
+            riskActions: task.riskActions ?? {},
+            status: task.status,
+            revision: task.revision,
+            exportStatus,
+            errorMessage: task.errorMessage ? "合同任务处理失败，请稍后重试或联系管理员。" : null,
+            costCredits: task.costCredits,
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt,
         };
     }
 }

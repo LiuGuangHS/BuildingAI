@@ -8,8 +8,9 @@ import { ContractInspector } from "../components/contract-workbench/ContractInsp
 import { ContractIntakeRail } from "../components/contract-workbench/ContractIntakeRail";
 import { ContractTemplateDrawer } from "../components/contract-workbench/ContractTemplateDrawer";
 import { ContractWorkbenchShell } from "../components/contract-workbench/ContractWorkbenchShell";
+import { canRestoreConflictingDraft, clearContractDraft, getContractDraftState, isTemplateDraft, readContractDraft, writeContractDraft, type ContractDraft } from "../components/contract-workbench/contract-draft-storage";
 import { deriveContractWorkbenchState } from "../components/contract-workbench/contract-workbench-view-model";
-import { useContractGenerationConfigQuery, useContractTaskDetailQuery, useContractTasksQuery, useContractTemplatesQuery, useContractVersionsQuery, useExportContractMutation, useGenerateContractMutation, useRestoreContractVersionMutation, useReviewContractMutation, useReviewUploadedContractMutation, useRewriteContractClauseMutation, useUpdateContractContentMutation, useUpdateRiskActionMutation } from "../services/web";
+import { downloadContractExport, useContractGenerationConfigQuery, useContractTaskDetailQuery, useContractTasksQuery, useContractTemplatesQuery, useContractVersionsQuery, useExportContractMutation, useGenerateContractMutation, useRestoreContractVersionMutation, useReviewContractMutation, useReviewUploadedContractMutation, useRewriteContractClauseMutation, useUpdateContractContentMutation, useUpdateRiskActionMutation } from "../services/web";
 import { contractStatusText, contractStatusVariant, isContractBusyStatus, type ContractGenerationConfig, type ContractGenerationStatus, type ContractGenerationTask, type ContractSection, type ContractTemplate } from "../services/types";
 
 type ContractStance = "neutral" | "favor_party_a" | "favor_party_b" | "strict" | "friendly";
@@ -64,6 +65,7 @@ export default function ContractGenerationHomePage() {
     const [message, setMessage] = useState("");
     const [dirty, setDirty] = useState(false);
     const [documentRevision, setDocumentRevision] = useState(0);
+    const [draftConflict, setDraftConflict] = useState<ContractDraft | null>(null);
     const { data: detailTask } = useContractTaskDetailQuery(activeTaskId);
     const activeTask = detailTask ?? localTask;
     const { data: versions = [] } = useContractVersionsQuery(activeTask?.id);
@@ -104,10 +106,24 @@ export default function ContractGenerationHomePage() {
         setSections(detailTask.sections ?? []);
         setSelectedSectionIndex(0);
         setDirty(false);
+        setDraftConflict(null);
         setDocumentRevision((value) => value + 1);
-    }, [detailTask?.id, detailTask?.updatedAt]);
+        const localDraft = readContractDraft();
+        if (!localDraft || !detailTask.id) return;
+        const state = getContractDraftState(localDraft, { taskId: detailTask.id, revision: detailTask.revision });
+        if (state === "compatible") {
+            setSections(localDraft.sections);
+            setDirty(true);
+            setMessage("已恢复本地草稿，请确认后保存。");
+        } else if (state === "conflict") {
+            setDraftConflict(localDraft);
+            setMessage(`检测到本地草稿基于 revision ${localDraft.baseRevision}，服务端当前为 ${detailTask.revision}，请选择恢复或保留服务端正文。`);
+        }
+    }, [detailTask?.id, detailTask?.revision, detailTask?.updatedAt]);
 
     function setTask(task: ContractGenerationTask) {
+        clearContractDraft();
+        setDraftConflict(null);
         setLocalTask(task);
         setActiveTaskId(task.id);
         setTitle(task.title);
@@ -124,9 +140,17 @@ export default function ContractGenerationHomePage() {
         setVariables({});
         setFieldErrors({});
         setPrompt("");
-        setDraftSections([]);
+        const localDraft = readContractDraft();
+        if (localDraft && isTemplateDraft(localDraft, template.id)) {
+            setDraftSections(localDraft.sections);
+            setDirty(true);
+            setMessage("已恢复未生成合同的本地草稿。");
+        } else {
+            setDraftSections([]);
+            setDirty(false);
+        }
+        setDraftConflict(null);
         setSelectedSectionIndex(0);
-        setDirty(false);
     }
 
     async function handleGenerate() {
@@ -191,7 +215,7 @@ export default function ContractGenerationHomePage() {
         if (!activeTask) return;
         setMessage("正在保存修改...");
         try {
-            const task = await updateMutation.mutateAsync({ taskId: activeTask.id, params: { title, summary: activeTask.summary ?? undefined, sections } });
+            const task = await updateMutation.mutateAsync({ taskId: activeTask.id, params: { baseRevision: activeTask.revision, title, summary: activeTask.summary ?? undefined, sections } });
             setTask(task);
             setMessage("修改已保存。");
         } catch (error) {
@@ -248,7 +272,13 @@ export default function ContractGenerationHomePage() {
             const task = await exportMutation.mutateAsync({ taskId: activeTask.id, params: { exportType } });
             setTask(task);
             setMessage("导出完成。");
-            if (task.resultUrl) window.open(task.resultUrl, "_blank", "noopener,noreferrer");
+            const blob = await downloadContractExport(task.id);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `${task.id}.docx`;
+            link.click();
+            URL.revokeObjectURL(url);
         } catch (error) {
             setMessage(error instanceof Error ? error.message : "导出失败");
         }
@@ -257,18 +287,17 @@ export default function ContractGenerationHomePage() {
     async function handleAcceptRisk(index: number) {
         if (!activeTask) return;
         const risk = activeTask.riskFindings?.[index];
-        if (!risk?.replacementText) {
-            setMessage("该风险建议没有可直接替换的条款文本。");
+        if (!risk?.replacementText || !risk.sectionId || risk.sourceRevision !== activeTask.revision || risk.stale) {
+            setMessage("该建议缺少当前版本的可验证证据，请手动复制或重新审查。");
             return;
         }
-        const sectionIndex = sections.findIndex((section) => section.title.includes(risk.sectionTitle) || risk.sectionTitle.includes(section.title));
+        const sectionIndex = sections.findIndex((section) => section.id === risk.sectionId);
         if (sectionIndex < 0) {
-            setMessage("未找到对应条款，请手动复制建议文本。");
+            setMessage("未找到来源条款，请手动复制建议文本。");
             return;
         }
-        const nextSections = sections.map((item, itemIndex) => (itemIndex === sectionIndex ? { ...item, content: risk.replacementText! } : item));
         try {
-            const task = await updateRiskActionMutation.mutateAsync({ taskId: activeTask.id, params: { riskKey: getRiskKey(risk, index), status: "accepted", sections: nextSections } });
+            const task = await updateRiskActionMutation.mutateAsync({ taskId: activeTask.id, params: { baseRevision: activeTask.revision, riskKey: getRiskKey(risk, index), status: "accepted" } });
             setTask(task);
             setSelectedSectionIndex(sectionIndex);
             setMessage("已采纳风险建议并记录版本。");
@@ -281,7 +310,7 @@ export default function ContractGenerationHomePage() {
         const risk = activeTask?.riskFindings?.[index];
         if (!risk || !activeTask) return;
         try {
-            const task = await updateRiskActionMutation.mutateAsync({ taskId: activeTask.id, params: { riskKey: getRiskKey(risk, index), status: "ignored" } });
+            const task = await updateRiskActionMutation.mutateAsync({ taskId: activeTask.id, params: { baseRevision: activeTask.revision, riskKey: getRiskKey(risk, index), status: "ignored" } });
             setTask(task);
             setMessage("已忽略风险建议。");
         } catch (error) {
@@ -292,7 +321,7 @@ export default function ContractGenerationHomePage() {
     async function handleRestoreVersion(versionId: string) {
         if (!activeTask) return;
         try {
-            const task = await restoreVersionMutation.mutateAsync({ taskId: activeTask.id, versionId });
+            const task = await restoreVersionMutation.mutateAsync({ taskId: activeTask.id, versionId, params: { baseRevision: activeTask.revision } });
             setTask(task);
             setMessage("已恢复历史版本。");
         } catch (error) {
@@ -314,6 +343,33 @@ export default function ContractGenerationHomePage() {
         if (selectedSectionIndex >= nextSections.length) {
             setSelectedSectionIndex(Math.max(0, nextSections.length - 1));
         }
+    }
+
+    useEffect(() => {
+        if (!dirty) return;
+        writeContractDraft({
+            taskId: activeTask?.id ?? null,
+            templateId: selectedTemplate?.id ?? null,
+            sections: activeTask ? sections : draftSections,
+            baseRevision: activeTask?.revision ?? 0,
+            savedAt: new Date().toISOString(),
+        });
+    }, [activeTask?.id, activeTask?.revision, dirty, draftSections, sections, selectedTemplate?.id]);
+
+    function keepServerDraft() {
+        clearContractDraft();
+        setDraftConflict(null);
+        if (activeTask) setSections(activeTask.sections ?? []);
+        setDirty(false);
+        setMessage("已保留服务端正文。");
+    }
+
+    function restoreConflictingDraft() {
+        if (!draftConflict || !canRestoreConflictingDraft(draftConflict, activeTask?.id)) return;
+        setSections(draftConflict.sections);
+        setDraftConflict(null);
+        setDirty(true);
+        setMessage("已恢复冲突草稿；保存时仍需通过当前 revision 校验。");
     }
 
     const primaryActionPending = generateMutation.isPending || reviewUploadMutation.isPending || updateMutation.isPending || reviewMutation.isPending || exportMutation.isPending;
@@ -376,6 +432,16 @@ export default function ContractGenerationHomePage() {
             document={
                 <>
                     {message && <div className="mb-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm text-foreground">{message}</div>}
+                    {draftConflict && (
+                        <div className="mb-2.5 grid gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                            <strong>本地草稿与服务端正文冲突</strong>
+                            <span>本地草稿基于 revision {draftConflict.baseRevision}，服务端已有更新。请选择恢复本地草稿或保留服务端正文。</span>
+                            <div className="flex flex-wrap gap-2">
+                                <Button size="sm" onClick={restoreConflictingDraft}>恢复本地草稿</Button>
+                                <Button size="sm" variant="outline" onClick={keepServerDraft}>保留服务端正文</Button>
+                            </div>
+                        </div>
+                    )}
                     <Suspense fallback={<ContractDocumentLoading />}>
                         <ContractDocumentWorkbench
                             activeTask={activeTask}

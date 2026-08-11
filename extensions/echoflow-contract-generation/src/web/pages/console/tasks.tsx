@@ -187,7 +187,7 @@ export default function ContractTasksConsolePage() {
                                     <dl className="ec-detail-list">
                                         <div><dt>模型 ID</dt><dd className="ec-mono">{detail.modelId || "-"}</dd></div>
                                         <div><dt>Provider ID</dt><dd className="ec-mono">{detail.providerId || "-"}</dd></div>
-                                        <div><dt>导出 URL</dt><dd className="ec-mono">{detail.resultUrl || "-"}</dd></div>
+                                        <div><dt>导出文件</dt><dd className="ec-mono">{detail.providerMetadata?.fileId || "-"}</dd></div>
                                     </dl>
                                     <pre>{JSON.stringify({ requestPayload: detail.requestPayload, providerMetadata: detail.providerMetadata }, null, 2)}</pre>
                                 </article>

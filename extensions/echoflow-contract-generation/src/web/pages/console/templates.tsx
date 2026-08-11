@@ -16,11 +16,10 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
-import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { safeJsonParse } from "@buildingai/stores";
 
-import { useAdminContractTemplatesQuery, useCreateAdminContractTemplateMutation, useDeleteAdminContractTemplateMutation, useResetBuiltinContractTemplatesMutation, useUpdateAdminContractTemplateMutation } from "../../services/console";
+import { useAdminContractTemplatesQuery, useCreateAdminContractTemplateMutation, useDeleteAdminContractTemplateMutation, useOfflineAdminContractTemplateMutation, usePublishAdminContractTemplateMutation, useResetBuiltinContractTemplatesMutation, useUpdateAdminContractTemplateMutation } from "../../services/console";
 import type { AdminContractTemplate, UpsertContractTemplateParams } from "../../services/types";
 
 const emptyTemplate: UpsertContractTemplateParams = {
@@ -31,7 +30,6 @@ const emptyTemplate: UpsertContractTemplateParams = {
     fields: [{ key: "partyA", label: "甲方", type: "text", required: true }, { key: "partyB", label: "乙方", type: "text", required: true }],
     defaultSections: ["合同主体", "合同内容", "费用与付款", "违约责任", "争议解决"],
     promptTemplate: "",
-    isActive: true,
     sortOrder: 0,
 };
 
@@ -40,13 +38,15 @@ export default function ContractTemplatesConsolePage() {
     const createMutation = useCreateAdminContractTemplateMutation();
     const updateMutation = useUpdateAdminContractTemplateMutation();
     const deleteMutation = useDeleteAdminContractTemplateMutation();
+    const publishMutation = usePublishAdminContractTemplateMutation();
+    const offlineMutation = useOfflineAdminContractTemplateMutation();
     const resetMutation = useResetBuiltinContractTemplatesMutation();
     const [editing, setEditing] = useState<AdminContractTemplate | null>(null);
     const [form, setForm] = useState<UpsertContractTemplateParams>(emptyTemplate);
     const [fieldsText, setFieldsText] = useState(JSON.stringify(emptyTemplate.fields, null, 2));
     const [sectionsText, setSectionsText] = useState(emptyTemplate.defaultSections.join("\n"));
     const [message, setMessage] = useState("");
-    const activeCount = useMemo(() => templates.filter((template) => template.isActive).length, [templates]);
+    const publishedCount = useMemo(() => templates.filter((template) => template.status === "published").length, [templates]);
 
     useEffect(() => {
         if (!editing) return;
@@ -95,6 +95,16 @@ export default function ContractTemplatesConsolePage() {
         }
     }
 
+    async function handleLifecycle(template: AdminContractTemplate, action: "publish" | "offline") {
+        try {
+            if (action === "publish") await publishMutation.mutateAsync(template.id);
+            else await offlineMutation.mutateAsync(template.id);
+            setMessage(action === "publish" ? "模板已发布" : "模板已下线");
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "更新发布状态失败");
+        }
+    }
+
     async function handleResetBuiltin() {
         try {
             await resetMutation.mutateAsync();
@@ -132,7 +142,7 @@ export default function ContractTemplatesConsolePage() {
                 <Card className="ec-list-panel">
                     <CardHeader>
                         <CardTitle>模板列表</CardTitle>
-                        <CardDescription>共 {templates.length} 个，启用 {activeCount} 个</CardDescription>
+                        <CardDescription>共 {templates.length} 个，已发布 {publishedCount} 个</CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-3">
                         {templates.map((template) => (
@@ -143,7 +153,8 @@ export default function ContractTemplatesConsolePage() {
                                         <span>{template.industry} / {template.contractType}</span>
                                     </div>
                                     <div className="flex shrink-0 gap-2">
-                                        <Badge variant={template.isActive ? "default" : "outline"}>{template.isActive ? "启用" : "停用"}</Badge>
+                                        <Badge variant={template.status === "published" ? "default" : "outline"}>{template.status === "published" ? "已发布" : template.status === "offline" ? "已下线" : "草稿"}</Badge>
+                                        <Badge variant="outline">v{template.versionNo}</Badge>
                                         {template.isBuiltin ? <Badge variant="outline">内置</Badge> : null}
                                     </div>
                                 </div>
@@ -202,16 +213,18 @@ export default function ContractTemplatesConsolePage() {
                         </div>
                     </details>
 
-                    <section className="flex items-center justify-between gap-4 rounded-md border p-4">
-                        <div>
-                            <h3 className="text-base font-medium">发布状态</h3>
-                            <p className="text-sm text-muted-foreground">启用后用户端可以选择该模板。</p>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                            <Switch checked={form.isActive ?? true} onCheckedChange={(checked) => setForm({ ...form, isActive: checked })} />
-                            启用模板
-                        </div>
-                    </section>
+                    {editing && (
+                        <section className="flex flex-wrap items-center justify-between gap-4 rounded-md border p-4">
+                            <div>
+                                <h3 className="text-base font-medium">发布状态</h3>
+                                <p className="text-sm text-muted-foreground">当前为 {editing.status === "published" ? "已发布" : editing.status === "offline" ? "已下线" : "草稿"} v{editing.versionNo}；已发布或已使用版本保存后会产生新草稿版本。</p>
+                            </div>
+                            <div className="flex gap-2">
+                                {editing.status !== "published" && <Button variant="outline" onClick={() => handleLifecycle(editing, "publish")} disabled={publishMutation.isPending}>发布</Button>}
+                                {editing.status === "published" && <Button variant="outline" onClick={() => handleLifecycle(editing, "offline")} disabled={offlineMutation.isPending}>下线</Button>}
+                            </div>
+                        </section>
+                    )}
 
                     <div className="flex flex-wrap items-center gap-3">
                         {editing ? (
@@ -247,7 +260,7 @@ export default function ContractTemplatesConsolePage() {
 }
 
 function toForm(template: AdminContractTemplate): UpsertContractTemplateParams {
-    return { name: template.name, industry: template.industry, contractType: template.contractType, description: template.description, fields: template.fields, defaultSections: template.defaultSections, promptTemplate: template.promptTemplate ?? "", isActive: template.isActive ?? true, sortOrder: template.sortOrder ?? 0 };
+    return { name: template.name, industry: template.industry, contractType: template.contractType, description: template.description, fields: template.fields, defaultSections: template.defaultSections, promptTemplate: template.promptTemplate ?? "", sortOrder: template.sortOrder ?? 0 };
 }
 
 function parseFields(value: string) {

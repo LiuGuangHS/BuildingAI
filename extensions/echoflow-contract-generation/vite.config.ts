@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { defineExtensionViteConfig } from "@buildingai/web-core/vite/extension";
@@ -30,38 +30,6 @@ export default defineExtensionViteConfig(packageJson, {
                 warn(warning);
             },
         },
-    },
-    resolve: {
-        alias: [
-            {
-                find: /^react-router-dom$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/react-router-dom/dist/index.mjs",
-                ),
-            },
-            {
-                find: /^radix-ui$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/radix-ui/dist/index.mjs",
-                ),
-            },
-            {
-                find: /^zustand\/(.+)$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/zustand/esm/$1.mjs",
-                ),
-            },
-            {
-                find: /^zustand$/,
-                replacement: resolve(
-                    __dirname,
-                    "../../node_modules/.pnpm/node_modules/zustand/esm/index.mjs",
-                ),
-            },
-        ],
     },
     server: {
         open: true,

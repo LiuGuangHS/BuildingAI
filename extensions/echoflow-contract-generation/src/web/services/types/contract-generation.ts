@@ -37,7 +37,8 @@ export type PublicContractTemplate = {
 export type AdminContractTemplate = PublicContractTemplate & {
     promptTemplate?: string | null;
     isBuiltin?: boolean;
-    isActive?: boolean;
+    status: "draft" | "published" | "offline";
+    versionNo: number;
     sortOrder?: number;
 };
 
@@ -51,7 +52,6 @@ export type UpsertContractTemplateParams = {
     fields: ContractTemplateField[];
     defaultSections: string[];
     promptTemplate?: string;
-    isActive?: boolean;
     sortOrder?: number;
 };
 
@@ -75,6 +75,9 @@ export type ContractSection = {
 export type ContractRiskFinding = {
     id?: string;
     sectionId?: string;
+    sourceRevision?: number;
+    sourceVersionId?: string;
+    stale?: boolean;
     kind?: "missing_fact" | "legal_risk" | "clarity" | "enforceability";
     sectionTitle: string;
     level: "low" | "medium" | "high";
@@ -149,6 +152,7 @@ export type AdminContractGenerationConfig = Omit<ContractGenerationConfig, "mode
 };
 
 export type UpdateContractContentParams = {
+    baseRevision: number;
     title?: string;
     summary?: string;
     sections: ContractSection[];
@@ -163,16 +167,6 @@ export type RewriteContractClauseParams = {
 export type RewriteContractClauseResult = {
     content: string;
     reason: string;
-};
-
-export type PublicContractTaskMetadata = {
-    templateName?: unknown;
-    language?: unknown;
-    stance?: unknown;
-    exportedAt?: unknown;
-    exportType?: unknown;
-    billingStatus?: unknown;
-    refundedAt?: unknown;
 };
 
 export type ContractGenerationTask = {
@@ -191,10 +185,10 @@ export type ContractGenerationTask = {
     score?: ContractScore | null;
     riskActions: RiskActions;
     status: ContractGenerationStatus;
-    resultUrl?: string | null;
+    revision: number;
+    exportStatus: "not_exported" | "exporting" | "ready" | "failed";
     errorMessage?: string | null;
     costCredits: number;
-    providerMetadata?: PublicContractTaskMetadata;
     createdAt: string;
     updatedAt: string;
 };
@@ -203,6 +197,7 @@ export type AdminContractGenerationTask = ContractGenerationTask & {
     userId: string;
     modelId?: string;
     providerId?: string;
+    resultUrl?: string | null;
     requestPayload?: Record<string, unknown> | null;
     providerMetadata?: Record<string, unknown>;
 };
@@ -224,9 +219,14 @@ export type ContractGenerationVersion = {
 };
 
 export type UpdateRiskActionParams = {
+    baseRevision: number;
     riskKey: string;
     status: "accepted" | "ignored";
     sections?: ContractSection[];
+};
+
+export type RestoreContractVersionParams = {
+    baseRevision: number;
 };
 
 export type QueryContractTasksParams = {

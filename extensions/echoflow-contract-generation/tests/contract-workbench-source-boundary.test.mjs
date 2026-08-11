@@ -43,12 +43,15 @@ test("contract document editor workbench is lazy-loaded from the user page", () 
     assert.match(page, /<Suspense fallback=\{<ContractDocumentLoading \/>}/);
     assert.match(page, /@buildingai\/ui\/components\/ui\/skeleton/);
     assert.doesNotMatch(page, /import\s+\{\s*ContractDocumentWorkbench\s*\}\s+from\s+"..\/components\/contract-editor\/ContractDocumentEditor"/);
-    for (const forbidden of ["platejs/react", "usePlateEditor", "PlateContent"]) {
-        assert.equal(textEditor.includes(forbidden), false, `${forbidden} should not return to the text editor`);
+    assert.match(textEditor, /@buildingai\/ui\/components\/editor/);
+    for (const required of ["EditorKit", "Plate", "usePlateEditor", "EditorContainer", "Editor"]) {
+        assert.match(textEditor, new RegExp(required));
     }
-    assert.match(textEditor, /<textarea/);
+    for (const forbidden of ["<textarea", "@tiptap", "slate", "lexical"]) {
+        assert.equal(textEditor.toLowerCase().includes(forbidden.toLowerCase()), false, `${forbidden} must not enter the contract editor`);
+    }
     assert.match(textEditor, /disabled=\{!editable\}/);
-    assert.match(textEditor, /onChange=\{\(event\) => onChange\(event\.target\.value\)\}/);
+    assert.match(textEditor, /serializeEditorToMarkdown/);
 });
 
 test("contract risk UI exposes truncation and issue context without new widgets", () => {

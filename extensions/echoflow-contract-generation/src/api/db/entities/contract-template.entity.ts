@@ -42,9 +42,22 @@ export class ContractTemplateEntity {
     @Column({ type: "boolean", default: false, comment: "Whether template is synced from builtin templates" })
     isBuiltin: boolean;
 
-    @Column({ type: "boolean", default: true, comment: "Whether template is active" })
+    @Column({ type: "boolean", default: true, comment: "Legacy active flag" })
     @Index()
     isActive: boolean;
+
+    @Column({ name: "template_status", type: "varchar", length: 20, default: "draft", comment: "Template lifecycle status" })
+    @Index()
+    status: "draft" | "published" | "offline";
+
+    @Column({ name: "template_version_no", type: "int", default: 1, comment: "Immutable template version number" })
+    versionNo: number;
+
+    @Column({ name: "published_at", type: "timestamptz", nullable: true })
+    publishedAt?: Date | null;
+
+    @Column({ name: "offline_at", type: "timestamptz", nullable: true })
+    offlineAt?: Date | null;
 
     @Column({ type: "int", default: 0, comment: "Sort order" })
     sortOrder: number;

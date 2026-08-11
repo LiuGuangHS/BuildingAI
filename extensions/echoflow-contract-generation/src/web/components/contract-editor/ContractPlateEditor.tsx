@@ -1,9 +1,18 @@
+import {
+    Editor,
+    EditorContainer,
+    EditorKit,
+    markdownToValue,
+    Plate,
+    serializeEditorToMarkdown,
+    usePlateEditor,
+} from "@buildingai/ui/components/editor";
 import { useEffect, useRef } from "react";
 
 import type { ContractSection } from "../../services/types";
 import type { DocumentSection } from "./contract-document-model";
 
-type ContractTextEditorProps = {
+type ContractPlateEditorProps = {
     documentId: string;
     editable: boolean;
     sections: DocumentSection[];
@@ -14,8 +23,8 @@ type ContractTextEditorProps = {
     onSectionsChange: (sections: ContractSection[]) => void;
 };
 
-export function ContractPlateEditor({ documentId, editable, sections, sourceSections, selectedSectionIndex, sectionAnnotations, onSelectSection, onSectionsChange }: ContractTextEditorProps) {
-    const sectionRefs = useRef<Array<HTMLDivElement | null>>([]);
+export function ContractPlateEditor({ documentId, editable, sections, sourceSections, selectedSectionIndex, sectionAnnotations, onSelectSection, onSectionsChange }: ContractPlateEditorProps) {
+    const sectionRefs = useRef<Array<HTMLElement | null>>([]);
 
     useEffect(() => {
         sectionRefs.current[selectedSectionIndex]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -25,7 +34,7 @@ export function ContractPlateEditor({ documentId, editable, sections, sourceSect
         const nextSections = sections.map((section, sectionIndex) => {
             const previous = sourceSections[sectionIndex];
             return {
-                id: previous?.id,
+                id: previous?.id ?? section.id,
                 title: section.title,
                 content: sectionIndex === index ? content || "待补充条款内容。" : section.content,
                 importance: previous?.importance ?? section.importance,
@@ -55,7 +64,7 @@ export function ContractPlateEditor({ documentId, editable, sections, sourceSect
                             </span>
                         )}
                     </div>
-                    <SectionTextEditor
+                    <SectionPlateEditor
                         key={`${documentId}:${section.id ?? index}:editor`}
                         documentId={`${documentId}:${section.id ?? index}`}
                         editable={editable}
@@ -68,21 +77,33 @@ export function ContractPlateEditor({ documentId, editable, sections, sourceSect
     );
 }
 
-function SectionTextEditor({ documentId, editable, content, onChange }: { documentId: string; editable: boolean; content: string; onChange: (content: string) => void }) {
-    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+type SectionPlateEditorProps = {
+    documentId: string;
+    editable: boolean;
+    content: string;
+    onChange: (content: string) => void;
+};
 
-    useEffect(() => {
-        textareaRef.current?.scrollTo({ top: 0 });
-    }, [documentId]);
+function SectionPlateEditor({ documentId, editable, content, onChange }: SectionPlateEditorProps) {
+    const editor = usePlateEditor({
+        plugins: EditorKit,
+        id: documentId,
+        value: markdownToValue(content),
+    });
 
     return (
-        <textarea
-            ref={textareaRef}
-            className="contract-text-editor"
-            disabled={!editable}
-            placeholder={editable ? "在这里编辑条款正文..." : "填写左侧合同信息后，可生成正式合同初稿。"}
-            value={content}
-            onChange={(event) => onChange(event.target.value)}
-        />
+        <Plate
+            editor={editor}
+            onValueChange={() => onChange(serializeEditorToMarkdown(editor))}
+        >
+            <EditorContainer className="min-h-36 rounded-lg border bg-background/70">
+                <Editor
+                    variant="none"
+                    className="min-h-36 px-3 py-2 text-sm leading-7"
+                    disabled={!editable}
+                    placeholder={editable ? "在这里编辑条款正文..." : "填写左侧合同信息后，可生成正式合同初稿。"}
+                />
+            </EditorContainer>
+        </Plate>
     );
 }

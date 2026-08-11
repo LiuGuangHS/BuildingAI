@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 const rules = await import("../src/api/modules/contract-generation/services/contract-task-recovery-rules.ts");
+const serviceSource = await import("node:fs").then(({ readFileSync }) => readFileSync(new URL("../src/api/modules/contract-generation/services/contract-generation.service.ts", import.meta.url), "utf8"));
+const processorSource = await import("node:fs").then(({ readFileSync }) => readFileSync(new URL("../src/api/modules/contract-generation/processors/contract-generation.processor.ts", import.meta.url), "utf8"));
 
 const nowMs = Date.parse("2026-06-19T09:00:00.000Z");
 const cutoff = new Date(nowMs - 30 * 60 * 1000);
@@ -109,6 +111,19 @@ test("canClaimContractTaskForProcessing avoids busy processing records with fres
         false,
     );
     assert.equal(rules.canClaimContractTaskForProcessing(task({ status: "success" }), nowMs), false);
+});
+
+test("execution fencing tokens are carried through recovery, jobs, CAS writes, and refund paths", () => {
+    assert.equal(rules.canRecoverContractTask(task({ processingAttemptId: "attempt-a" }), cutoff, nowMs), true);
+    assert.equal(rules.canRecoverContractTask(task({ processingAttemptId: "attempt-b" }), cutoff, nowMs), true);
+    assert.match(serviceSource, /randomUUID\(\)/);
+    assert.match(serviceSource, /processingAttemptId/);
+    assert.match(serviceSource, /currentTask\.processingAttemptId !== processingAttemptId/);
+    assert.match(serviceSource, /expectedAttemptId/);
+    assert.match(serviceSource, /refundTaskCreditsIfNeeded\(taskId, .*expectedAttemptId\)/);
+    assert.match(serviceSource, /const processingAttemptId = task\.processingAttemptId \?\? undefined/);
+    assert.match(serviceSource, /markTaskFailedIfActive\(task\.id, resolution\.status as ContractGenerationStatus, resolution\.message, resolution\.errorKey, processingAttemptId\)/);
+    assert.match(processorSource, /processingAttemptId/);
 });
 
 test("processing lock timeout is 30 minutes, not affected by 5-minute recovery lock", () => {

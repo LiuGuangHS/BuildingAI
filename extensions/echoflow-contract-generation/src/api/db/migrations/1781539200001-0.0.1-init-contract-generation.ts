@@ -29,6 +29,10 @@ export class InitContractGeneration1781539200001 {
                 "prompt_template" text,
                 "is_builtin" boolean NOT NULL DEFAULT false,
                 "is_active" boolean NOT NULL DEFAULT true,
+                "template_status" varchar(20) NOT NULL DEFAULT 'draft',
+                "template_version_no" int NOT NULL DEFAULT 1,
+                "published_at" timestamptz,
+                "offline_at" timestamptz,
                 "sort_order" int NOT NULL DEFAULT 0,
                 "created_at" timestamptz NOT NULL DEFAULT now(),
                 "updated_at" timestamptz NOT NULL DEFAULT now(),
@@ -56,6 +60,8 @@ export class InitContractGeneration1781539200001 {
                 "score" jsonb,
                 "risk_actions" jsonb NOT NULL DEFAULT '{}',
                 "status" varchar(20) NOT NULL DEFAULT 'pending',
+                "revision" int NOT NULL DEFAULT 0,
+                "processing_attempt_id" varchar(80),
                 "result_url" varchar(1024),
                 "error_message" text,
                 "cost_credits" numeric(18,4) NOT NULL DEFAULT 0,
@@ -89,6 +95,8 @@ export class InitContractGeneration1781539200001 {
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_contract_tasks_status" ON "echoflow_contract_generation"."contract_generation_tasks" ("status")`);
         await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_contract_generation_versions_task_version" ON "echoflow_contract_generation"."contract_generation_versions" ("task_id", "version_no")`);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_contract_templates_active_sort" ON "echoflow_contract_generation"."contract_templates" ("is_active", "sort_order")`);
+        await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "uq_contract_templates_published_name_type" ON "echoflow_contract_generation"."contract_templates" ("contract_type", "name") WHERE "template_status" = 'published' AND "deleted_at" IS NULL`);
+        await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_contract_templates_status_sort" ON "echoflow_contract_generation"."contract_templates" ("template_status", "sort_order") WHERE "deleted_at" IS NULL`);
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {

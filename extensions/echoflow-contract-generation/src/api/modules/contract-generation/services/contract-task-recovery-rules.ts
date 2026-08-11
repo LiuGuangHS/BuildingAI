@@ -27,6 +27,7 @@ export type ContractTaskRecoverySnapshot = {
     status: string;
     deletedAt?: Date | string | null;
     updatedAt?: Date;
+    processingAttemptId?: string | null;
     requestPayload?: unknown;
     providerMetadata?: {
         jobType?: unknown;

@@ -1,6 +1,7 @@
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
 
-import type { ContractGenerationTask, ContractRiskFinding, ContractSection, RiskActions } from "../../../db/entities";
+import type { ContractGenerationTask, ContractRiskFinding, RiskActions } from "../../../db/entities";
+import { contractSectionsToDocument, type ContractBlock } from "../../../contract-document-ast";
 
 function paragraph(text: string, options: { bold?: boolean; size?: number; heading?: (typeof HeadingLevel)[keyof typeof HeadingLevel]; alignment?: (typeof AlignmentType)[keyof typeof AlignmentType] } = {}) {
     return new Paragraph({
@@ -21,16 +22,16 @@ function riskParagraph(risk: ContractRiskFinding, index: number, actions: RiskAc
 }
 
 export async function buildContractDocx(task: Pick<ContractGenerationTask, "title" | "summary" | "sections" | "riskFindings" | "legalTerms" | "riskActions">, options: { exportType?: "contract" | "contract_with_report" | "risk_report"; includeRiskReport?: boolean } = {}) {
-    const sections = normalizeSections(task.sections);
+    const document = contractSectionsToDocument(task.sections, { title: task.title });
     const exportType = options.exportType ?? (options.includeRiskReport ? "contract_with_report" : "contract");
     const children: Paragraph[] = exportType === "risk_report" ? [] : [
-        paragraph(task.title, { bold: true, size: 36, alignment: AlignmentType.CENTER }),
+        paragraph(document.title, { bold: true, size: 36, alignment: AlignmentType.CENTER }),
         paragraph(""),
         ...(task.summary ? [paragraph(`合同摘要：${task.summary}`)] : []),
         paragraph(""),
-        ...sections.flatMap((section, index) => [
+        ...document.sections.flatMap((section, index) => [
             paragraph(`第 ${index + 1} 条 ${section.title}`, { bold: true, heading: HeadingLevel.HEADING_2 }),
-            ...section.content.split("\n").filter(Boolean).map((line) => paragraph(line.trim())),
+            ...section.blocks.flatMap(blockToParagraphs),
         ]),
         paragraph(""),
         paragraph("签署栏", { bold: true, heading: HeadingLevel.HEADING_2 }),
@@ -66,6 +67,12 @@ export async function buildContractDocx(task: Pick<ContractGenerationTask, "titl
     return Packer.toBuffer(doc);
 }
 
-function normalizeSections(sections: ContractSection[]) {
-    return (Array.isArray(sections) ? sections : []).filter((section) => section.title?.trim() && section.content?.trim());
+function blockToParagraphs(block: ContractBlock): Paragraph[] {
+    if (block.type === "list") {
+        return block.items.map((item, index) => paragraph(`${block.ordered ? `${index + 1}.` : "•"} ${item}`));
+    }
+    if (block.type === "table") {
+        return block.rows.map((row) => paragraph(row.join(" | ")));
+    }
+    return [paragraph(block.text)];
 }

@@ -25,12 +25,14 @@ export function ContractRiskReasoningPanel(props: {
                 {risks.slice(0, 5).map((risk, index) => {
                     const reasoning = deriveRiskReasoning(risk, index);
                     const action = props.task?.riskActions?.[reasoning.key]?.status;
-                    const sectionIndex = props.task?.sections.findIndex((section) => (risk.sectionId && section.id && risk.sectionId === section.id) || section.title.includes(risk.sectionTitle) || risk.sectionTitle.includes(section.title)) ?? -1;
+                    const sectionIndex = props.task?.sections.findIndex((section) => Boolean(risk.sectionId && section.id === risk.sectionId)) ?? -1;
+                    const isCurrent = Boolean(risk.sectionId && risk.sourceRevision === props.task?.revision && !risk.stale);
                     return (
                         <article key={reasoning.key} className={cn("contract-ai-comment-card grid gap-2 rounded-lg border border-l-4 bg-muted/35 p-2.5", riskBorderClass(risk.level))} data-level={risk.level}>
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <Badge variant={risk.level === "high" ? "destructive" : "secondary"}>{reasoning.severityLabel}</Badge>
                                 {action && <em className="text-xs not-italic text-muted-foreground">{action === "accepted" ? "已采纳" : "已忽略"}</em>}
+                                {!isCurrent && <em className="text-xs not-italic text-amber-700 dark:text-amber-300">旧版本/无证据</em>}
                             </div>
                             <dl className="grid gap-2">
                                 <div><dt className="text-[11px] font-semibold uppercase tracking-normal text-muted-foreground">批注问题</dt><dd className="mt-0.5 text-xs leading-relaxed">{reasoning.riskPoint}</dd></div>
@@ -40,7 +42,7 @@ export function ContractRiskReasoningPanel(props: {
                             </dl>
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <Button size="sm" variant="ghost" onClick={() => sectionIndex >= 0 && props.onSelectSection(sectionIndex)} disabled={sectionIndex < 0}>定位</Button>
-                                <Button size="sm" variant="outline" onClick={() => props.onAcceptRisk(index)} disabled={!reasoning.canApplyRewrite || action === "accepted"}>采纳批注</Button>
+                                <Button size="sm" variant="outline" onClick={() => props.onAcceptRisk(index)} disabled={!reasoning.canApplyRewrite || !isCurrent || action === "accepted"}>采纳批注</Button>
                                 <Button size="sm" variant="ghost" onClick={() => props.onIgnoreRisk(index)} disabled={action === "ignored"}>忽略</Button>
                             </div>
                         </article>

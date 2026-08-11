@@ -32,6 +32,14 @@ export function updateAdminContractTemplate(id: string, params: UpsertContractTe
     return consoleHttpClient.patch<AdminContractTemplate>(`/contract-generation/templates/${id}`, params);
 }
 
+export function publishAdminContractTemplate(id: string) {
+    return consoleHttpClient.post<AdminContractTemplate>(`/contract-generation/templates/${id}/publish`);
+}
+
+export function offlineAdminContractTemplate(id: string) {
+    return consoleHttpClient.post<AdminContractTemplate>(`/contract-generation/templates/${id}/offline`);
+}
+
 export function deleteAdminContractTemplate(id: string) {
     return consoleHttpClient.delete<{ success: boolean }>(`/contract-generation/templates/${id}`);
 }
@@ -79,6 +87,14 @@ export function useCreateAdminContractTemplateMutation() {
 
 export function useUpdateAdminContractTemplateMutation() {
     return useMutation({ mutationFn: ({ id, params }: { id: string; params: UpsertContractTemplateParams }) => updateAdminContractTemplate(id, params), onSuccess: useInvalidateOnSuccess(CONTRACT_TEMPLATES_QUERY_KEY) });
+}
+
+export function usePublishAdminContractTemplateMutation() {
+    return useMutation({ mutationFn: publishAdminContractTemplate, onSuccess: useInvalidateOnSuccess(CONTRACT_TEMPLATES_QUERY_KEY) });
+}
+
+export function useOfflineAdminContractTemplateMutation() {
+    return useMutation({ mutationFn: offlineAdminContractTemplate, onSuccess: useInvalidateOnSuccess(CONTRACT_TEMPLATES_QUERY_KEY) });
 }
 
 export function useDeleteAdminContractTemplateMutation() {

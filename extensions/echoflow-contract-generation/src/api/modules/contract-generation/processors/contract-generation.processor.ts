@@ -8,6 +8,7 @@ import { ContractGenerationService } from "../services";
 
 type ContractGenerationJobData = {
     id?: string;
+    processingAttemptId?: string | null;
 };
 
 @Processor(CONTRACT_GENERATION_QUEUE)
@@ -32,7 +33,7 @@ export class ContractGenerationProcessor extends WorkerHost {
 
         try {
             await job.updateProgress(10);
-            const task = await this.contractGenerationService.executeTaskJob(id, job.name);
+            const task = await this.contractGenerationService.executeTaskJob(id, job.name, job.data?.processingAttemptId ?? undefined);
             await job.updateProgress(100);
             return {
                 success: task?.status === ContractGenerationStatus.DRAFT,
@@ -40,7 +41,7 @@ export class ContractGenerationProcessor extends WorkerHost {
                 status: task?.status ?? "missing",
             };
         } catch (error) {
-            await this.contractGenerationService.markTaskCrashed(id, error);
+            await this.contractGenerationService.markTaskCrashed(id, error, job.data?.processingAttemptId ?? undefined);
             throw error;
         }
     }

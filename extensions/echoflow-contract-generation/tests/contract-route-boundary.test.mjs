@@ -32,13 +32,12 @@ test("contract console JSON inputs reuse the shared safe parser instead of raw J
     assert.doesNotMatch(consoleTemplatesSource, /JSON\.parse\(/);
 });
 
-test("contract non-platform uploaded file URLs are DNS-checked before parsing", () => {
+test("non-local uploaded files use the platform URL safety helpers only as a fallback", () => {
     assert.match(serviceSource, /assertPublicHttpUrl/);
-    assert.match(serviceSource, /private async normalizeStoredFileUrl/);
-    assert.match(serviceSource, /await this\.normalizeStoredFileUrl\(file\.url\)/);
-    assert.match(serviceSource, /value\.startsWith\(`\/\$\{EXTENSION_ID\}\/uploads\/`\) \|\| value\.startsWith\("\/uploads\/"\)/);
-    assert.match(serviceSource, /await assertPublicHttpUrl\(value, \{ label: "合同文件 URL" \}\)/);
-    assert.doesNotMatch(serviceSource, /url\.pathname\.startsWith\(`\/\$\{EXTENSION_ID\}\/uploads\/`\)|url\.pathname\.startsWith\("\/uploads\/"\)/);
+    assert.match(serviceSource, /downloadPublicHttpUrl/);
+    assert.match(serviceSource, /createReadStream\(fileId, \{ extensionId: EXTENSION_ID \}\)/);
+    assert.doesNotMatch(serviceSource, /fileUrl\.startsWith/);
+    assert.doesNotMatch(serviceSource, /url\.pathname\.startsWith/);
 });
 
 test("contract upload review persists extracted contract content", () => {
@@ -49,13 +48,14 @@ test("contract upload review persists extracted contract content", () => {
     assert.match(serviceSource, /sections,/);
 });
 
-test("contract stale cleanup leaves recoverable queue tasks to recovery", () => {
+test("contract stale cleanup leaves recoverable queue tasks to recovery and fences terminal compensation", () => {
     const match = serviceSource.match(/private async failStaleGenerationTasks[\s\S]*?private async claimTaskForRecovery/);
     assert.ok(match, "failStaleGenerationTasks block should exist");
     assert.match(match[0], /if \(canRecoverContractTask\(task, cutoff\)\) continue/);
     assert.match(match[0], /resolveStaleContractTaskResolution\(task\.status\)/);
+    assert.match(match[0], /const processingAttemptId = task\.processingAttemptId \?\? undefined/);
+    assert.match(match[0], /refundTaskCreditsIfNeeded\(task\.id, "AI合同任务超时自动退款", processingAttemptId\)/);
     assert.doesNotMatch(match[0], /const recoverableTasks/);
-    assert.doesNotMatch(match[0], /refundTaskCreditsIfNeeded/);
 });
 
 test("contract failure notifications do not expose internal errors to users", () => {
