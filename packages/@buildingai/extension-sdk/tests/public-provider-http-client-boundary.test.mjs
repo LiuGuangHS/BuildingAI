@@ -54,3 +54,144 @@ test("provider HTTP client centralizes timeout, retry and safe JSON parsing", as
     assert.match(distClientJs, /ProviderHttpError/);
     await Promise.all([access(DIST_CLIENT_DTS), access(DIST_CLIENT_JS)]);
 });
+
+test("provider writes retry only with an explicit idempotency key", async () => {
+    const { requestProviderText } = await import("../dist/utils/provider-http-client.js");
+    const originalFetch = globalThis.fetch;
+    let attempts = 0;
+    const sentKeys = [];
+
+    globalThis.fetch = async (_url, options) => {
+        attempts += 1;
+        sentKeys.push(new Headers(options?.headers).get("Idempotency-Key"));
+        return new Response("unavailable", { status: 503 });
+    };
+
+    try {
+        for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+            attempts = 0;
+            await assert.rejects(() =>
+                requestProviderText("https://1.1.1.1/provider", {
+                    method,
+                    body: "{}",
+                    retryDelayMs: 0,
+                }),
+            );
+            assert.equal(attempts, 1);
+        }
+
+        attempts = 0;
+        sentKeys.length = 0;
+        await assert.rejects(() =>
+            requestProviderText("https://1.1.1.1/provider", {
+                method: "POST",
+                body: "{}",
+                idempotencyKey: "provider-request-1",
+                retryDelayMs: 0,
+            }),
+        );
+        assert.equal(attempts, 3);
+        assert.deepEqual(sentKeys, ["provider-request-1", "provider-request-1", "provider-request-1"]);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test("provider caps explicit retries", async () => {
+    const { requestProviderText } = await import("../dist/utils/provider-http-client.js");
+    const originalFetch = globalThis.fetch;
+    let attempts = 0;
+
+    globalThis.fetch = async () => {
+        attempts += 1;
+        return new Response("unavailable", { status: 503 });
+    };
+
+    try {
+        await assert.rejects(() =>
+            requestProviderText("https://1.1.1.1/provider", {
+                method: "GET",
+                maxRetries: 3,
+                retryDelayMs: 0,
+            }),
+        );
+        assert.equal(attempts, 3);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test("provider never retries authentication failures", async () => {
+    const { requestProviderText } = await import("../dist/utils/provider-http-client.js");
+    const originalFetch = globalThis.fetch;
+    let attempts = 0;
+
+    globalThis.fetch = async () => {
+        attempts += 1;
+        return new Response("unauthorized", { status: 401 });
+    };
+
+    try {
+        await assert.rejects(() =>
+            requestProviderText("https://1.1.1.1/provider", {
+                method: "GET",
+                classifyError: () => new Error("retry"),
+                isRetryableError: () => true,
+                retryDelayMs: 0,
+            }),
+        );
+        assert.equal(attempts, 1);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test("provider rejects conflicting idempotency keys before a request", async () => {
+    const { requestProviderText } = await import("../dist/utils/provider-http-client.js");
+    const originalFetch = globalThis.fetch;
+    let attempts = 0;
+
+    globalThis.fetch = async () => {
+        attempts += 1;
+        return new Response("ok", { status: 200 });
+    };
+
+    try {
+        await assert.rejects(() =>
+            requestProviderText("https://1.1.1.1/provider", {
+                method: "POST",
+                headers: { "idempotency-key": "caller-key" },
+                idempotencyKey: "provider-key",
+            }),
+        );
+        assert.equal(attempts, 0);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test("provider reads retain bounded retry behavior", async () => {
+    const { requestProviderText } = await import("../dist/utils/provider-http-client.js");
+    const originalFetch = globalThis.fetch;
+    let attempts = 0;
+
+    globalThis.fetch = async () => {
+        attempts += 1;
+        return new Response("unavailable", { status: 503 });
+    };
+
+    try {
+        for (const method of ["GET", "HEAD", "OPTIONS"]) {
+            attempts = 0;
+            await assert.rejects(() =>
+                requestProviderText("https://1.1.1.1/provider", {
+                    method,
+                    retryDelayMs: 0,
+                }),
+            );
+            assert.equal(attempts, 3);
+        }
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});

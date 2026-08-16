@@ -30,6 +30,7 @@ test("image manifest declares direct runtime imports", async () => {
         ["class-transformer", "class-transformer is directly imported by DTO modules"],
         ["class-validator", "class-validator is directly imported by DTO modules"],
         ["eslint", "eslint/config is directly imported by eslint.config.mjs"],
+        ["eslint-plugin-react-hooks", "eslint.config.mjs enforces React Hook rules"],
         ["globals", "globals is directly imported by eslint.config.mjs"],
         ["tsup", "tsup Options is directly imported by tsup.config.ts"],
         ["vite", "vite build API is directly imported by scripts/build-web.mjs"],

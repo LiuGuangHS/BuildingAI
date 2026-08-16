@@ -83,6 +83,7 @@ export async function updateProject() {
         // Build project
         Logger.info("Build", "Building project...");
         await executeCommand("pnpm", ["build"], { cwd: rootDir });
+        await executeCommand("node", ["scripts/release.mjs"], { cwd: rootDir });
         Logger.success("Build", "Project built successfully.");
 
         Logger.success("Update", "Project update completed successfully!");
@@ -120,7 +121,7 @@ export async function updateProjectWithGit() {
         Logger.info("Git", "  2. Then manually pull once: git pull");
         Logger.info("Git", "  3. Credentials will be saved for future use");
         Logger.info("Git", "Or use SSH keys for passwordless authentication.");
-        console.log(""); // Empty line for better readability
+        Logger.info("Git", "");
 
         // Reset local changes before pulling
         Logger.info("Git", "Discarding local changes...");
@@ -189,6 +190,7 @@ export async function updateProjectWithGit() {
         // Build project
         Logger.info("Build", "Building project...");
         await executeCommand("pnpm", ["build"], { cwd: rootDir });
+        await executeCommand("node", ["scripts/release.mjs"], { cwd: rootDir });
         Logger.success("Build", "Project built successfully.");
 
         Logger.success("Update", "Project update with git pull completed successfully!");

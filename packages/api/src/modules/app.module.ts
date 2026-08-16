@@ -85,6 +85,7 @@ export class AppModule {
                     exclude: [
                         `${webApiPrefix}{/*path}`,
                         `${consoleApiPrefix}{/*path}`,
+                        "/manifest.webmanifest",
                         ...extensionsList.flatMap((extension) => [
                             `/extension/${extension.identifier}`,
                             `/${extension.name}`,

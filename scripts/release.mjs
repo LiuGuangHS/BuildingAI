@@ -1,5 +1,6 @@
-import { existsSync, readdirSync } from "node:fs";
-import { chmod, cp, mkdir, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { chmod, cp, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import chalk from "chalk";
@@ -70,6 +71,14 @@ async function release() {
         // Copy dist -> public/web
         await mkdir(releasePath, { recursive: true });
         await cp(distPath, releasePath, { recursive: true, force: true });
+
+        const indexContent = readFileSync(path.join(distPath, "index.html"));
+        const buildVersion = createHash("sha256").update(indexContent).digest("hex").slice(0, 12);
+        const serviceWorkerPath = path.join(releasePath, "sw.js");
+        if (existsSync(serviceWorkerPath)) {
+            const serviceWorker = readFileSync(serviceWorkerPath, "utf8").replaceAll("__BUILD_VERSION__", buildVersion);
+            await writeFile(serviceWorkerPath, serviceWorker, "utf8");
+        }
 
         const files = readdirSync(releasePath);
         console.log(chalk.blue(`� Copied ${files.length} items to public/web`));

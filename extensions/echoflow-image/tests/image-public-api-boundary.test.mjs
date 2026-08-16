@@ -269,7 +269,7 @@ test("image public web hides image continuation when runtime model options do no
     assert.match(indexSource, /onOpenCanvas=\{\(\) => setWorkspaceMode\("canvas"\)\}/);
     assert.match(indexSource, /onContinueFromImage=\{canContinueFromImage \? handleContinueFromImage : undefined\}/);
     assert.match(flowSource, /const canContinueFromImage = Boolean\(onContinueFromImage\)/);
-    assert.match(flowSource, /disabled=\{!image\.src \|\| !canContinueFromImage\}/);
+    assert.match(flowSource, /disabled=\{!image\.image\.fileId \|\| !canContinueFromImage\}/);
     assert.match(flowSource, /待模型支持/);
     assert.match(serviceSource, /assertRuntimeGenerationSupported\(this\.getRequestedReservedCapabilities\(dto\)\)/);
     assert.match(serviceSource, /getRequestedReservedCapabilities/);
@@ -497,8 +497,9 @@ test("image web fetches protected result media through the authenticated plugin 
         readFile(FLOW_CANVAS_FILE, "utf8"),
         readFile(new URL("../src/web/components/canvas/inspiration-board.tsx", import.meta.url), "utf8"),
     ]);
-    assert.match(flowSource, /resolveImageSrc\(image, generation\.id\)/);
-    assert.match(boardSource, /resolveImageSrc\(image, generation\?\.id\)/);
+    assert.match(flowSource, /<ControlledImage[\s\S]*generationId=\{group\.generationId\}/);
+    assert.doesNotMatch(flowSource, /resolveImageSrc\(image, generation\.id\)/);
+    assert.doesNotMatch(boardSource, /resolveImageSrc\(image, generation\?\.id\)/);
     assert.match(httpClientSource, /responseType: "blob"/);
     assert.match(source, /URL\.createObjectURL/);
     assert.match(source, /URL\.revokeObjectURL/);

@@ -43,8 +43,8 @@ function handleHttpError(error: HttpError): void {
 
 async function handleAuthError(error: unknown): Promise<void> {
     if (error && typeof error === "object" && "response" in error) {
-        const axiosError = error as AxiosError<{ message?: string }>;
-        const message = axiosError.response?.data?.message;
+        const axiosError = error as AxiosError<{ code?: string; message?: string }>;
+        const message = getBusinessErrorMessage(axiosError.response?.data?.code) ?? axiosError.response?.data?.message;
         if (message) {
             toast.error(message);
         }
@@ -111,8 +111,8 @@ function getPluginIdentifierFromUrl(): string {
 
 async function handlePluginAuthError(error: unknown): Promise<void> {
     if (error && typeof error === "object" && "response" in error) {
-        const axiosError = error as AxiosError<{ message?: string }>;
-        const message = axiosError.response?.data?.message;
+        const axiosError = error as AxiosError<{ code?: string; message?: string }>;
+        const message = getBusinessErrorMessage(axiosError.response?.data?.code) ?? axiosError.response?.data?.message;
         if (message) {
             toast.error(message);
         }

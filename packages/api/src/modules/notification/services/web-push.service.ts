@@ -151,11 +151,11 @@ export class WebPushService {
                 throw new ConflictException("Push subscription belongs to another user");
             }
             await this.pushSubscriptionRepository.update(existing.id, payload);
-            return { enabled: true };
+            return this.getStatus(userId);
         }
 
         await this.pushSubscriptionRepository.save(this.pushSubscriptionRepository.create(payload));
-        return { enabled: true };
+        return this.getStatus(userId);
     }
 
     async unsubscribe(userId: string, dto: UnsubscribePushDto) {
@@ -168,7 +168,7 @@ export class WebPushService {
             await this.pushSubscriptionRepository.update({ userId }, { isEnabled: false });
         }
 
-        return { enabled: false };
+        return this.getStatus(userId);
     }
 
     async sendWakeup(userId: string) {

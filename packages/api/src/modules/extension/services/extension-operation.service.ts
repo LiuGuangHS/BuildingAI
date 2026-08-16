@@ -15,11 +15,11 @@ import {
     FileUploadService,
 } from "@buildingai/core/modules";
 import { BaseSeeder } from "@buildingai/db";
+import { downloadPublicHttpUrl } from "@buildingai/extension-sdk";
 import { SeedRunner } from "@buildingai/db/seeds";
 import { DataSource } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { TerminalLogger } from "@buildingai/logger";
-import { createHttpClient, HttpClientInstance } from "@buildingai/utils";
 import { ExtensionFeatureScanService } from "@common/modules/auth/services/extension-feature-scan.service";
 import { Injectable, Logger } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
@@ -32,13 +32,16 @@ import { v4 as uuidv4 } from "uuid";
 import { Pm2Service } from "../../pm2/services/pm2.service";
 import { ExtensionMarketService } from "./extension-market.service";
 
+const MAX_PLUGIN_ARCHIVE_ENTRIES = 1_000;
+const MAX_PLUGIN_ARCHIVE_ENTRY_BYTES = 25 * 1024 * 1024;
+const MAX_PLUGIN_ARCHIVE_BYTES = 100 * 1024 * 1024;
+
 /**
  * Extension market service
  */
 @Injectable()
 export class ExtensionOperationService {
     private readonly logger = new Logger(ExtensionOperationService.name);
-    private readonly httpClient: HttpClientInstance;
     private readonly rootDir: string;
     private readonly tempDir: string;
     private readonly extensionsDir: string;
@@ -77,17 +80,6 @@ export class ExtensionOperationService {
         this.locksDir = path.join(this.rootDir, "storage", "locks");
         fs.ensureDirSync(this.locksDir);
 
-        this.httpClient = createHttpClient({
-            timeout: 30000,
-            autoTransformResponse: false,
-            retryConfig: {
-                retries: 2,
-                retryDelay: 1000,
-            },
-            logConfig: {
-                enableErrorLog: true,
-            },
-        });
     }
 
     // Lock file names
@@ -362,17 +354,19 @@ export class ExtensionOperationService {
 
             const baseName = this.buildPackageBaseName(identifier, version);
 
-            const response = await this.httpClient.get(url, {
-                responseType: "arraybuffer",
+            const response = await downloadPublicHttpUrl(url, {
+                label: "扩展包",
+                urlLabel: "扩展包下载地址",
             });
+            if (!response.ok) {
+                throw HttpErrorFactory.badRequest(`扩展包下载失败: ${response.status}`);
+            }
+            if (!this.isZipPackage(response.buffer)) {
+                throw HttpErrorFactory.badRequest("扩展包不是有效 ZIP 文件");
+            }
 
-            const axiosResponse = response as unknown as {
-                data: Buffer;
-                headers: Record<string, string | undefined>;
-            };
-
-            let fileName = this.extractFileNameFromUrl(url);
-            const contentDisposition = axiosResponse.headers?.["content-disposition"];
+            let fileName = this.extractFileNameFromUrl(response.url.toString());
+            const contentDisposition = response.headers["content-disposition"];
             if (contentDisposition) {
                 const fileNameMatch = contentDisposition.match(
                     /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
@@ -390,7 +384,7 @@ export class ExtensionOperationService {
             const finalFileName = `${baseName}${extension}`;
             const filePath = path.join(this.tempDir, finalFileName);
 
-            await fs.writeFile(filePath, axiosResponse.data);
+            await fs.writeFile(filePath, response.buffer);
 
             const pluginDir = await this.extractPluginPackage(filePath, identifier, type);
 
@@ -404,6 +398,10 @@ export class ExtensionOperationService {
             const reason = error instanceof Error ? error.message : String(error);
             throw HttpErrorFactory.badRequest(`Download extension failed: ${reason}`);
         }
+    }
+
+    private isZipPackage(buffer: Buffer): boolean {
+        return buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
     }
 
     /**
@@ -553,6 +551,7 @@ export class ExtensionOperationService {
         await fs.ensureDir(tempExtractDir);
 
         try {
+            this.assertPluginArchiveEntries(zip);
             zip.extractAllTo(tempExtractDir, true);
 
             const sourceDir = await this.resolvePluginRoot(tempExtractDir);
@@ -604,6 +603,31 @@ export class ExtensionOperationService {
             return targetDir;
         } finally {
             await fs.remove(tempExtractDir).catch(() => undefined);
+        }
+    }
+
+    private assertPluginArchiveEntries(zip: AdmZip): void {
+        const entries = zip.getEntries();
+        if (entries.length > MAX_PLUGIN_ARCHIVE_ENTRIES) {
+            throw HttpErrorFactory.badRequest("Plugin package has too many files");
+        }
+
+        let totalBytes = 0;
+        for (const entry of entries) {
+            const entryName = entry.entryName.replace(/\\/g, "/");
+            if (entryName.startsWith("/") || entryName.split("/").includes("..")) {
+                throw HttpErrorFactory.badRequest("Plugin package contains an invalid file path");
+            }
+            if (entry.isDirectory) continue;
+
+            const size = entry.header.size;
+            if (size > MAX_PLUGIN_ARCHIVE_ENTRY_BYTES) {
+                throw HttpErrorFactory.badRequest("Plugin package contains an oversized file");
+            }
+            totalBytes += size;
+            if (totalBytes > MAX_PLUGIN_ARCHIVE_BYTES) {
+                throw HttpErrorFactory.badRequest("Plugin package is too large when extracted");
+            }
         }
     }
 

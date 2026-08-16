@@ -12,6 +12,7 @@ export interface ProviderHttpRequestOptions {
     timeoutMs?: number;
     maxRetries?: number;
     retryDelayMs?: number;
+    idempotencyKey?: string;
     serviceLabel?: string;
     badRequestLabel?: string;
     defaultHeaders?: Record<string, string>;
@@ -28,21 +29,30 @@ export interface ProviderHttpErrorContext {
 }
 
 const MAX_PROVIDER_RESPONSE_BYTES = 1024 * 1024;
+const MAX_PROVIDER_RETRIES = 2;
+const AUTHENTICATION_FAILURE = Symbol("providerAuthenticationFailure");
+
+type AuthenticationFailure = Error & { [AUTHENTICATION_FAILURE]?: true };
 
 export class ProviderHttpError extends Error {
     readonly retryable: boolean;
+    readonly authenticationFailure: boolean;
 
-    constructor(message: string, retryable = false) {
+    constructor(message: string, retryable = false, authenticationFailure = false) {
         super(message);
         this.name = "ProviderHttpError";
         this.retryable = retryable;
+        this.authenticationFailure = authenticationFailure;
     }
 }
 
 export async function requestProviderText(url: string, options: ProviderHttpRequestOptions): Promise<string> {
+    assertNoConflictingIdempotencyKey(options);
     const safeUrl = await assertPublicHttpUrl(url, { label: options.serviceLabel ?? "Provider URL" });
     let lastError: Error | undefined;
-    const maxRetries = options.maxRetries ?? 2;
+    const maxRetries = canRetryProviderRequest(options)
+        ? Math.min(normalizeMaxRetries(options.maxRetries), MAX_PROVIDER_RETRIES)
+        : 0;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
@@ -135,6 +145,7 @@ async function executeProviderTextRequest(
             headers: {
                 ...options.defaultHeaders,
                 ...options.headers,
+                ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
             },
             body: options.body,
             signal: controller.signal,
@@ -149,6 +160,11 @@ async function executeProviderTextRequest(
                 serviceLabel: options.serviceLabel ?? "Provider",
                 badRequestLabel: options.badRequestLabel ?? "Provider 请求参数有误",
             };
+            if (response.status === 401 || response.status === 403) {
+                const error = classifyProviderHttpError(context) as AuthenticationFailure;
+                error[AUTHENTICATION_FAILURE] = true;
+                throw error;
+            }
             throw options.classifyError?.(context) ?? classifyProviderHttpError(context);
         }
         return responseText;
@@ -213,7 +229,26 @@ function classifyProviderHttpError(context: ProviderHttpErrorContext): Error {
     }
 }
 
+function normalizeMaxRetries(value: number | undefined): number {
+    if (value === undefined) return MAX_PROVIDER_RETRIES;
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+function assertNoConflictingIdempotencyKey(options: ProviderHttpRequestOptions): void {
+    if (!options.idempotencyKey) return;
+
+    const headers = [options.defaultHeaders, options.headers].filter(Boolean) as Record<string, string>[];
+    if (headers.some((entry) => Object.keys(entry).some((name) => name.toLowerCase() === "idempotency-key"))) {
+        throw HttpErrorFactory.badRequest("Provider 请求的幂等键重复定义");
+    }
+}
+
+function canRetryProviderRequest(options: ProviderHttpRequestOptions): boolean {
+    return ["GET", "HEAD", "OPTIONS"].includes(options.method.toUpperCase()) || Boolean(options.idempotencyKey);
+}
+
 function isRetryableProviderError(error: Error, options: ProviderHttpRequestOptions): boolean {
+    if ((error as AuthenticationFailure)[AUTHENTICATION_FAILURE]) return false;
     if (error instanceof ProviderHttpError) return error.retryable;
     if (options.isRetryableError?.(error)) return true;
     const message = error.message || "";

@@ -83,11 +83,9 @@ const NoticeSetting = () => {
   );
   const subscribeMutation = useSubscribeNotificationPushMutation({
     onSuccess: () => toast.success("应用通知已开启"),
-    onError: (error: Error) => toast.error(error.message || "开启应用通知失败"),
   });
   const unsubscribeMutation = useUnsubscribeNotificationPushMutation({
     onSuccess: () => toast.success("应用通知已关闭"),
-    onError: (error: Error) => toast.error(error.message || "关闭应用通知失败"),
   });
   const testMutation = useCreateTestNotificationMutation({
     onSuccess: () => toast.success("测试通知已发送，请留意系统通知"),
@@ -99,51 +97,59 @@ const NoticeSetting = () => {
   });
 
   const enablePush = async () => {
-    if (!pushSupported) {
-      toast.error("当前浏览器不支持应用通知");
-      return;
+    try {
+      if (!pushSupported) {
+        toast.error("当前浏览器不支持应用通知");
+        return;
+      }
+
+      const publicKey = pushPublicKeyQuery.data?.publicKey;
+      if (!publicKey) {
+        toast.error("通知公钥还未准备好，请稍后重试");
+        return;
+      }
+
+      const nextPermission =
+        Notification.permission === "default"
+          ? await Notification.requestPermission()
+          : Notification.permission;
+      setPermission(nextPermission);
+
+      if (nextPermission !== "granted") {
+        toast.error("浏览器未授予通知权限");
+        return;
+      }
+
+      const applicationServerKey = urlBase64ToUint8Array(publicKey);
+      const registration = await navigator.serviceWorker.ready;
+      const existing = await registration.pushManager.getSubscription();
+      const canReuseExisting = Boolean(existing && usesApplicationServerKey(existing, applicationServerKey));
+      if (existing && !canReuseExisting) {
+        await existing.unsubscribe();
+      }
+      const subscription =
+        existing && canReuseExisting
+          ? existing
+          : await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey,
+            });
+
+      await subscribeMutation.mutateAsync(serializeSubscription(subscription));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "开启应用通知失败");
     }
-
-    const publicKey = pushPublicKeyQuery.data?.publicKey;
-    if (!publicKey) {
-      toast.error("通知公钥还未准备好，请稍后重试");
-      return;
-    }
-
-    const nextPermission =
-      Notification.permission === "default"
-        ? await Notification.requestPermission()
-        : Notification.permission;
-    setPermission(nextPermission);
-
-    if (nextPermission !== "granted") {
-      toast.error("浏览器未授予通知权限");
-      return;
-    }
-
-    const applicationServerKey = urlBase64ToUint8Array(publicKey);
-    const registration = await navigator.serviceWorker.ready;
-    const existing = await registration.pushManager.getSubscription();
-    const canReuseExisting = Boolean(existing && usesApplicationServerKey(existing, applicationServerKey));
-    if (existing && !canReuseExisting) {
-      await existing.unsubscribe();
-    }
-    const subscription =
-      existing && canReuseExisting
-        ? existing
-        : await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey,
-          });
-
-    await subscribeMutation.mutateAsync(serializeSubscription(subscription));
   };
 
   const disablePush = async () => {
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.getSubscription();
-    await unsubscribeMutation.mutateAsync({ endpoint: subscription?.endpoint });
-    await subscription?.unsubscribe();
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      await unsubscribeMutation.mutateAsync({ endpoint: subscription?.endpoint });
+      await subscription?.unsubscribe();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "关闭应用通知失败");
+    }
   };
 
   const handlePushChange = (checked: boolean) => {

@@ -45,8 +45,15 @@ const MainLayout = () => {
     description: websiteConfig?.webinfo.description,
     icon: websiteConfig?.webinfo.icon || `/echoflowai-favicon.ico?t=${new Date().getTime()}`,
   });
-  useOrganizationStructuredData();
-  useWebApplicationStructuredData();
+  useOrganizationStructuredData({
+    name: websiteConfig?.webinfo.name || "清云AI",
+    description: websiteConfig?.webinfo.description,
+    logo: websiteConfig?.webinfo.icon,
+  });
+  useWebApplicationStructuredData({
+    name: websiteConfig?.webinfo.name || "清云AI",
+    description: websiteConfig?.webinfo.description,
+  });
   useRefreshUser();
   useRefreshUserConfig();
 

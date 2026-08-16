@@ -1,6 +1,6 @@
 /* global self, URL, caches, fetch */
 
-const CACHE_NAME = "echoflowai-v3";
+const CACHE_NAME = "echoflowai-b90a407df13d";
 const STATIC_ASSETS = [
   "/",
   "/manifest.webmanifest",

@@ -24,7 +24,10 @@ import { ConsoleController } from "@common/decorators/controller.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import { ExtensionFeatureScanService } from "@common/modules/auth/services/extension-feature-scan.service";
 import {
+    ActivationCodeParamDto,
     DownloadExtensionDto,
+    ExtensionIdentifierParamDto,
+    InstallByActivationCodeDto,
     SetPlatformSecretDto,
 } from "@modules/extension/dto/extension-manager.dto";
 import { ExtensionMarketService } from "@modules/extension/services/extension-market.service";
@@ -125,9 +128,9 @@ export class ExtensionConsoleController extends BaseController {
         hidden: true,
     })
     @BuildFileUrl(["**.icon"])
-    async install(@Param("identifier") identifier: string, @Body() dto: DownloadExtensionDto) {
+    async install(@Param() params: ExtensionIdentifierParamDto, @Body() dto: DownloadExtensionDto) {
         return await this.extensionOperationService.install(
-            identifier,
+            params.identifier,
             dto.version,
             this.extensionMarketService,
         );
@@ -142,11 +145,11 @@ export class ExtensionConsoleController extends BaseController {
         name: "通过兑换码安装应用",
     })
     async installByActivationCode(
-        @Param("activationCode") activationCode: string,
-        @Body() dto: DownloadExtensionDto,
+        @Param() params: ActivationCodeParamDto,
+        @Body() dto: InstallByActivationCodeDto,
     ) {
         return await this.extensionOperationService.installByActivationCode(
-            activationCode,
+            params.activationCode,
             dto.identifier,
             dto.version,
             this.extensionMarketService,
@@ -161,9 +164,9 @@ export class ExtensionConsoleController extends BaseController {
         code: "upgrade-content",
         name: "升级应用",
     })
-    async upgradeContent(@Param("identifier") identifier: string) {
+    async upgradeContent(@Param() params: ExtensionIdentifierParamDto) {
         return await this.extensionOperationService.upgradeContent(
-            identifier,
+            params.identifier,
             this.extensionMarketService,
         );
     }
@@ -177,8 +180,8 @@ export class ExtensionConsoleController extends BaseController {
         name: "通过兑换码安装应用",
     })
     @BuildFileUrl(["**.icon"])
-    async getApplicationByActivationCode(@Param("activationCode") activationCode: string) {
-        return await this.extensionMarketService.getApplicationByActivationCode(activationCode);
+    async getApplicationByActivationCode(@Param() params: ActivationCodeParamDto) {
+        return await this.extensionMarketService.getApplicationByActivationCode(params.activationCode);
     }
 
     /**
@@ -190,9 +193,9 @@ export class ExtensionConsoleController extends BaseController {
         name: "更新应用",
     })
     @BuildFileUrl(["**.icon"])
-    async upgrade(@Param("identifier") identifier: string) {
+    async upgrade(@Param() params: ExtensionIdentifierParamDto) {
         return await this.extensionOperationService.upgrade(
-            identifier,
+            params.identifier,
             this.extensionMarketService,
         );
     }
@@ -760,58 +763,9 @@ export class ExtensionConsoleController extends BaseController {
             manifest = await fs.readJson(manifestPath);
         }
 
-        // Try to load consoleMenu from compiled router.options.js first
-        let consoleMenu = null;
-        const routerOptionsBuildPath = path.join(extensionDir, "build", "web", "router.options.js");
-        const routerOptionsSourcePath = path.join(extensionDir, "src", "web", "router.options.ts");
-
-        // Try to load from build output first (if exists)
-        if (await fs.pathExists(routerOptionsBuildPath)) {
-            try {
-                // Clear require cache to ensure fresh load
-                delete require.cache[require.resolve(routerOptionsBuildPath)];
-                const routerOptionsModule = require(routerOptionsBuildPath);
-                consoleMenu = routerOptionsModule.consoleMenu || null;
-            } catch (error) {
-                // If require fails, fall back to parsing source file
-                console.warn(`Failed to load router.options.js: ${error}`);
-            }
-        }
-
-        // If build file doesn't exist or load failed, parse source TypeScript file
-        if (!consoleMenu && (await fs.pathExists(routerOptionsSourcePath))) {
-            try {
-                const content = await fs.readFile(routerOptionsSourcePath, "utf-8");
-
-                // Extract consoleMenu array using regex
-                const match = content.match(
-                    /export\s+(?:const|let)\s+consoleMenu[^=]*=\s*(\[[\s\S]*?\]);/,
-                );
-
-                if (match && match[1]) {
-                    // Remove comments
-                    let arrayContent = match[1]
-                        .replace(/\/\*[\s\S]*?\*\//g, "")
-                        .replace(/\/\/.*$/gm, "");
-
-                    // Replace import() calls with null (we don't need component functions in backend)
-                    arrayContent = arrayContent.replace(/\(\)\s*=>\s*import\([^)]+\)/g, "null");
-
-                    // Parse the array
-                    try {
-                        consoleMenu = new Function(`return ${arrayContent}`)();
-                    } catch (parseError) {
-                        console.warn("Failed to parse consoleMenu:", parseError);
-                    }
-                }
-            } catch (error) {
-                console.warn(`Failed to read router.options.ts: ${error}`);
-            }
-        }
-
         return {
             manifest,
-            consoleMenu,
+            consoleMenu: null,
         };
     }
 }

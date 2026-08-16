@@ -162,7 +162,6 @@ export function GenerationForm({ loading, models, modelsLoading, disabledReason,
         const initialModel = models.find((item) => item.modelConfigId === initialValues.modelConfigId);
         const initialMode = inferModeFromMedia(initialValues.media, initialModel);
         setUnavailableInitialModelId(initialValues.modelConfigId && !initialModel ? initialValues.modelConfigId : undefined);
-        setUnavailableInitialModelId(initialValues.modelConfigId && !initialModel ? initialValues.modelConfigId : undefined);
         setMode(getDefaultMode(models, initialMode));
         if (initialValues.prompt) setPrompt(initialValues.prompt);
         if (initialValues.originalPrompt) setOriginalPrompt(initialValues.originalPrompt);

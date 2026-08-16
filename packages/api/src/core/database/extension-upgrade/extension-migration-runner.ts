@@ -219,38 +219,13 @@ export class ExtensionMigrationRunner {
                 `[${this.extensionIdentifier}] Completed: ${migration.name}`,
             );
         } catch (error) {
-            const errorMessage = error.message || "";
-            const isIdempotentError =
-                errorMessage.includes("already exists") ||
-                errorMessage.includes("duplicate key") ||
-                errorMessage.includes("already defined") ||
-                (error.code && ["42701", "42P07", "23505"].includes(error.code));
-
-            if (isIdempotentError) {
-                this.logger.warn(
-                    `[${this.extensionIdentifier}] Migration ${migration.name} encountered idempotent error (likely already applied), marking as completed`,
-                );
-                TerminalLogger.log(
-                    "Extension Migration",
-                    `[${this.extensionIdentifier}] Skipped (already applied): ${migration.name}`,
-                );
-
-                try {
-                    await this.recordMigrationExecution(migration);
-                } catch (recordError) {
-                    if (!recordError.message?.includes("duplicate key")) {
-                        throw recordError;
-                    }
-                }
-                return;
-            }
-
+            const message = error instanceof Error ? error.message : String(error);
             this.logger.error(
-                `[${this.extensionIdentifier}] Migration failed: ${migration.name} - ${error.message}`,
+                `[${this.extensionIdentifier}] Migration failed: ${migration.name} - ${message}`,
             );
             TerminalLogger.error(
                 "Extension Migration",
-                `[${this.extensionIdentifier}] Failed: ${migration.name} - ${error.message}`,
+                `[${this.extensionIdentifier}] Failed: ${migration.name} - ${message}`,
             );
             throw error;
         }
