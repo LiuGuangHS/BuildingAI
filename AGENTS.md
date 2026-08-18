@@ -17,22 +17,22 @@ Layered documentation is not automatically read by every agent. When details are
 | Task | Read / invoke |
 |---|---|
 | Cross-repository rules, architecture, or boundaries | `AGENTS.md`, `CLAUDE.md` |
-| API / auth / Secret / upload / queue / billing / DB | `packages/api/ai-rules.md`, relevant source, `security-boundary-reviewer` |
+| API / auth / Secret / upload / queue / billing / DB | `packages/api/ai-rules.md`, relevant source, relevant tests, and ECC security review when applicable |
 | Client | `packages/client/README.md`, `packages/client/package.json`, relevant route/page |
 | Shared package | Read the nearest `package.json`, README, `src/index.ts`, or exports; do not infer a filesystem path from a package name. `@buildingai/core` is at `packages/core`. |
 | Ordinary extension source bugfix | Relevant plugin README section, `package.json`, and the source named by the stack trace; do not invoke a reviewer by default. |
 | Local extension Web build failure | README build/risk section, `package.json`, Vite config, and build wrapper; by default do not read manifest/registry or invoke UI workflow, reviewer, or release skills. |
-| Extension metadata / dependencies / SDK exports / release boundary | Plugin README, `package.json`, `manifest.json`, `extensions/extensions.json` when relevant, and `extension-boundary-reviewer` |
-| Plugin UI design / Design Gallery / frontend-backend UI contract | `.claude/design-workflow.md`, target plugin README, and `echoflow-ui-workflow` |
+| Extension metadata / dependencies / SDK exports / release boundary | Plugin README, `package.json`, `manifest.json`, `extensions/extensions.json` when relevant, plus targeted tests and ECC review |
+| Plugin UI design / Design Gallery / frontend-backend UI contract | Target plugin README, route/source contracts, and ECC UI/security review when applicable |
 | Plugin roadmap or handoff | Target plugin `README.md`, `ROADMAP.md` when present, the matching plugin skill, current source, and verification evidence |
 | Extension release / delivery | `/extension-release-check` |
 | Cross-package, root configuration, or unclear verification scope | `/repo-verify`; for a localized package change, use the smallest checks from the target `package.json` |
-| Skills / reviewers / hooks | `skills/README.md`, `skill-developer`, `scripts/sync-skills.mjs`, and `scripts/check-agent-governance.mjs` |
+| Skills and workflow guidance | `skills/README.md`, `skill-developer`, and `scripts/sync-skills.mjs` |
 | New external-library APIs | Prefer Context7 from the Codex runtime; when unavailable, use the library's official documentation. Do not restore a project-level `.claude/mcp` launcher. |
 
-Reviewers inspect only the explicit diff for the current task: `extension-boundary-reviewer` covers metadata, dependencies, SDK, and release; `security-boundary-reviewer` covers API, Secret, upload, transactions, queues, and billing; `extension-ui-contract-reviewer` covers Web UI, public capability, and Design Gallery; `astrology-domain-reviewer` covers the astrology domain. Independent reviews may run in parallel; the primary agent owns deduplication, changes, and final verification.
+Review only the explicit diff for the current task. Keep extension metadata, API security, UI/public-contract, and domain checks scoped to the changed boundary; the primary agent owns deduplication, changes, and final verification.
 
-When the active Claude Code environment provides ECC, use it as the default development harness for every implementation, bugfix, refactor, build/config change, and release-preparation task—not only for high-risk work. ECC does not replace BuildingAI project reviewers and its external plugin capabilities are not repository-native features. If ECC is unavailable, state why and use the equivalent repository-native checks.
+When the active Claude Code environment provides ECC, use it as the default development harness for every implementation, bugfix, refactor, build/config change, and release-preparation task. If ECC is unavailable, state why and use the equivalent repository-native checks.
 
 ### ECC Default Development Lifecycle
 
@@ -40,12 +40,12 @@ Apply this sequence once per development task; skip a stage only when its stated
 
 1. **Plan**: start with `/ecc:plan` to restate requirements, ground the approach in the repository, identify risks, and define acceptance/verification. Use `/ecc:plan-prd` when a durable PRD is needed.
 2. **Implement**: use `/ecc:tdd-workflow` for behavior changes, bugs, and refactors; write and run the smallest relevant test before production edits, then verify GREEN. Pure documentation or mechanical configuration edits still require a focused syntax/policy check.
-3. **Review**: run `/ecc:code-review` after the implementation or configuration change. For BuildingAI-specific boundaries, use the matching project reviewer as well; ECC general review is supplementary.
-4. **Verify**: run `/ecc:verification-loop` and the path-aware `repo-verify`/target package checks. Do not replace narrow project checks with a broad command when the repository provides a smaller sufficient one.
+3. **Review**: run `/ecc:code-review` after the implementation or configuration change.
+4. **Verify**: run `/ecc:verification-loop` and the smallest path-aware package checks. Do not replace narrow project checks with a broad command when the repository provides a smaller sufficient one.
 5. **Repair**: use `/ecc:build-fix` only when a real build or typecheck failure occurs; do not invoke it speculatively.
-6. **Document and hand off**: use `/ecc:update-docs` when source-of-truth documentation changed, and record the ECC stages, project reviewers, commands, results, and intentional skips in the handoff.
+6. **Document and hand off**: use `/ecc:update-docs` when source-of-truth documentation changed, and record the commands, results, and intentional skips in the handoff.
 
-For Auth, Secrets, URLs/downloads, uploads, migrations, queues, billing, and release boundaries, also run `security-boundary-reviewer`. Add the matching extension/UI/domain reviewer when its documented boundary is touched. The project `ECC_HOOK_PROFILE=strict` setting enables ECC's stricter deterministic hook profile. Project hooks do not invoke slash commands; ECC plugin hooks run their configured checks and formatters according to that profile.
+For Auth, Secrets, URLs/downloads, uploads, migrations, queues, billing, and release boundaries, run ECC security review and the smallest relevant tests.
 
 ## 3. Core Boundaries
 
@@ -177,7 +177,7 @@ Generated extensions must document the generated object, charging time or price 
 - Use plugin CSS only for business typography, editor content, special states, media canvases, and responsive fallbacks that the component library and utilities cannot express.
 - Main-system theme variables may be OKLCH or direct color values; do not assume `hsl(var(--primary))` wrapping.
 - Prefer `getLocalStorage()`, `getSessionStorage()`, `safeJsonParse()`, and `safeJsonStringify()` from `@buildingai/stores` for browser persistence and JSON tolerance.
-- A plugin UI design sandbox must be a dev-only route inside the target plugin. It must not enter production builds, call real generation/charging/uploads/providers/Secrets, or expose raw/provider/Secret/base-URL data or unpublished capabilities. The detailed Contract Brief, Design Gallery, selection, migration cleanup, and verification workflow is in `.claude/design-workflow.md` and the `echoflow-ui-workflow` skill.
+- A plugin UI design sandbox must be a dev-only route inside the target plugin. It must not enter production builds, call real generation/charging/uploads/providers/Secrets, or expose raw/provider/Secret/base-URL data or unpublished capabilities.
 - Gameplay/management/narrative plugin details such as memory, actions, rewards, accessibility, and copy belong in that plugin's README and tests. This file keeps only the shared rule: serve the business scenario, avoid generic AI chrome, and avoid a generic application shell.
 
 ## 11. Build, Release, and Verification
@@ -220,7 +220,6 @@ Verification principles:
 ### ECC-Assisted Upstream Conflict Resolution
 
 - When ECC is available, use `/ecc:plan` first to define the conflict strategy, such as preserving upstream fixes, protecting EchoFlow-owned capabilities, and standardizing the brand. Then use ECC `ecc:code-reviewer` for general conflict-risk analysis; use ECC `ecc:architect` only when an actual architectural trade-off exists.
-- BuildingAI project reviewers must still review their documented boundaries. ECC general reviewers do not replace `extension-boundary-reviewer`, `security-boundary-reviewer`, `extension-ui-contract-reviewer`, or the domain reviewer.
 - During conflict resolution, ECC provides analysis and recommendations only. The developer must manually confirm the resolved content and execute `git add` and `git commit`; after the resolution is written, run `/ecc:code-review` and `/ecc:quality-gate` when ECC is available.
 - Conflict review and repair must apply these brand mappings: `cc-haha` → `echoflow`, `Claude-Code-Haha` → `EchoFlow-Code`, and `CC_HAHA_*` → `ECHOFLOW_*`. If an upstream conflict introduces `providerPresets.json` or an equivalent preset file, remove promotional entries such as `jiekouai`, `shengsuanyun`, and `teamorouter`, retaining only presets verified as official. Do not create these files or entries when they do not exist.
 

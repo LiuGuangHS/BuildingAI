@@ -128,7 +128,7 @@
 
 ## 开发规划
 
-规划原则：先补正确性和测试，再拆模块；先复用仓库已有平台能力和依赖，只有真实需求和验证证据成立后才增加新依赖或基础设施。ECC 开发任务按 `AGENTS.md` 的 `/ecc:plan` → `/ecc:tdd-workflow` → `/ecc:code-review` → `/ecc:verification-loop` 执行；涉及上传、URL、队列、计费、文件、数据库或公共序列化时补 `security-boundary-reviewer`。
+规划原则：先补正确性和测试，再拆模块；先复用仓库已有平台能力和依赖，只有真实需求和验证证据成立后才增加新依赖或基础设施。ECC 开发任务按 `AGENTS.md` 的 `/ecc:plan` → `/ecc:tdd-workflow` → `/ecc:code-review` → `/ecc:verification-loop` 执行；涉及上传、URL、队列、计费、文件、数据库或公共序列化时补 `ECC security review`。
 
 ### P0：合同数据和任务可靠性
 
@@ -268,7 +268,7 @@ pnpm --filter echoflow-contract-generation build:publish
 1. `/ecc:plan`：确认范围、复用依赖、边界和验收。
 2. `/ecc:tdd-workflow`：先补最小失败测试，再实现和回归。
 3. `/ecc:code-review`：检查通用质量和安全问题。
-4. `security-boundary-reviewer`：涉及上传、URL、队列、计费、文件、数据库或 public serializer 时执行。
+4. `ECC security review`：涉及上传、URL、队列、计费、文件、数据库或 public serializer 时执行。
 5. `/ecc:verification-loop`：执行包级最小验证和必要的真实 smoke。
 6. `/ecc:update-docs`：源码事实、验证证据或剩余风险变化时同步本 README。
 
