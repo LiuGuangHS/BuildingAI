@@ -78,7 +78,7 @@
             "dependsOn": ["^lint:fix"]
         },
         "check-types": {
-            "dependsOn": ["^check-types"]
+            "dependsOn": ["^build"]
         },
         "clean": {
             "dependsOn": ["^clean"]
